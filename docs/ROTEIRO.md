@@ -130,19 +130,19 @@ Comum em CPDs/labs onde o `sshd_config` tem `AllowUsers <lista-fixa>` e você n�
 
 2. **As contas Unix dos admins gerenciados já existem no servidor** — você não pode criar contas novas (quem mantém isso é o admin do CPD via LDAP/manual). O AdminForge vai instalar chaves e sudoers nelas, **não** criar.
 
-Configure as variáveis apontando pro seu user e desligando a criação automática de contas:
+Configure as variáveis apontando pro seu user e desligando a criação automática de contas. **Ajuste os valores marcados com `# AJUSTE` antes de colar:**
 
 ```bash
-export ADMINFORGE_SSH_USER=<seu-user-no-servidor>
-export ADMINFORGE_SSH_KEY=~/.ssh/<arquivo-da-chave>     # tipicamente em ~/.ssh/
+export ADMINFORGE_SSH_USER=$USER                            # AJUSTE se seu user no servidor for outro
+export ADMINFORGE_SSH_KEY=~/.ssh/nome_do_arquivo_da_chave   # AJUSTE para o nome real (geralmente em ~/.ssh/)
 export ADMINFORGE_CREATE_UNIX_USER=false
 ```
 
 > Pra descobrir qual chave seu SSH usa para esse host:
 > ```bash
-> ssh -G <servidor> | grep -i identityfile
+> ssh -G servidor | grep -i identityfile
 > ```
-> Ele lista os caminhos das chaves consultadas (default ou via `~/.ssh/config`). Pegue a primeira que existe e funciona.
+> (Substitua `servidor` pelo hostname real.) Ele lista os caminhos das chaves consultadas, default ou via `~/.ssh/config`. Pegue a primeira que existe e funciona.
 
 Com `ADMINFORGE_CREATE_UNIX_USER=false`, o `apply` falha com mensagem clara se algum admin cadastrado não existir como conta Unix no host — em vez de tentar `useradd`.
 
