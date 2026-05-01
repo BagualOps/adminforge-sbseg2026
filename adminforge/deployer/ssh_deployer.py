@@ -213,7 +213,9 @@ class SSHDeployer(IDeployer):
         try:
             _, out_users, _ = self._executar(
                 client,
-                "getent passwd | awk -F: '$3>=1000 && $1!=\"nobody\" {print $1}'",
+                "getent passwd | awk -F: '"
+                "$3 >= 100 && $1 != \"nobody\" "
+                "{ printf \"%s\\tuid=%s\\tshell=%s\\n\", $1, $3, $7 }'",
             )
             _, out_serv, _ = self._executar(
                 client,
