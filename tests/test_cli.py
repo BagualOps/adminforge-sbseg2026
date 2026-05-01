@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import io
-import sys
 from contextlib import redirect_stdout
 from pathlib import Path
 

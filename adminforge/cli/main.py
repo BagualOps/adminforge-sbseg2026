@@ -5,12 +5,11 @@ import os
 import sys
 from pathlib import Path
 
-from adminforge import __version__, ssh_keys
+from adminforge import __version__
 from adminforge.cli import ui
 from adminforge.core.nucleo import Nucleo
 from adminforge.domain import (
     NivelPermissao,
-    StatusOperacao,
     TipoAcao,
 )
 from adminforge.exceptions import LockOcupado
@@ -502,13 +501,27 @@ def _build_parser() -> argparse.ArgumentParser:
     # group
     p_group = sub.add_parser("group", help="Grupos de admins.")
     s_group = p_group.add_subparsers(dest="sub", required=True)
-    a = s_group.add_parser("create"); a.add_argument("nome"); a.set_defaults(func=cmd_group_create)
-    a = s_group.add_parser("add-member"); a.add_argument("grupo"); a.add_argument("username")
+
+    a = s_group.add_parser("create")
+    a.add_argument("nome")
+    a.set_defaults(func=cmd_group_create)
+
+    a = s_group.add_parser("add-member")
+    a.add_argument("grupo")
+    a.add_argument("username")
     a.set_defaults(func=cmd_group_add_member)
-    a = s_group.add_parser("remove-member"); a.add_argument("grupo"); a.add_argument("username")
+
+    a = s_group.add_parser("remove-member")
+    a.add_argument("grupo")
+    a.add_argument("username")
     a.set_defaults(func=cmd_group_remove_member)
-    a = s_group.add_parser("delete"); a.add_argument("nome"); a.set_defaults(func=cmd_group_delete)
-    a = s_group.add_parser("list"); a.set_defaults(func=cmd_group_list)
+
+    a = s_group.add_parser("delete")
+    a.add_argument("nome")
+    a.set_defaults(func=cmd_group_delete)
+
+    a = s_group.add_parser("list")
+    a.set_defaults(func=cmd_group_list)
 
     # server
     p_server = sub.add_parser("server", help="Cadastro de servidores.")
@@ -520,30 +533,54 @@ def _build_parser() -> argparse.ArgumentParser:
     a.add_argument("--host-key", help="ssh-keyscan: 'ssh-ed25519 AAAA...'")
     a.add_argument("--auto", action="store_true", help="Captura host_key via ssh-keyscan.")
     a.set_defaults(func=cmd_server_add)
-    a = s_server.add_parser("list"); a.set_defaults(func=cmd_server_list)
-    a = s_server.add_parser("show"); a.add_argument("hostname"); a.set_defaults(func=cmd_server_show)
+
+    a = s_server.add_parser("list")
+    a.set_defaults(func=cmd_server_list)
+
+    a = s_server.add_parser("show")
+    a.add_argument("hostname")
+    a.set_defaults(func=cmd_server_show)
+
     a = s_server.add_parser("remove")
-    a.add_argument("hostname"); a.add_argument("--yes", action="store_true")
+    a.add_argument("hostname")
+    a.add_argument("--yes", action="store_true")
     a.set_defaults(func=cmd_server_remove)
 
     # server-group
     p_sg = sub.add_parser("server-group", help="Grupos de servidores.")
     s_sg = p_sg.add_subparsers(dest="sub", required=True)
-    a = s_sg.add_parser("create"); a.add_argument("nome"); a.set_defaults(func=cmd_sg_create)
-    a = s_sg.add_parser("add-member"); a.add_argument("grupo"); a.add_argument("hostname")
+
+    a = s_sg.add_parser("create")
+    a.add_argument("nome")
+    a.set_defaults(func=cmd_sg_create)
+
+    a = s_sg.add_parser("add-member")
+    a.add_argument("grupo")
+    a.add_argument("hostname")
     a.set_defaults(func=cmd_sg_add)
-    a = s_sg.add_parser("remove-member"); a.add_argument("grupo"); a.add_argument("hostname")
+
+    a = s_sg.add_parser("remove-member")
+    a.add_argument("grupo")
+    a.add_argument("hostname")
     a.set_defaults(func=cmd_sg_rm)
-    a = s_sg.add_parser("delete"); a.add_argument("nome"); a.set_defaults(func=cmd_sg_delete)
-    a = s_sg.add_parser("list"); a.set_defaults(func=cmd_sg_list)
+
+    a = s_sg.add_parser("delete")
+    a.add_argument("nome")
+    a.set_defaults(func=cmd_sg_delete)
+
+    a = s_sg.add_parser("list")
+    a.set_defaults(func=cmd_sg_list)
 
     # grant / revoke
     a = sub.add_parser("grant", help="Concede acesso de grupo de admins a grupo de servidores.")
-    a.add_argument("grupo_admin"); a.add_argument("grupo_servidor")
+    a.add_argument("grupo_admin")
+    a.add_argument("grupo_servidor")
     a.add_argument("--nivel", choices=["shell", "sudo"], required=True)
     a.set_defaults(func=cmd_grant)
+
     a = sub.add_parser("revoke", help="Revoga acesso entre dois grupos.")
-    a.add_argument("grupo_admin"); a.add_argument("grupo_servidor")
+    a.add_argument("grupo_admin")
+    a.add_argument("grupo_servidor")
     a.set_defaults(func=cmd_revoke)
 
     # preview
@@ -559,13 +596,21 @@ def _build_parser() -> argparse.ArgumentParser:
     # history
     p_hist = sub.add_parser("history", help="Consulta de historico operacional.")
     s_hist = p_hist.add_subparsers(dest="sub", required=True)
-    a = s_hist.add_parser("list"); a.add_argument("-n", "--limite", type=int, default=50)
+
+    a = s_hist.add_parser("list")
+    a.add_argument("-n", "--limite", type=int, default=50)
     a.set_defaults(func=cmd_history_list)
-    a = s_hist.add_parser("show"); a.add_argument("op_id")
+
+    a = s_hist.add_parser("show")
+    a.add_argument("op_id")
     a.set_defaults(func=cmd_history_show)
-    a = s_hist.add_parser("failed"); a.add_argument("-n", "--limite", type=int, default=50)
+
+    a = s_hist.add_parser("failed")
+    a.add_argument("-n", "--limite", type=int, default=50)
     a.set_defaults(func=cmd_history_failed)
-    a = s_hist.add_parser("verify"); a.set_defaults(func=cmd_history_verify)
+
+    a = s_hist.add_parser("verify")
+    a.set_defaults(func=cmd_history_verify)
 
     # audit
     p_audit = sub.add_parser("audit", help="Auditoria operacional (read-only via SSH).")

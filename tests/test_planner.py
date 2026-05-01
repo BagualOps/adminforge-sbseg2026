@@ -1,5 +1,5 @@
 from adminforge.core.nucleo import Nucleo
-from adminforge.domain import NivelPermissao, StatusAdmin, TipoAcao
+from adminforge.domain import NivelPermissao, TipoAcao
 
 from .conftest import CHAVE_MARINA, CHAVE_RUI, HOST_KEY_FAKE
 

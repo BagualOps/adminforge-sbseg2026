@@ -391,7 +391,7 @@ class Nucleo:
                         )
                     }
                     for s in aplicadas:
-                        if s.status != "sucesso":
+                        if s.status != "sucesso" or s.credencial is None:
                             continue
                         if s.acao == TipoAcao.ADICIONAR_CHAVE:
                             instaladas[s.credencial] = ChaveInstalada(

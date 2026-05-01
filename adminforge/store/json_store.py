@@ -107,7 +107,7 @@ class JsonStore(IStore):
         return admins
 
     def save_admin(self, admin: Admin) -> None:
-        data = {
+        data: dict = {
             "id": str(admin.id),
             "username": admin.username,
             "nome": admin.nome,

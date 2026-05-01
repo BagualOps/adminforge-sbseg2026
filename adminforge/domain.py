@@ -71,7 +71,7 @@ class Servidor:
     ipv4: str
     porta_ssh: int = 22
     chave_host: str = ""
-    chaves_instaladas: list[str] = field(default_factory=list)
+    chaves_instaladas: list = field(default_factory=list)
     id: UUID = field(default_factory=uuid4)
 
 
