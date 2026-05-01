@@ -449,39 +449,142 @@ Esperado:
 
 ---
 
-## PARTE E — (Opcional) Auditoria read-only em servidor real
+## PARTE E — Validação contra servidor real (que você controla)
 
-Se você tem acesso SSH a um servidor (qualquer um — pode ser compartilhado, desde que respeite a política do lugar), dá pra exercitar o `audit server` contra ele. **Apenas operações read-only** — não rode `apply` em servidor que não é seu.
+Aqui você roda o **fluxo completo** (incluindo `apply`) contra uma máquina real de verdade — não containers. Use uma **VM/VPS/host que você possui** (DigitalOcean droplet, Proxmox, AWS EC2, Raspberry Pi na sua rede, etc.).
 
-Substitua os placeholders pelos valores do seu host:
+> **Pré-requisito de cidadania:** o `apply` cria contas Unix, escreve em `/etc/sudoers.d/` e modifica `~/<user>/.ssh/authorized_keys` de outros usuários. Não rode contra servidor que não é seu.
+
+### E.1 Bootstrap único do usuário `adminforge` no servidor
+
+O AdminForge precisa de um usuário Linux com sudo `NOPASSWD` e a chave dele instalada antes do primeiro `apply`. Faça **uma vez** por servidor:
+
+**Opção 1 — VM nova com cloud-init.** Inclua no `user-data` ao provisionar:
+
+```yaml
+#cloud-config
+users:
+  - name: adminforge
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - ssh-ed25519 AAAA... adminforge@operador
+```
+
+**Opção 2 — Servidor existente, manualmente:**
 
 ```bash
-export ADMINFORGE_STATE=/tmp/audit-real
-export ADMINFORGE_SSH_USER=<seu-usuario-no-servidor>
-export ADMINFORGE_SSH_KEY=<caminho-da-sua-chave-privada>
-export ADMINFORGE_SUPERADMIN=<seu-username-local>
-mkdir -p /tmp/audit-real
+# (no seu laptop) gere a chave do AdminForge
+ssh-keygen -t ed25519 -N "" -f ~/.ssh/adminforge_id -C "adminforge@operador"
 
-af server add <apelido> --ip <IP-DO-SERVIDOR> --auto
-# Confira o fingerprint exibido contra um canal seguro
-# (ex: ssh-keygen -lf ~/.ssh/known_hosts -F <hostname>)
+# (no servidor, como root ou via sudo) crie o usuario e instale a chave
+ssh root@<seu-servidor> bash <<EOF
+useradd -m -s /bin/bash adminforge
+echo 'adminforge ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/adminforge
+chmod 0440 /etc/sudoers.d/adminforge
+visudo -c
+install -d -m 700 -o adminforge -g adminforge /home/adminforge/.ssh
+echo "$(cat ~/.ssh/adminforge_id.pub)" \
+    | install -m 600 -o adminforge -g adminforge /dev/stdin /home/adminforge/.ssh/authorized_keys
+EOF
+```
 
-af audit server <apelido>                       # lista usuarios e servicos
-af audit server <apelido> --user <username>     # destaca + alerta se sem servico
-af audit server <apelido> --service <nome>      # destaca servicos relacionados
+Verifique antes de continuar:
 
-af history list
+```bash
+ssh -i ~/.ssh/adminforge_id -o BatchMode=yes adminforge@<seu-servidor> 'whoami; sudo -n whoami'
+# Esperado: adminforge / root
+```
+
+### E.2 Configure o AdminForge para apontar pra esse servidor
+
+```bash
+export ADMINFORGE_STATE=/tmp/state-real
+export ADMINFORGE_SSH_KEY=~/.ssh/adminforge_id
+export ADMINFORGE_SSH_USER=adminforge
+export ADMINFORGE_SUPERADMIN=$USER
+mkdir -p /tmp/state-real
+```
+
+### E.3 Cadastre o servidor
+
+```bash
+af server add prod-01 --ip <IP-DO-SERVIDOR> --auto
+# Confira o fingerprint contra um canal seguro
+```
+
+### E.4 Rode o fluxo do PARTE B contra esse servidor
+
+Agora repita os passos UC-1 a UC-9 da [PARTE B](#parte-b--os-10-casos-de-uso-10-min), trocando os apelidos `web-01/web-02/db-03` por `prod-01` e adicionando admins/grupos como achar útil.
+
+Exemplo enxuto:
+
+```bash
+af admin add teste --nome "Conta Teste" --email teste@operador.local
+ssh-keygen -t ed25519 -N "" -f /tmp/teste_key -C "teste@laptop"
+af key add teste --file /tmp/teste_key.pub
+af group create operadores
+af group add-member operadores teste
+
+af server-group create real
+af server-group add-member real prod-01
+
+af grant operadores real --nivel sudo
+af preview
+af apply --yes
+```
+
+Validação direta no servidor:
+
+```bash
+ssh -i ~/.ssh/adminforge_id adminforge@<seu-servidor> 'sudo cat /home/teste/.ssh/authorized_keys'
+ssh -i ~/.ssh/adminforge_id adminforge@<seu-servidor> 'sudo cat /etc/sudoers.d/adminforge-teste'
+ssh -i ~/.ssh/adminforge_id adminforge@<seu-servidor> 'sudo visudo -c'
+
+# Smoke test: a conta teste loga e usa sudo?
+ssh -i /tmp/teste_key teste@<seu-servidor> 'whoami; sudo whoami'
+# Esperado: teste / root
+```
+
+Revogação e limpeza:
+
+```bash
+FP=$(af key list teste | tail -1 | awk '{print $1}')
+af key revoke "$FP"
+af apply --yes
+
+# Verifique que sumiu
+ssh -i ~/.ssh/adminforge_id adminforge@<seu-servidor> 'sudo cat /home/teste/.ssh/authorized_keys'
+# Esperado: vazio ou sem o bloco do AdminForge
+
 af history verify
 ```
 
-O `audit` é estritamente leitura: roda `getent passwd` e `systemctl list-units` via SSH. Não escreve nada no servidor remoto. O único efeito local é uma entrada no `state/history.jsonl`.
-
-Limpeza:
+Limpeza local:
 
 ```bash
-rm -rf /tmp/audit-real
+rm -rf /tmp/state-real /tmp/teste_key /tmp/teste_key.pub
 unset ADMINFORGE_STATE ADMINFORGE_SSH_USER ADMINFORGE_SSH_KEY ADMINFORGE_SUPERADMIN
 ```
+
+### E.5 (Sub-opção) Audit em servidor compartilhado (read-only)
+
+Tem servidor onde você só consegue logar como você, sem direito a `apply`? Dá pra exercitar o `audit server`, que é estritamente leitura (`getent passwd` + `systemctl list-units` via SSH):
+
+```bash
+export ADMINFORGE_STATE=/tmp/audit-only
+export ADMINFORGE_SSH_USER=<seu-usuario-no-servidor>
+export ADMINFORGE_SSH_KEY=<sua-chave-privada>
+export ADMINFORGE_SUPERADMIN=$USER
+mkdir -p /tmp/audit-only
+
+af server add host --ip <IP-DO-SERVIDOR> --auto
+af audit server host
+af audit server host --user <conta-tecnica-suspeita>
+af history verify
+```
+
+Não rode `apply` aqui. O `audit` não escreve nada no servidor remoto.
 
 ---
 
@@ -516,6 +619,7 @@ rm -f /tmp/marina /tmp/marina.pub /tmp/rui /tmp/rui.pub /tmp/joao /tmp/joao.pub 
 | C.4 | Validacoes de formato e regras de negocio | | |
 | C.5 | Lockfile bloqueia segunda instancia | | |
 | D | JSON de estado bem-formado, permissoes 0600 | | |
-| E | (Opcional) audit em servidor real, read-only | | |
+| E | Fluxo completo contra servidor real (que voce controla) | | |
+| E.5 | (Sub-opcao) audit read-only em servidor compartilhado | | |
 
 Se qualquer linha falhar, abra issue com a saída completa.
