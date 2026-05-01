@@ -12,6 +12,9 @@ from adminforge.interfaces.deployer import IDeployer
 
 
 class SSHDeployer(IDeployer):
+    MARCADOR_INICIO = "# BEGIN adminforge: "
+    MARCADOR_FIM = "# END adminforge: "
+
     def __init__(
         self,
         chave_privada_path: Path,
@@ -26,13 +29,16 @@ class SSHDeployer(IDeployer):
 
     def _conectar(self, servidor: Servidor) -> paramiko.SSHClient:
         client = paramiko.SSHClient()
-        if servidor.chave_host:
-            host_key = self._carregar_host_key(servidor.chave_host)
-            client.get_host_keys().add(servidor.hostname, host_key.get_name(), host_key)
-            client.get_host_keys().add(servidor.ipv4, host_key.get_name(), host_key)
-            client.set_missing_host_key_policy(paramiko.RejectPolicy())
-        else:
+        if not servidor.chave_host:
             raise HostKeyDivergente(f"servidor {servidor.hostname} sem host_key registrada")
+        host_key = self._carregar_host_key(servidor.chave_host)
+        nomes = {servidor.hostname, servidor.ipv4}
+        if servidor.porta_ssh != 22:
+            nomes |= {f"[{servidor.hostname}]:{servidor.porta_ssh}", f"[{servidor.ipv4}]:{servidor.porta_ssh}"}
+        for nome in nomes:
+            if nome:
+                client.get_host_keys().add(nome, host_key.get_name(), host_key)
+        client.set_missing_host_key_policy(paramiko.RejectPolicy())
 
         client.connect(
             hostname=servidor.ipv4 or servidor.hostname,
@@ -72,64 +78,108 @@ class SSHDeployer(IDeployer):
         return rc, out, err
 
     def _garantir_usuario_unix(self, client: paramiko.SSHClient, username: str) -> None:
-        if not self.criar_conta_unix:
+        u = shlex.quote(username)
+        rc, _, _ = self._executar(client, f"id -u {u} >/dev/null 2>&1")
+        if rc == 0:
             return
-        comando = (
-            f"id -u {shlex.quote(username)} >/dev/null 2>&1 || "
-            f"sudo useradd -m -s /bin/bash {shlex.quote(username)}"
-        )
-        rc, _, err = self._executar(client, comando)
+        if not self.criar_conta_unix:
+            raise RuntimeError(
+                f"usuario '{username}' nao existe e criacao automatica esta desabilitada "
+                f"(ADMINFORGE_CREATE_UNIX_USER=false)"
+            )
+        rc, _, err = self._executar(client, f"sudo useradd -m -s /bin/bash {u}")
         if rc != 0:
             raise RuntimeError(f"falha ao criar usuario unix '{username}': {err.strip()}")
 
-    def _adicionar_chave(self, client: paramiko.SSHClient, sub: Subacao) -> None:
-        if not sub.chave_publica or not sub.username:
-            raise ValueError("subacao sem chave_publica ou username")
-        self._garantir_usuario_unix(client, sub.username)
-        chave = sub.chave_publica.strip().replace("'", "'\\''")
-        u = shlex.quote(sub.username)
-        comando = (
-            f"sudo -u {u} bash -c '"
-            f"mkdir -p ~/.ssh && chmod 700 ~/.ssh && "
-            f"touch ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys && "
-            f"grep -qxF \"{chave}\" ~/.ssh/authorized_keys || echo \"{chave}\" >> ~/.ssh/authorized_keys"
-            f"'"
+    def _bloco_chave(self, ref: str, chave: str) -> str:
+        return (
+            f"{self.MARCADOR_INICIO}{ref}\n"
+            f"{chave.strip()}\n"
+            f"{self.MARCADOR_FIM}{ref}"
         )
-        rc, _, err = self._executar(client, comando)
-        if rc != 0:
-            raise RuntimeError(f"falha ao instalar chave: {err.strip()}")
+
+    def _adicionar_chave(self, client: paramiko.SSHClient, sub: Subacao) -> None:
+        if not sub.chave_publica or not sub.username or not sub.credencial:
+            raise ValueError("subacao sem chave_publica, username ou credencial")
+        self._garantir_usuario_unix(client, sub.username)
+        atual = self._ler_authorized_keys(client, sub.username)
+        novo = self._substituir_bloco(atual, sub.credencial, self._bloco_chave(sub.credencial, sub.chave_publica))
+        self._escrever_authorized_keys(client, sub.username, novo)
 
         sudoers = f"/etc/sudoers.d/adminforge-{sub.username}"
         if sub.nivel == NivelPermissao.SUDO:
-            linha = f"{sub.username} ALL=(ALL) NOPASSWD:ALL"
-            comando_sudoers = (
-                f"echo {shlex.quote(linha)} | sudo tee {sudoers} >/dev/null && "
-                f"sudo chmod 0440 {sudoers}"
-            )
-            rc, _, err = self._executar(client, comando_sudoers)
-            if rc != 0:
-                raise RuntimeError(f"falha ao escrever sudoers: {err.strip()}")
+            self._escrever_sudoers(client, sub.username, sudoers)
         else:
             self._executar(client, f"sudo rm -f {sudoers}")
+
+    def _escrever_sudoers(
+        self, client: paramiko.SSHClient, username: str, destino: str
+    ) -> None:
+        linha = f"{username} ALL=(ALL) NOPASSWD:ALL\n"
+        tmp = f"/tmp/.adminforge-sudoers-{username}.{_token()}"
+        comando = (
+            f"set -e; "
+            f"printf %s {shlex.quote(linha)} | sudo tee {tmp} >/dev/null && "
+            f"sudo chmod 0440 {tmp} && "
+            f"sudo visudo -cf {tmp} >/dev/null && "
+            f"sudo mv {tmp} {destino}"
+        )
+        rc, _, err = self._executar(client, comando)
+        if rc != 0:
+            self._executar(client, f"sudo rm -f {tmp}")
+            raise RuntimeError(f"falha ao escrever sudoers: {err.strip()}")
 
     def _remover_chave(self, client: paramiko.SSHClient, sub: Subacao) -> None:
         if not sub.username or not sub.credencial:
             raise ValueError("subacao sem username ou credencial")
-        fingerprint = sub.credencial.split(":", 1)[1] if ":" in sub.credencial else sub.credencial
-        u = shlex.quote(sub.username)
-        marcador = shlex.quote(fingerprint)
+        atual = self._ler_authorized_keys(client, sub.username)
+        novo = self._substituir_bloco(atual, sub.credencial, "")
+        self._escrever_authorized_keys(client, sub.username, novo)
+        self._executar(client, f"sudo rm -f /etc/sudoers.d/adminforge-{sub.username}")
+
+    def _ler_authorized_keys(self, client: paramiko.SSHClient, username: str) -> str:
+        u = shlex.quote(username)
+        rc, out, _ = self._executar(
+            client,
+            f"sudo cat /home/{u}/.ssh/authorized_keys 2>/dev/null || true",
+        )
+        return out
+
+    def _escrever_authorized_keys(
+        self, client: paramiko.SSHClient, username: str, conteudo: str
+    ) -> None:
+        u = shlex.quote(username)
+        b64 = _b64encode(conteudo)
         comando = (
-            f"sudo -u {u} bash -c '"
-            f"if [ -f ~/.ssh/authorized_keys ]; then "
-            f"grep -v {marcador} ~/.ssh/authorized_keys > ~/.ssh/authorized_keys.tmp && "
-            f"mv ~/.ssh/authorized_keys.tmp ~/.ssh/authorized_keys && "
-            f"chmod 600 ~/.ssh/authorized_keys; "
-            f"fi'"
+            f"sudo install -d -m 700 -o {u} -g {u} /home/{u}/.ssh && "
+            f"echo {shlex.quote(b64)} | base64 -d | "
+            f"sudo install -m 600 -o {u} -g {u} /dev/stdin /home/{u}/.ssh/authorized_keys"
         )
         rc, _, err = self._executar(client, comando)
         if rc != 0:
-            raise RuntimeError(f"falha ao remover chave: {err.strip()}")
-        self._executar(client, f"sudo rm -f /etc/sudoers.d/adminforge-{sub.username}")
+            raise RuntimeError(f"falha ao escrever authorized_keys: {err.strip()}")
+
+    def _substituir_bloco(self, conteudo: str, ref: str, bloco_novo: str) -> str:
+        linhas = conteudo.splitlines()
+        marcador_inicio = f"{self.MARCADOR_INICIO}{ref}"
+        marcador_fim = f"{self.MARCADOR_FIM}{ref}"
+        out: list[str] = []
+        dentro = False
+        for linha in linhas:
+            if linha == marcador_inicio:
+                dentro = True
+                continue
+            if dentro:
+                if linha == marcador_fim:
+                    dentro = False
+                continue
+            out.append(linha)
+        if bloco_novo:
+            out.append(bloco_novo)
+        resultado = "\n".join(out)
+        if resultado and not resultado.endswith("\n"):
+            resultado += "\n"
+        return resultado
 
     def aplicar(self, servidor: Servidor, subacoes: list[Subacao]) -> list[Subacao]:
         try:
@@ -176,6 +226,18 @@ class SSHDeployer(IDeployer):
             }
         finally:
             client.close()
+
+
+def _b64encode(s: str) -> str:
+    import base64
+
+    return base64.b64encode(s.encode("utf-8")).decode("ascii")
+
+
+def _token() -> str:
+    import secrets
+
+    return secrets.token_hex(8)
 
 
 def _from_known(tipo: str, blob: str) -> paramiko.PKey:

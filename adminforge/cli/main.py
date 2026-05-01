@@ -53,9 +53,11 @@ def _nucleo(ctx: click.Context, com_ssh: bool = False) -> Nucleo:
 
         chave = os.environ.get("ADMINFORGE_SSH_KEY") or str(Path.home() / ".ssh" / "adminforge_id")
         usuario = os.environ.get("ADMINFORGE_SSH_USER", "adminforge")
+        criar_conta = os.environ.get("ADMINFORGE_CREATE_UNIX_USER", "true").lower() != "false"
         deployer = SSHDeployer(
             chave_privada_path=Path(chave),
             usuario_servico=usuario,
+            criar_conta_unix=criar_conta,
         )
     return Nucleo.montar(_state_dir(ctx), deployer=deployer, superadmin=_superadmin())
 
