@@ -12,8 +12,8 @@ def _op(id: str) -> Operacao:
     return Operacao(
         id=id,
         momento=datetime(2026, 4, 22, 14, 32),
-        superadmin="cristhian",
-        comando="admin add marina",
+        superadmin="operador",
+        comando="admin add alice",
         status=StatusOperacao.SUCESSO,
     )
 
@@ -39,7 +39,7 @@ def test_cadeia_quebrada_em_alteracao_retroativa(tmp_path: Path):
     a.registrar(_op("OP-0001"))
     a.registrar(_op("OP-0002"))
     linhas = path.read_text(encoding="utf-8").splitlines()
-    linhas[0] = linhas[0].replace("admin add marina", "admin add evil")
+    linhas[0] = linhas[0].replace("admin add alice", "admin add evil")
     path.write_text("\n".join(linhas) + "\n", encoding="utf-8")
     with pytest.raises(CadeiaQuebrada):
         a.verificar_cadeia()

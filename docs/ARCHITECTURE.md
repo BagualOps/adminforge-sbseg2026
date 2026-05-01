@@ -67,7 +67,7 @@ A v1 (M-1) começou usando `paramiko` (SSH), `click` (CLI) e `PyYAML` (estado), 
 ```
 state/
 ├── admins/                # 1 arquivo por admin (inclui suas chaves)
-│   └── marina.json
+│   └── alice.json
 ├── admin-groups/
 │   └── sysadmins.json
 ├── servers/               # cada server.json inclui chaves_instaladas
@@ -128,7 +128,7 @@ Cada entrada de `history.jsonl` é um JSON com:
 {
   "id": "OP-0042",
   "momento": "2026-04-22T14:32:11-03:00",
-  "superadmin": "cristhian",
+  "superadmin": "alice",
   "comando": "apply",
   "status": "sucesso_parcial",
   "subacoes": [...],

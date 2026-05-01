@@ -31,11 +31,11 @@ KEYS_DIR = LAB_DIR / "keys"
 
 PORTAS = {"web-01": 2201, "web-02": 2202, "db-03": 2203}
 
-CHAVE_MARINA = (
-    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGZdz3+gT+Md3OSv00ku0Q9j+QUvhU3iRA9eCkP9F1Tc marina@laptop"
+CHAVE_ALICE = (
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGZdz3+gT+Md3OSv00ku0Q9j+QUvhU3iRA9eCkP9F1Tc alice@laptop"
 )
-CHAVE_RUI = (
-    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9NK1qj7m9rwGzN9bM4LqXz0Z8c9zN0R1aB9fEdC7Yk rui@laptop"
+CHAVE_BOB = (
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9NK1qj7m9rwGzN9bM4LqXz0Z8c9zN0R1aB9fEdC7Yk bob@laptop"
 )
 
 
@@ -135,20 +135,20 @@ def _fazer_nucleo(state_dir: Path, chave_priv: Path) -> Nucleo:
         usuario_servico="adminforge",
         timeout=10,
     )
-    return Nucleo(store, auditor, deployer, superadmin="cristhian")
+    return Nucleo(store, auditor, deployer, superadmin="operador")
 
 
 def test_fluxo_completo_em_containers(lab, tmp_path):
     nucleo = _fazer_nucleo(tmp_path / "state", lab["chave_priv"])
 
-    assert nucleo.cadastrar_admin("marina", "Marina", "m@e.com").status == StatusOperacao.SUCESSO
-    assert nucleo.cadastrar_admin("rui", "Rui", "rui@e.com").status == StatusOperacao.SUCESSO
-    assert nucleo.cadastrar_chave("marina", CHAVE_MARINA).status == StatusOperacao.SUCESSO
-    assert nucleo.cadastrar_chave("rui", CHAVE_RUI).status == StatusOperacao.SUCESSO
+    assert nucleo.cadastrar_admin("alice", "Alice", "m@e.com").status == StatusOperacao.SUCESSO
+    assert nucleo.cadastrar_admin("bob", "Bob", "bob@e.com").status == StatusOperacao.SUCESSO
+    assert nucleo.cadastrar_chave("alice", CHAVE_ALICE).status == StatusOperacao.SUCESSO
+    assert nucleo.cadastrar_chave("bob", CHAVE_BOB).status == StatusOperacao.SUCESSO
 
     nucleo.criar_grupo_admin("sysadmins")
-    nucleo.adicionar_membro_grupo_admin("sysadmins", "marina")
-    nucleo.adicionar_membro_grupo_admin("sysadmins", "rui")
+    nucleo.adicionar_membro_grupo_admin("sysadmins", "alice")
+    nucleo.adicionar_membro_grupo_admin("sysadmins", "bob")
 
     for hostname, porta in PORTAS.items():
         hk = _capturar_host_key(porta)
@@ -169,50 +169,50 @@ def test_fluxo_completo_em_containers(lab, tmp_path):
     assert all(s.status == "sucesso" for s in op_apply.subacoes)
 
     rc, out = _exec_container(
-        "adminforge-web-01", "sudo", "cat", "/home/marina/.ssh/authorized_keys"
+        "adminforge-web-01", "sudo", "cat", "/home/alice/.ssh/authorized_keys"
     )
     assert rc == 0
-    assert "BEGIN adminforge: marina:" in out
-    assert "END adminforge: marina:" in out
-    assert "marina@laptop" in out
+    assert "BEGIN adminforge: alice:" in out
+    assert "END adminforge: alice:" in out
+    assert "alice@laptop" in out
 
-    rc, out = _exec_container("adminforge-web-01", "sudo", "cat", "/etc/sudoers.d/adminforge-marina")
+    rc, out = _exec_container("adminforge-web-01", "sudo", "cat", "/etc/sudoers.d/adminforge-alice")
     assert rc == 0
-    assert "marina ALL=(ALL) NOPASSWD:ALL" in out
+    assert "alice ALL=(ALL) NOPASSWD:ALL" in out
 
     rc, _ = _exec_container("adminforge-web-01", "sudo", "visudo", "-c")
     assert rc == 0
 
-    rc, out = _exec_container("adminforge-web-01", "id", "marina")
+    rc, out = _exec_container("adminforge-web-01", "id", "alice")
     assert rc == 0
     assert "uid=" in out
 
     assert nucleo.preview() == []
 
-    nucleo.desabilitar_admin("rui")
+    nucleo.desabilitar_admin("bob")
     pendentes = nucleo.preview()
     assert len(pendentes) == 3
-    assert all(s.acao == TipoAcao.REMOVER_CHAVE and s.username == "rui" for s in pendentes)
+    assert all(s.acao == TipoAcao.REMOVER_CHAVE and s.username == "bob" for s in pendentes)
 
     op_remove = nucleo.aplicar()
     assert op_remove.status == StatusOperacao.SUCESSO
 
-    rc, out = _exec_container("adminforge-web-01", "sudo", "cat", "/home/rui/.ssh/authorized_keys")
+    rc, out = _exec_container("adminforge-web-01", "sudo", "cat", "/home/bob/.ssh/authorized_keys")
     assert rc == 0
-    assert "rui:" not in out
-    assert "BEGIN adminforge: rui:" not in out
+    assert "bob:" not in out
+    assert "BEGIN adminforge: bob:" not in out
 
-    rc, _ = _exec_container("adminforge-web-01", "ls", "/etc/sudoers.d/adminforge-rui")
+    rc, _ = _exec_container("adminforge-web-01", "ls", "/etc/sudoers.d/adminforge-bob")
     assert rc != 0
 
-    rc, out = _exec_container("adminforge-web-01", "sudo", "cat", "/home/marina/.ssh/authorized_keys")
+    rc, out = _exec_container("adminforge-web-01", "sudo", "cat", "/home/alice/.ssh/authorized_keys")
     assert rc == 0
-    assert "BEGIN adminforge: marina:" in out
+    assert "BEGIN adminforge: alice:" in out
 
     op_audit, relatorio = nucleo.auditar_servidor("web-01")
     assert op_audit.status == StatusOperacao.SUCESSO
     assert any("adminforge" in u for u in relatorio["usuarios"])
-    assert any("marina" in u for u in relatorio["usuarios"])
+    assert any("alice" in u for u in relatorio["usuarios"])
 
     ok, _ = nucleo.auditor.verificar_cadeia()
     assert ok is True

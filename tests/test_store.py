@@ -22,8 +22,8 @@ def test_lockfile_concorrencia(tmp_path: Path):
 
 def test_save_admin_permissao_0600(tmp_path: Path):
     s = JsonStore(tmp_path)
-    s.save_admin(Admin(username="marina", nome="Marina", email="m@e.com"))
-    arquivo = tmp_path / "admins" / "marina.json"
+    s.save_admin(Admin(username="alice", nome="Alice", email="m@e.com"))
+    arquivo = tmp_path / "admins" / "alice.json"
     assert arquivo.exists()
     modo = oct(arquivo.stat().st_mode)[-3:]
     assert modo == "600"
@@ -36,13 +36,13 @@ def test_roundtrip_servidor(tmp_path: Path):
         ipv4="10.0.0.10",
         porta_ssh=22,
         chave_host="ssh-ed25519 AAAA...",
-        chaves_instaladas=[{"ref": "marina:fp", "username": "marina", "nivel": "sudo"}],
+        chaves_instaladas=[{"ref": "alice:fp", "username": "alice", "nivel": "sudo"}],
     )
     s.save_servidor(serv)
     lido = s.get_servidor("web-01")
     assert lido is not None
     assert lido.ipv4 == "10.0.0.10"
-    assert lido.chaves_instaladas[0]["ref"] == "marina:fp"
+    assert lido.chaves_instaladas[0]["ref"] == "alice:fp"
 
 
 def test_permissao_atualiza_em_vez_de_duplicar(tmp_path: Path):

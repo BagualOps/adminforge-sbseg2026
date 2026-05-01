@@ -2,6 +2,8 @@
 
 5 minutos do clone ao primeiro `apply`.
 
+> **Placeholders.** Os nomes nos exemplos (`alice`, `bob`, `web-01`, `producao`, `sysadmins`, `<IP-DO-SERVIDOR>`, etc.) são genéricos — substitua pelos da sua frota.
+
 ## 1. Instalar
 
 **Zero dependências de runtime.** Basta Python 3.11+ e cliente OpenSSH (presente em qualquer Linux).
@@ -132,11 +134,11 @@ Esperado: o usuário e `root` na segunda linha. Se a segunda linha pedir senha o
 ## 4. Cadastros
 
 ```bash
-adminforge admin add marina --nome "Marina Silva" --email marina@empresa.com
-adminforge key add marina --file ~/.ssh/marina.pub
+adminforge admin add alice --nome "Alice Silva" --email alice@empresa.com
+adminforge key add alice --file ~/.ssh/alice.pub
 
 adminforge group create sysadmins
-adminforge group add-member sysadmins marina
+adminforge group add-member sysadmins alice
 
 adminforge server add web-01 --ip 10.0.0.10 --auto
 # > host_key capturada: SHA256:abc...
@@ -156,11 +158,11 @@ adminforge preview
 # i  1 subacoes em 1 servidores
 #
 # web-01
-#   + adicionar_chave    marina:SHA256:abc...    sudo
+#   + adicionar_chave    alice:SHA256:abc...    sudo
 
 adminforge apply
 # Aplicar agora? [y/N]: y
-#   OK   web-01    adicionar_chave    marina:SHA256:abc...
+#   OK   web-01    adicionar_chave    alice:SHA256:abc...
 # operacao: OP-0008
 #   status: SUCESSO
 # sucessos: 1

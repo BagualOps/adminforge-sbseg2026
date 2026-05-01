@@ -37,14 +37,14 @@ Permissões: diretórios `0700`, arquivos `0600`.
 ```json
 {
   "id": "9c1d8e1a-9b1f-4e09-9d34-3b5b23a3eaa1",
-  "username": "marina",
-  "nome": "Marina Silva",
-  "email": "marina@empresa.com",
+  "username": "alice",
+  "nome": "Alice Silva",
+  "email": "alice@empresa.com",
   "status": "ativo",
   "credenciais": [
     {
       "id": "7f01...",
-      "chave_publica": "ssh-ed25519 AAAA... marina@laptop",
+      "chave_publica": "ssh-ed25519 AAAA... alice@laptop",
       "fingerprint": "SHA256:abc...",
       "status": "ativa"
     }
@@ -60,7 +60,7 @@ Permissões: diretórios `0700`, arquivos `0600`.
 {
   "id": "...",
   "nome": "sysadmins",
-  "membros": ["marina", "rui"]
+  "membros": ["alice", "bob"]
 }
 ```
 
@@ -75,8 +75,8 @@ Permissões: diretórios `0700`, arquivos `0600`.
   "chave_host": "ssh-ed25519 AAAAC3...",
   "chaves_instaladas": [
     {
-      "ref": "marina:SHA256:abc...",
-      "username": "marina",
+      "ref": "alice:SHA256:abc...",
+      "username": "alice",
       "nivel": "sudo"
     }
   ]
@@ -125,7 +125,7 @@ Usado pelo `SSHDeployer` com `ssh -o UserKnownHostsFile=state/known_hosts -o Str
 ### `history.jsonl` (1 linha por operação)
 
 ```json
-{"id":"OP-0042","momento":"2026-04-22T14:32:11-03:00","superadmin":"cristhian","comando":"apply","status":"sucesso_parcial","subacoes":[{"servidor":"web-01","acao":"adicionar_chave","credencial":"marina:SHA256:abc","status":"sucesso"},{"servidor":"db-03","acao":"adicionar_chave","credencial":"marina:SHA256:abc","status":"falha","erro":"ssh: connect timeout after 30s"}],"hash_anterior":"7c4a8d09...","hash":"9e8b2c14..."}
+{"id":"OP-0042","momento":"2026-04-22T14:32:11-03:00","superadmin":"alice","comando":"apply","status":"sucesso_parcial","subacoes":[{"servidor":"web-01","acao":"adicionar_chave","credencial":"alice:SHA256:abc","status":"sucesso"},{"servidor":"db-03","acao":"adicionar_chave","credencial":"alice:SHA256:abc","status":"falha","erro":"ssh: connect timeout after 30s"}],"hash_anterior":"7c4a8d09...","hash":"9e8b2c14..."}
 ```
 
 ## Backup

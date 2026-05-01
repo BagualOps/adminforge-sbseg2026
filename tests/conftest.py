@@ -9,11 +9,11 @@ from adminforge.core.nucleo import Nucleo
 from adminforge.deployer.dry_run import DryRunDeployer
 from adminforge.store.json_store import JsonStore
 
-CHAVE_MARINA = (
-    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGZdz3+gT+Md3OSv00ku0Q9j+QUvhU3iRA9eCkP9F1Tc marina@laptop"
+CHAVE_ALICE = (
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGZdz3+gT+Md3OSv00ku0Q9j+QUvhU3iRA9eCkP9F1Tc alice@laptop"
 )
-CHAVE_RUI = (
-    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9NK1qj7m9rwGzN9bM4LqXz0Z8c9zN0R1aB9fEdC7Yk rui@laptop"
+CHAVE_BOB = (
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9NK1qj7m9rwGzN9bM4LqXz0Z8c9zN0R1aB9fEdC7Yk bob@laptop"
 )
 HOST_KEY_FAKE = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBO4cGUzZxDpHxEyz1F4vLeXyv7yY8Ig9aB1cD2eF3gH"
 
@@ -34,4 +34,4 @@ def deployer() -> DryRunDeployer:
 def nucleo(state_dir: Path, deployer: DryRunDeployer) -> Nucleo:
     store = JsonStore(state_dir)
     auditor = JsonlAuditor(state_dir / "history.jsonl")
-    return Nucleo(store, auditor, deployer, superadmin="cristhian")
+    return Nucleo(store, auditor, deployer, superadmin="operador")

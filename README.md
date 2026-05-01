@@ -80,10 +80,10 @@ python3 -m adminforge.cli.main --help
 # Cadastros (mudam apenas o estado desejado)
 alias adminforge="python3 -m adminforge.cli.main"
 
-adminforge admin add marina --nome "Marina Silva" --email marina@empresa.com
-adminforge key add marina --file ~/.ssh/marina.pub
+adminforge admin add alice --nome "Alice Silva" --email alice@empresa.com
+adminforge key add alice --file ~/.ssh/alice.pub
 adminforge group create sysadmins
-adminforge group add-member sysadmins marina
+adminforge group add-member sysadmins alice
 
 adminforge server add web-01 --ip 10.0.0.10 --auto       # TOFU host_key
 adminforge server-group create producao
@@ -141,7 +141,7 @@ Mais em [`docs/SECURITY.md`](docs/SECURITY.md).
 | [`docs/SECURITY.md`](docs/SECURITY.md)     | Modelo de ameaças, cuidados operacionais, escopo de auditoria. |
 | [`docs/CONFIG.md`](docs/CONFIG.md)         | Variáveis de ambiente e estrutura do `state/`. |
 | [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) | Como rodar testes, lint, contribuir. |
-| [`infra/testlab/ROTEIRO.md`](infra/testlab/ROTEIRO.md) | Roteiro de teste manual no lab Docker (9 cenários, ~10 min). |
+| [`docs/ROTEIRO.md`](docs/ROTEIRO.md) | Roteiro completo de teste manual: 10 UCs + edge cases + servidor real (~20 min). |
 | [`docs/modelagem-v1.pdf`](docs/modelagem-v1.pdf) | Modelagem original (sumário, diagramas, fluxos, questões em aberto). |
 
 ## Testes
@@ -152,9 +152,9 @@ pytest -v
 
 36 testes cobrem o fluxo end-to-end e edge cases (cadeia quebrada, duplicatas, idempotência, falha parcial, no-op, lockfile concorrente, permissão 0600).
 
-### Validação manual em lab Docker
+### Validação manual completa
 
-Para exercitar o `apply` real (SSH, criação de conta, sudoers, markers em `authorized_keys`) num ambiente isolado de 3 containers Debian, siga o **[Roteiro de teste](infra/testlab/ROTEIRO.md)** — 9 cenários sequenciais (~10 min) com comando + saída esperada em cada passo.
+Para exercitar **todo** o sistema — `apply` real via SSH, markers em `authorized_keys`, sudoers, revogação, falha parcial, audit operacional, cadeia de hashes — siga o **[Roteiro completo de teste](docs/ROTEIRO.md)**: ~20 minutos cobrindo os 10 UCs com lab Docker (write) e instruções para validar contra servidor próprio (VM/VPS).
 
 ## Licença
 

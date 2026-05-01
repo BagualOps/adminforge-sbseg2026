@@ -17,10 +17,10 @@ from adminforge.exceptions import LockOcupado
 
 EPILOG_GERAL = """\
 EXEMPLOS
-  adminforge admin add marina --nome "Marina Silva" --email marina@empresa.com
-  adminforge key add marina --file ~/.ssh/marina.pub
+  adminforge admin add alice --nome "Alice Silva" --email alice@empresa.com
+  adminforge key add alice --file ~/.ssh/alice.pub
   adminforge group create sysadmins
-  adminforge group add-member sysadmins marina
+  adminforge group add-member sysadmins alice
   adminforge server add web-01 --ip 10.0.0.10
   adminforge server-group create producao
   adminforge server-group add-member producao web-01

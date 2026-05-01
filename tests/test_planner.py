@@ -1,17 +1,17 @@
 from adminforge.core.nucleo import Nucleo
 from adminforge.domain import NivelPermissao, TipoAcao
 
-from .conftest import CHAVE_MARINA, CHAVE_RUI, HOST_KEY_FAKE
+from .conftest import CHAVE_ALICE, CHAVE_BOB, HOST_KEY_FAKE
 
 
 def _setup_basico(nucleo: Nucleo) -> None:
-    assert nucleo.cadastrar_admin("marina", "Marina", "m@e.com").status.value == "sucesso"
-    assert nucleo.cadastrar_admin("rui", "Rui", "r@e.com").status.value == "sucesso"
-    assert nucleo.cadastrar_chave("marina", CHAVE_MARINA).status.value == "sucesso"
-    assert nucleo.cadastrar_chave("rui", CHAVE_RUI).status.value == "sucesso"
+    assert nucleo.cadastrar_admin("alice", "Alice", "m@e.com").status.value == "sucesso"
+    assert nucleo.cadastrar_admin("bob", "Bob", "r@e.com").status.value == "sucesso"
+    assert nucleo.cadastrar_chave("alice", CHAVE_ALICE).status.value == "sucesso"
+    assert nucleo.cadastrar_chave("bob", CHAVE_BOB).status.value == "sucesso"
     assert nucleo.criar_grupo_admin("sysadmins").status.value == "sucesso"
-    assert nucleo.adicionar_membro_grupo_admin("sysadmins", "marina").status.value == "sucesso"
-    assert nucleo.adicionar_membro_grupo_admin("sysadmins", "rui").status.value == "sucesso"
+    assert nucleo.adicionar_membro_grupo_admin("sysadmins", "alice").status.value == "sucesso"
+    assert nucleo.adicionar_membro_grupo_admin("sysadmins", "bob").status.value == "sucesso"
     assert nucleo.cadastrar_servidor("web-01", "10.0.0.10", 22, HOST_KEY_FAKE).status.value == "sucesso"
     assert nucleo.cadastrar_servidor("web-02", "10.0.0.11", 22, HOST_KEY_FAKE).status.value == "sucesso"
     assert nucleo.criar_grupo_servidor("producao").status.value == "sucesso"
@@ -38,18 +38,18 @@ def test_admin_inativo_sai_do_estado_desejado(nucleo: Nucleo):
     _setup_basico(nucleo)
     nucleo.conceder("sysadmins", "producao", NivelPermissao.SHELL)
     nucleo.aplicar()
-    nucleo.desabilitar_admin("rui")
+    nucleo.desabilitar_admin("bob")
     subacoes = nucleo.preview()
     assert len(subacoes) == 2
     assert all(s.acao == TipoAcao.REMOVER_CHAVE for s in subacoes)
-    assert all(s.username == "rui" for s in subacoes)
+    assert all(s.username == "bob" for s in subacoes)
 
 
 def test_sudo_prevalece_sobre_shell(nucleo: Nucleo):
     _setup_basico(nucleo)
     nucleo.criar_grupo_admin("dba")
-    nucleo.adicionar_membro_grupo_admin("dba", "marina")
+    nucleo.adicionar_membro_grupo_admin("dba", "alice")
     nucleo.conceder("sysadmins", "producao", NivelPermissao.SHELL)
     nucleo.conceder("dba", "producao", NivelPermissao.SUDO)
-    subacoes_marina = [s for s in nucleo.preview() if s.username == "marina"]
-    assert all(s.nivel == NivelPermissao.SUDO for s in subacoes_marina)
+    subacoes_alice = [s for s in nucleo.preview() if s.username == "alice"]
+    assert all(s.nivel == NivelPermissao.SUDO for s in subacoes_alice)

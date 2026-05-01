@@ -5,19 +5,19 @@ from adminforge.core.nucleo import Nucleo
 from adminforge.deployer.dry_run import DryRunDeployer
 from adminforge.domain import NivelPermissao, StatusOperacao, TipoAcao
 
-from .conftest import CHAVE_MARINA, CHAVE_RUI, HOST_KEY_FAKE
+from .conftest import CHAVE_ALICE, CHAVE_BOB, HOST_KEY_FAKE
 
 
 def test_fluxo_completo(nucleo: Nucleo):
-    assert nucleo.cadastrar_admin("marina", "Marina", "m@empresa.com").status == StatusOperacao.SUCESSO
-    assert nucleo.cadastrar_admin("rui", "Rui", "rui@empresa.com").status == StatusOperacao.SUCESSO
+    assert nucleo.cadastrar_admin("alice", "Alice", "m@empresa.com").status == StatusOperacao.SUCESSO
+    assert nucleo.cadastrar_admin("bob", "Bob", "bob@empresa.com").status == StatusOperacao.SUCESSO
 
-    assert nucleo.cadastrar_chave("marina", CHAVE_MARINA).status == StatusOperacao.SUCESSO
-    assert nucleo.cadastrar_chave("rui", CHAVE_RUI).status == StatusOperacao.SUCESSO
+    assert nucleo.cadastrar_chave("alice", CHAVE_ALICE).status == StatusOperacao.SUCESSO
+    assert nucleo.cadastrar_chave("bob", CHAVE_BOB).status == StatusOperacao.SUCESSO
 
     nucleo.criar_grupo_admin("sysadmins")
-    nucleo.adicionar_membro_grupo_admin("sysadmins", "marina")
-    nucleo.adicionar_membro_grupo_admin("sysadmins", "rui")
+    nucleo.adicionar_membro_grupo_admin("sysadmins", "alice")
+    nucleo.adicionar_membro_grupo_admin("sysadmins", "bob")
 
     nucleo.cadastrar_servidor("web-01", "10.0.0.10", 22, HOST_KEY_FAKE)
     nucleo.cadastrar_servidor("web-02", "10.0.0.11", 22, HOST_KEY_FAKE)
@@ -47,7 +47,7 @@ def test_fluxo_completo(nucleo: Nucleo):
     assert op_apply_2.status == StatusOperacao.SUCESSO
     assert op_apply_2.subacoes == []
 
-    nucleo.desabilitar_admin("rui")
+    nucleo.desabilitar_admin("bob")
     subacoes_remover = nucleo.preview()
     assert len(subacoes_remover) == 3
     assert all(s.acao == TipoAcao.REMOVER_CHAVE for s in subacoes_remover)
@@ -72,12 +72,12 @@ def test_apply_com_falha_parcial(state_dir):
     deployer = DryRunDeployer(falhar_em={"db-03"})
     store = JsonStore(state_dir)
     auditor = JsonlAuditor(state_dir / "history.jsonl")
-    nucleo = Nucleo(store, auditor, deployer, superadmin="cristhian")
+    nucleo = Nucleo(store, auditor, deployer, superadmin="operador")
 
-    nucleo.cadastrar_admin("marina", "Marina", "m@e.com")
-    nucleo.cadastrar_chave("marina", CHAVE_MARINA)
+    nucleo.cadastrar_admin("alice", "Alice", "m@e.com")
+    nucleo.cadastrar_chave("alice", CHAVE_ALICE)
     nucleo.criar_grupo_admin("sa")
-    nucleo.adicionar_membro_grupo_admin("sa", "marina")
+    nucleo.adicionar_membro_grupo_admin("sa", "alice")
     nucleo.cadastrar_servidor("web-01", "10.0.0.10", 22, HOST_KEY_FAKE)
     nucleo.cadastrar_servidor("db-03", "10.0.0.30", 22, HOST_KEY_FAKE)
     nucleo.criar_grupo_servidor("prod")

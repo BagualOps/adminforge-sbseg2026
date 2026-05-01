@@ -6,6 +6,8 @@ Validação manual de **todo** o sistema AdminForge: 10 casos de uso + edge case
 > **Risco:** zero (lab isolado em containers); a parte opcional contra servidor real é read-only.
 > **Pré-requisito mínimo:** Python 3.11+ e cliente OpenSSH. Para o lab Docker: `docker compose v2`.
 
+> **Sobre os nomes nos exemplos.** `alice`, `bob`, `charlie`, `dave` são placeholders convencionais — substitua pelos nomes reais dos administradores do seu CPD. `web-01`, `db-03`, `producao`, `sysadmins` idem (substitua pelos seus hostnames e grupos). `<IP-DO-SERVIDOR>` e similares entre `<...>` são placeholders explícitos: troque antes de executar.
+
 ---
 
 ## PARTE A — Setup (3 min)
@@ -65,7 +67,7 @@ Esperado: `OK web-01`, `OK web-02`, `OK db-03`.
 export ADMINFORGE_STATE=/tmp/lab-state
 export ADMINFORGE_SSH_KEY=/tmp/adminforge_id
 export ADMINFORGE_SSH_USER=adminforge
-export ADMINFORGE_SUPERADMIN=cristhian
+export ADMINFORGE_SUPERADMIN=$USER       # ou substitua por <seu-username>
 
 rm -rf /tmp/lab-state && mkdir -p /tmp/lab-state
 ```
@@ -77,29 +79,29 @@ rm -rf /tmp/lab-state && mkdir -p /tmp/lab-state
 ### UC-1 — Cadastrar admin
 
 ```bash
-af admin add marina --nome "Marina Silva" --email marina@empresa.com
-af admin add rui    --nome "Rui Costa"    --email rui@empresa.com
-af admin add joao   --nome "João Pereira" --email joao@empresa.com
+af admin add alice --nome "Alice Silva" --email alice@empresa.com
+af admin add bob    --nome "Bob Costa"    --email bob@empresa.com
+af admin add charlie   --nome "Charlie Pereira" --email charlie@empresa.com
 ```
 
 Validações:
 
 ```bash
 af admin list                # tabela: 3 admins, status=ativo
-af admin show marina         # detalhes + 0 credenciais + 0 grupos
+af admin show alice         # detalhes + 0 credenciais + 0 grupos
 ```
 
 **Edge case — duplicata:**
 
 ```bash
-af admin add marina --nome X --email x@e.com
-# Esperado: ERRO  ... username 'marina' ja existe
+af admin add alice --nome X --email x@e.com
+# Esperado: ERRO  ... username 'alice' ja existe
 ```
 
 **Edge case — formato:**
 
 ```bash
-af admin add "Marina!" --nome X --email x@e.com
+af admin add "Alice!" --nome X --email x@e.com
 # Esperado: ERRO  ... username invalido
 af admin add valid --nome X --email "nao-e-email"
 # Esperado: ERRO  ... email invalido
@@ -108,28 +110,28 @@ af admin add valid --nome X --email "nao-e-email"
 ### UC-2 — Cadastrar / revogar chave SSH
 
 ```bash
-ssh-keygen -t ed25519 -N "" -f /tmp/marina -C "marina@laptop"
-ssh-keygen -t ed25519 -N "" -f /tmp/rui    -C "rui@laptop"
-ssh-keygen -t ed25519 -N "" -f /tmp/joao   -C "joao@laptop"
+ssh-keygen -t ed25519 -N "" -f /tmp/alice -C "alice@laptop"
+ssh-keygen -t ed25519 -N "" -f /tmp/bob    -C "bob@laptop"
+ssh-keygen -t ed25519 -N "" -f /tmp/charlie   -C "charlie@laptop"
 
-af key add marina --file /tmp/marina.pub
-af key add rui    --file /tmp/rui.pub
-af key add joao   --file /tmp/joao.pub
+af key add alice --file /tmp/alice.pub
+af key add bob    --file /tmp/bob.pub
+af key add charlie   --file /tmp/charlie.pub
 
-af key list marina           # 1 credencial, status=ativa
+af key list alice           # 1 credencial, status=ativa
 ```
 
 **Edge case — tipo não suportado:**
 
 ```bash
-af key add marina --string "ssh-dss AAAA..."
+af key add alice --string "ssh-dss AAAA..."
 # Esperado: ERRO  ... tipo de chave nao suportado
 ```
 
 **Edge case — duplicada:**
 
 ```bash
-af key add marina --file /tmp/marina.pub
+af key add alice --file /tmp/alice.pub
 # Esperado: ERRO  ... chave ja cadastrada
 ```
 
@@ -137,21 +139,21 @@ af key add marina --file /tmp/marina.pub
 
 ```bash
 af group create sysadmins
-af group add-member sysadmins marina
-af group add-member sysadmins rui
+af group add-member sysadmins alice
+af group add-member sysadmins bob
 
 af group create dba
-af group add-member dba joao
-af group add-member dba marina    # marina em 2 grupos
+af group add-member dba charlie
+af group add-member dba alice    # alice em 2 grupos
 
 af group list
-af admin show marina              # mostra "Grupos: sysadmins, dba"
+af admin show alice              # mostra "Grupos: sysadmins, dba"
 ```
 
 **Edge case — idempotência:**
 
 ```bash
-af group add-member sysadmins marina
+af group add-member sysadmins alice
 # Esperado: OK   (operacao registrada como sucesso, sem duplicar)
 ```
 
@@ -231,16 +233,16 @@ Esperado: lista subações agrupadas por servidor com `+` (verde, adicionar) e `
 i  6 subacoes em 3 servidores
 
 db-03
-  + adicionar_chave    joao:SHA256:...     sudo
-  + adicionar_chave    marina:SHA256:...   shell
+  + adicionar_chave    charlie:SHA256:...     sudo
+  + adicionar_chave    alice:SHA256:...   shell
 
 producao (web-01, web-02)
-  + adicionar_chave    marina:SHA256:...   sudo
-  + adicionar_chave    rui:SHA256:...      sudo
+  + adicionar_chave    alice:SHA256:...   sudo
+  + adicionar_chave    bob:SHA256:...      sudo
   ...
 ```
 
-> Note: marina aparece em `db-03` com nível `shell` (via grupo `sysadmins → bancos`), mas no `producao` ela está com `sudo` (`sysadmins → producao --nivel sudo`).
+> Note: alice aparece em `db-03` com nível `shell` (via grupo `sysadmins → bancos`), mas no `producao` ela está com `sudo` (`sysadmins → producao --nivel sudo`).
 
 **Edge case — preview é read-only:**
 
@@ -258,8 +260,8 @@ af apply --yes
 Esperado: cada subação executada via SSH real, todas com status `sucesso`.
 
 ```
-  OK  db-03    adicionar_chave    joao:SHA256:...
-  OK  db-03    adicionar_chave    marina:SHA256:...
+  OK  db-03    adicionar_chave    charlie:SHA256:...
+  OK  db-03    adicionar_chave    alice:SHA256:...
   ...
 operacao: OP-001x
 status: SUCESSO
@@ -270,28 +272,28 @@ falhas: 0
 **Validar dentro dos containers:**
 
 ```bash
-echo "--- web-01: marina ---"
-docker exec adminforge-web-01 sudo cat /home/marina/.ssh/authorized_keys
-echo "--- web-01: sudoers da marina ---"
-docker exec adminforge-web-01 sudo cat /etc/sudoers.d/adminforge-marina
+echo "--- web-01: alice ---"
+docker exec adminforge-web-01 sudo cat /home/alice/.ssh/authorized_keys
+echo "--- web-01: sudoers da alice ---"
+docker exec adminforge-web-01 sudo cat /etc/sudoers.d/adminforge-alice
 echo "--- visudo -c (sintaxe valida) ---"
 docker exec adminforge-web-01 sudo visudo -c
-echo "--- conta unix marina ---"
-docker exec adminforge-web-01 id marina
+echo "--- conta unix alice ---"
+docker exec adminforge-web-01 id alice
 ```
 
 Esperado:
-- `authorized_keys` tem o bloco `# BEGIN adminforge: marina:SHA256:...` ... `# END adminforge: marina:SHA256:...` envolvendo a chave
-- sudoers `marina ALL=(ALL) NOPASSWD:ALL`
+- `authorized_keys` tem o bloco `# BEGIN adminforge: alice:SHA256:...` ... `# END adminforge: alice:SHA256:...` envolvendo a chave
+- sudoers `alice ALL=(ALL) NOPASSWD:ALL`
 - `visudo -c` parsed OK
-- `id marina` retorna UID/GID
+- `id alice` retorna UID/GID
 
-**Smoke test — marina loga e usa sudo:**
+**Smoke test — alice loga e usa sudo:**
 
 ```bash
 ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-    -i /tmp/marina -p 2201 marina@127.0.0.1 'whoami; sudo whoami'
-# Esperado: marina / root
+    -i /tmp/alice -p 2201 alice@127.0.0.1 'whoami; sudo whoami'
+# Esperado: alice / root
 ```
 
 **Idempotência:**
@@ -329,10 +331,10 @@ af history verify       # volta a OK
 af audit server web-01
 ```
 
-Esperado: lista 3 usuários (`adminforge`, `marina`, `rui`) com UID/shell + serviços rodando (`ssh`, etc.).
+Esperado: lista 3 usuários (`adminforge`, `alice`, `bob`) com UID/shell + serviços rodando (`ssh`, etc.).
 
 ```bash
-af audit server web-01 --user marina    # destaca marina em amarelo
+af audit server web-01 --user alice    # destaca alice em amarelo
 af audit server web-01 --user fantasma  # nao destaca; nao alerta
 ```
 
@@ -343,21 +345,21 @@ af audit server web-01 --user fantasma  # nao destaca; nao alerta
 ### C.1 Briga com edição manual (markers preservam linha pessoal)
 
 ```bash
-docker exec --user marina adminforge-web-01 \
-    bash -c 'echo "ssh-ed25519 AAAA-FakeManualKey marina@home" >> ~/.ssh/authorized_keys'
+docker exec --user alice adminforge-web-01 \
+    bash -c 'echo "ssh-ed25519 AAAA-FakeManualKey alice@home" >> ~/.ssh/authorized_keys'
 
-docker exec --user marina adminforge-web-01 cat /home/marina/.ssh/authorized_keys
-# Esperado: bloco AdminForge + linha manual da marina
+docker exec --user alice adminforge-web-01 cat /home/alice/.ssh/authorized_keys
+# Esperado: bloco AdminForge + linha manual da alice
 ```
 
 Revogue a chave gerenciada:
 
 ```bash
-FP=$(af key list marina | tail -1 | awk '{print $1}')
+FP=$(af key list alice | tail -1 | awk '{print $1}')
 af key revoke "$FP"
 af apply --yes
 
-docker exec --user marina adminforge-web-01 cat /home/marina/.ssh/authorized_keys
+docker exec --user alice adminforge-web-01 cat /home/alice/.ssh/authorized_keys
 # Esperado: APENAS a linha manual sobra; o bloco com markers desapareceu
 ```
 
@@ -366,16 +368,16 @@ docker exec --user marina adminforge-web-01 cat /home/marina/.ssh/authorized_key
 ### C.2 Desabilitar admin
 
 ```bash
-af admin disable rui --yes
+af admin disable bob --yes
 
-af preview              # 2 subacoes 'remover_chave' para rui
+af preview              # 2 subacoes 'remover_chave' para bob
 af apply --yes
 
-docker exec adminforge-web-01 sudo cat /home/rui/.ssh/authorized_keys
+docker exec adminforge-web-01 sudo cat /home/bob/.ssh/authorized_keys
 # Esperado: arquivo vazio ou so newlines
 
-docker exec adminforge-web-01 ls /etc/sudoers.d/ | grep rui
-# Esperado: vazio (sudoers do rui foi removido)
+docker exec adminforge-web-01 ls /etc/sudoers.d/ | grep bob
+# Esperado: vazio (sudoers do bob foi removido)
 ```
 
 ### C.3 Falha parcial (servidor offline)
@@ -383,10 +385,10 @@ docker exec adminforge-web-01 ls /etc/sudoers.d/ | grep rui
 ```bash
 docker stop adminforge-db-03
 
-af admin add carla --nome "Carla" --email c@e.com
-ssh-keygen -t ed25519 -N "" -f /tmp/carla -C "carla@laptop"
-af key add carla --file /tmp/carla.pub
-af group add-member sysadmins carla
+af admin add dave --nome "Dave" --email c@e.com
+ssh-keygen -t ed25519 -N "" -f /tmp/dave -C "dave@laptop"
+af key add dave --file /tmp/dave.pub
+af group add-member sysadmins dave
 
 af apply --yes
 ```
@@ -434,7 +436,7 @@ Esperado no terminal 2: `outra instância do AdminForge está em execução` (ex
 
 ```bash
 ls -la /tmp/lab-state/
-cat /tmp/lab-state/admins/marina.json
+cat /tmp/lab-state/admins/alice.json
 cat /tmp/lab-state/servers/web-01.json
 cat /tmp/lab-state/permissions.json
 cat /tmp/lab-state/known_hosts
@@ -594,7 +596,7 @@ Não rode `apply` aqui. O `audit` não escreve nada no servidor remoto.
 docker compose -f infra/testlab/docker-compose.yml --env-file infra/testlab/.env down -v
 
 rm -rf /tmp/lab-state
-rm -f /tmp/marina /tmp/marina.pub /tmp/rui /tmp/rui.pub /tmp/joao /tmp/joao.pub /tmp/carla /tmp/carla.pub /tmp/adminforge_id
+rm -f /tmp/alice /tmp/alice.pub /tmp/bob /tmp/bob.pub /tmp/charlie /tmp/charlie.pub /tmp/dave /tmp/dave.pub /tmp/adminforge_id
 ```
 
 ---

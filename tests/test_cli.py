@@ -9,7 +9,7 @@ import pytest
 
 from adminforge.cli.main import main
 
-from .conftest import CHAVE_MARINA, HOST_KEY_FAKE
+from .conftest import CHAVE_ALICE, HOST_KEY_FAKE
 
 
 @pytest.fixture
@@ -17,7 +17,7 @@ def env(tmp_path: Path, monkeypatch) -> dict:
     state = tmp_path / "state"
     state.mkdir()
     monkeypatch.setenv("ADMINFORGE_STATE", str(state))
-    monkeypatch.setenv("ADMINFORGE_SUPERADMIN", "cristhian")
+    monkeypatch.setenv("ADMINFORGE_SUPERADMIN", "operador")
     return {"state": str(state)}
 
 
@@ -29,15 +29,15 @@ def run_cli(argv: list[str]) -> tuple[int, str]:
 
 
 def test_cli_fluxo_basico(env):
-    rc, out = run_cli(["admin", "add", "marina", "--nome", "Marina", "--email", "m@e.com"])
+    rc, out = run_cli(["admin", "add", "alice", "--nome", "Alice", "--email", "m@e.com"])
     assert rc == 0, out
 
-    rc, out = run_cli(["key", "add", "marina", "--string", CHAVE_MARINA])
+    rc, out = run_cli(["key", "add", "alice", "--string", CHAVE_ALICE])
     assert rc == 0, out
 
     rc, _ = run_cli(["group", "create", "sysadmins"])
     assert rc == 0
-    rc, _ = run_cli(["group", "add-member", "sysadmins", "marina"])
+    rc, _ = run_cli(["group", "add-member", "sysadmins", "alice"])
     assert rc == 0
 
     rc, _ = run_cli(["server", "add", "web-01", "--ip", "10.0.0.10", "--host-key", HOST_KEY_FAKE])

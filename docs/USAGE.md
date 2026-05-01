@@ -18,8 +18,8 @@ adminforge admin add <username> --nome "Nome Completo" --email pessoa@empresa.co
 
 ```bash
 adminforge admin list                # tabela
-adminforge admin show marina         # detalha admin + chaves + grupos
-adminforge admin disable marina      # status=inativo, chaves revogadas
+adminforge admin show alice         # detalha admin + chaves + grupos
+adminforge admin disable alice      # status=inativo, chaves revogadas
 ```
 
 ---
@@ -27,8 +27,8 @@ adminforge admin disable marina      # status=inativo, chaves revogadas
 ## UC-2 — Cadastrar / revogar chave SSH
 
 ```bash
-adminforge key add marina --file ~/.ssh/marina.pub
-adminforge key add marina --string "ssh-ed25519 AAAA... marina@laptop"
+adminforge key add alice --file ~/.ssh/alice.pub
+adminforge key add alice --string "ssh-ed25519 AAAA... alice@laptop"
 ```
 
 Aceita `ssh-ed25519`, `ssh-rsa`, `ecdsa-sha2-nistp{256,384,521}`. Fingerprint é SHA256 da chave.
@@ -36,7 +36,7 @@ Aceita `ssh-ed25519`, `ssh-rsa`, `ecdsa-sha2-nistp{256,384,521}`. Fingerprint é
 Revogar:
 
 ```bash
-adminforge key list marina
+adminforge key list alice
 adminforge key revoke SHA256:abc123...
 ```
 
@@ -48,8 +48,8 @@ A revogação muda o status para `revogada`. A remoção física do `authorized_
 
 ```bash
 adminforge group create sysadmins
-adminforge group add-member sysadmins marina
-adminforge group remove-member sysadmins marina
+adminforge group add-member sysadmins alice
+adminforge group remove-member sysadmins alice
 adminforge group delete sysadmins        # bloqueia se houver permissoes associadas
 adminforge group list
 ```
@@ -122,11 +122,11 @@ Read-only: lê o estado declarado e cada `chaves_instaladas`, calcula o delta, a
 i  3 subacoes em 2 servidores
 
 web-01
-  + adicionar_chave    marina:SHA256:abc...    sudo
-  - remover_chave      rui:SHA256:def...       shell
+  + adicionar_chave    alice:SHA256:abc...    sudo
+  - remover_chave      bob:SHA256:def...       shell
 
 db-03
-  + adicionar_chave    marina:SHA256:abc...    sudo
+  + adicionar_chave    alice:SHA256:abc...    sudo
 ```
 
 ---
@@ -142,9 +142,9 @@ adminforge apply --dry-run    # simula com DryRunDeployer
 Saída típica com falha parcial:
 
 ```
-  OK   web-01   adicionar_chave   marina:SHA256:abc...
-  OK   web-02   adicionar_chave   marina:SHA256:abc...
- ERRO  db-03    adicionar_chave   marina:SHA256:abc... — ssh: connect timeout after 30s
+  OK   web-01   adicionar_chave   alice:SHA256:abc...
+  OK   web-02   adicionar_chave   alice:SHA256:abc...
+ ERRO  db-03    adicionar_chave   alice:SHA256:abc... — ssh: connect timeout after 30s
 
 operacao: OP-0042
   status: SUCESSO_PARCIAL
