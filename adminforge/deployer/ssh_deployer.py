@@ -62,9 +62,7 @@ class SSHDeployer(IDeployer):
         import base64
 
         blob = base64.b64encode(host_key.asbytes()).decode("ascii")
-        return f"{host_key.get_name()} {blob}", host_key.fingerprint.hex() if hasattr(
-            host_key, "fingerprint"
-        ) else _fingerprint_md5(host_key)
+        return f"{host_key.get_name()} {blob}", _fingerprint_sha256(host_key)
 
     def _executar(self, client: paramiko.SSHClient, comando: str) -> tuple[int, str, str]:
         _, stdout, stderr = client.exec_command(comando, timeout=self.timeout)
@@ -197,8 +195,9 @@ def _decode_b64(s: str) -> bytes:
     return base64.b64decode(s.encode("ascii"))
 
 
-def _fingerprint_md5(host_key: paramiko.PKey) -> str:
+def _fingerprint_sha256(host_key: paramiko.PKey) -> str:
+    import base64
     import hashlib
 
-    digest = hashlib.md5(host_key.asbytes()).hexdigest()
-    return ":".join(digest[i : i + 2] for i in range(0, len(digest), 2))
+    digest = hashlib.sha256(host_key.asbytes()).digest()
+    return "SHA256:" + base64.b64encode(digest).decode("ascii").rstrip("=")
