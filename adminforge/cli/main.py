@@ -54,8 +54,10 @@ def _nucleo(ctx: click.Context, com_ssh: bool = False) -> Nucleo:
         chave = os.environ.get("ADMINFORGE_SSH_KEY") or str(Path.home() / ".ssh" / "adminforge_id")
         usuario = os.environ.get("ADMINFORGE_SSH_USER", "adminforge")
         criar_conta = os.environ.get("ADMINFORGE_CREATE_UNIX_USER", "true").lower() != "false"
+        known_hosts = _state_dir(ctx) / "known_hosts"
         deployer = SSHDeployer(
             chave_privada_path=Path(chave),
+            known_hosts_path=known_hosts,
             usuario_servico=usuario,
             criar_conta_unix=criar_conta,
         )
@@ -311,7 +313,10 @@ def server_add(
     if auto and not host_key:
         from adminforge.deployer.ssh_deployer import SSHDeployer
 
-        deployer = SSHDeployer(chave_privada_path=Path("/dev/null"))
+        deployer = SSHDeployer(
+            chave_privada_path=Path("/dev/null"),
+            known_hosts_path=_state_dir(ctx) / "known_hosts",
+        )
         try:
             host_key, fp = deployer.capturar_host_key(hostname, ipv4, porta)
         except Exception as e:
