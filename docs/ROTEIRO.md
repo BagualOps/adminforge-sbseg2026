@@ -57,26 +57,36 @@ export ADMINFORGE_SSH_USER=adminforge
 
 ---
 
-## 4. Bootstrappar o usuário de serviço (uma vez por servidor)
+## 4. Bootstrappar o acesso ao servidor (uma vez por servidor)
 
-Em cada servidor da frota, garanta **uma única vez** que existe um usuário `adminforge` com `NOPASSWD:ALL` e a chave acima instalada.
+O AdminForge precisa de **um usuário Linux no servidor com `sudo NOPASSWD` e uma chave SSH instalada**. Há dois cenários, escolha conforme seu contexto:
 
-### Opção A — Servidor existente, manual
+---
+
+### Cenário 1 — Você controla totalmente o servidor (VM, VPS, hardware seu)
+
+Crie um usuário **dedicado** chamado `adminforge`. É a forma mais limpa: separa identidade do operador da identidade da ferramenta.
+
+#### 1a. Servidor existente, via SSH
+
+> **Heredoc com aspas (`<<'EOF'`) é importante** — sem aspas, `$(...)` é expandido localmente e pode pegar a chave errada. Pra evitar a armadilha completamente, copie a pubkey antes:
 
 ```bash
-ssh <seu-acesso-sudo>@<servidor> bash <<EOF
-set -e
+scp ~/.ssh/adminforge_id.pub <seu-acesso-sudo>@<servidor>:/tmp/adminforge.pub
+
+ssh <seu-acesso-sudo>@<servidor> bash -s <<'EOF'
+set -ex
 sudo useradd -m -s /bin/bash adminforge 2>/dev/null || true
 echo 'adminforge ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/adminforge >/dev/null
 sudo chmod 0440 /etc/sudoers.d/adminforge
-sudo visudo -c
+sudo visudo -c >/dev/null
 sudo install -d -m 700 -o adminforge -g adminforge /home/adminforge/.ssh
-echo "$(cat ~/.ssh/adminforge_id.pub)" \
-    | sudo install -m 600 -o adminforge -g adminforge /dev/stdin /home/adminforge/.ssh/authorized_keys
+sudo install -m 600 -o adminforge -g adminforge /tmp/adminforge.pub /home/adminforge/.ssh/authorized_keys
+rm -f /tmp/adminforge.pub
 EOF
 ```
 
-### Opção B — VM nova, via cloud-init `user-data`
+#### 1b. VM nova, via cloud-init `user-data`
 
 ```yaml
 #cloud-config
@@ -88,14 +98,57 @@ users:
       - ssh-ed25519 AAAA... adminforge@operador
 ```
 
-### Verifique antes de continuar
+#### Verifique antes de continuar
 
 ```bash
 ssh -i ~/.ssh/adminforge_id -o BatchMode=yes adminforge@<servidor> 'whoami; sudo -n whoami'
 # Esperado: adminforge / root
 ```
 
-> **Reuso de usuário existente.** Se preferir não criar `adminforge` e sim usar uma conta sua que já tenha sudo NOPASSWD, ajuste `ADMINFORGE_SSH_USER=$USER` e desligue a criação automática de contas com `export ADMINFORGE_CREATE_UNIX_USER=false`. O AdminForge falha com mensagem clara se algum admin não existir como conta Unix, em vez de criar.
+Configure as variáveis com o user dedicado:
+
+```bash
+export ADMINFORGE_SSH_USER=adminforge
+export ADMINFORGE_SSH_KEY=~/.ssh/adminforge_id
+```
+
+---
+
+### Cenário 2 — Servidor compartilhado (você só pode logar como você mesmo)
+
+Comum em CPDs/labs onde o `sshd_config` tem `AllowUsers <lista-fixa>` e você não tem autoridade pra adicionar um user novo. Aqui você **reusa sua própria conta** (que já está na lista) como service user do AdminForge.
+
+**Pré-requisitos:**
+
+1. Sua conta no servidor tem `sudo NOPASSWD`. Confirme:
+
+   ```bash
+   ssh -o BatchMode=yes <seu-user>@<servidor> 'sudo -n whoami'
+   # Esperado: root
+   # Se pedir senha: precisa configurar NOPASSWD pra seu user (peça pro admin do CPD).
+   ```
+
+2. **As contas Unix dos admins gerenciados já existem no servidor** — você não pode criar contas novas (quem mantém isso é o admin do CPD via LDAP/manual). O AdminForge vai instalar chaves e sudoers nelas, **não** criar.
+
+Configure as variáveis apontando pro seu user e desligando a criação automática de contas:
+
+```bash
+export ADMINFORGE_SSH_USER=<seu-user-no-servidor>
+export ADMINFORGE_SSH_KEY=<sua-chave-privada-que-loga-no-servidor>
+export ADMINFORGE_CREATE_UNIX_USER=false
+```
+
+Com `ADMINFORGE_CREATE_UNIX_USER=false`, o `apply` falha com mensagem clara se algum admin cadastrado não existir como conta Unix no host — em vez de tentar `useradd`.
+
+Não há bootstrap adicional aqui: a configuração SSH+sudo do seu user já é o "bootstrap".
+
+> **Diagnóstico rápido se a Opção 1 falha mesmo com a chave instalada.** Se `ssh -i ... adminforge@<host>` der `Permission denied (publickey,password)` mas o `authorized_keys` está correto, provavelmente é `AllowUsers` no sshd. Confirma com:
+>
+> ```bash
+> ssh <seu-user>@<servidor> 'sudo journalctl -u ssh -n 20 --no-pager | grep AllowUsers'
+> ```
+>
+> Se aparecer `User adminforge ... not allowed because not listed in AllowUsers`, vá pro Cenário 2 (ou peça acesso pra incluir `adminforge` no `AllowUsers`).
 
 ---
 
@@ -139,6 +192,8 @@ af admin add bruno  --nome "Bruno Lima"     --email bruno@empresa.com
 af admin add diego  --nome "Diego Pereira"  --email diego@empresa.com
 af admin list
 ```
+
+> **Atenção em servidor compartilhado (Cenário 2 do passo 4):** o `username` aqui precisa **bater com uma conta Unix que já existe** no servidor. Cadastrar `bruno` no AdminForge enquanto não há `bruno` no `/etc/passwd` do host vai fazer o `apply` falhar com mensagem clara. Em servidor próprio (Cenário 1), o AdminForge cria a conta no primeiro `apply`.
 
 ### 5.4 Chaves públicas SSH
 
