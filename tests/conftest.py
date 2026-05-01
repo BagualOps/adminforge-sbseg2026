@@ -7,7 +7,7 @@ import pytest
 from adminforge.auditor.jsonl_auditor import JsonlAuditor
 from adminforge.core.nucleo import Nucleo
 from adminforge.deployer.dry_run import DryRunDeployer
-from adminforge.store.yaml_store import YamlStore
+from adminforge.store.json_store import JsonStore
 
 CHAVE_MARINA = (
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGZdz3+gT+Md3OSv00ku0Q9j+QUvhU3iRA9eCkP9F1Tc marina@laptop"
@@ -32,6 +32,6 @@ def deployer() -> DryRunDeployer:
 
 @pytest.fixture
 def nucleo(state_dir: Path, deployer: DryRunDeployer) -> Nucleo:
-    store = YamlStore(state_dir)
+    store = JsonStore(state_dir)
     auditor = JsonlAuditor(state_dir / "history.jsonl")
     return Nucleo(store, auditor, deployer, superadmin="cristhian")

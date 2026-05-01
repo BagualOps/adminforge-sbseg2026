@@ -67,10 +67,10 @@ def test_fluxo_completo(nucleo: Nucleo):
 
 def test_apply_com_falha_parcial(state_dir):
     from adminforge.auditor.jsonl_auditor import JsonlAuditor
-    from adminforge.store.yaml_store import YamlStore
+    from adminforge.store.json_store import JsonStore
 
     deployer = DryRunDeployer(falhar_em={"db-03"})
-    store = YamlStore(state_dir)
+    store = JsonStore(state_dir)
     auditor = JsonlAuditor(state_dir / "history.jsonl")
     nucleo = Nucleo(store, auditor, deployer, superadmin="cristhian")
 

@@ -30,7 +30,7 @@ from adminforge.exceptions import (
 )
 from adminforge.interfaces.deployer import IDeployer
 from adminforge.planner.planner import Planner
-from adminforge.store.yaml_store import YamlStore
+from adminforge.store.json_store import JsonStore
 
 _RE_USERNAME = re.compile(r"^[a-z_][a-z0-9_-]{0,30}$")
 _RE_HOSTNAME = re.compile(r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$")
@@ -42,7 +42,7 @@ _RE_IPV4 = re.compile(r"^(?:\d{1,3}\.){3}\d{1,3}$")
 class Nucleo:
     def __init__(
         self,
-        store: YamlStore,
+        store: JsonStore,
         auditor: JsonlAuditor,
         deployer: IDeployer | None = None,
         superadmin: str = "desconhecido",
@@ -60,7 +60,7 @@ class Nucleo:
         deployer: IDeployer | None = None,
         superadmin: str = "desconhecido",
     ) -> "Nucleo":
-        store = YamlStore(state_dir)
+        store = JsonStore(state_dir)
         auditor = JsonlAuditor(state_dir / "history.jsonl")
         return cls(store, auditor, deployer, superadmin)
 

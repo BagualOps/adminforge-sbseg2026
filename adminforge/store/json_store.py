@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import fcntl
+import json
 import os
 from pathlib import Path
 from uuid import UUID
-
-import yaml
 
 from adminforge.domain import (
     Admin,
@@ -23,14 +22,16 @@ from adminforge.interfaces.store import IStore
 from adminforge.store.atomic import write_atomic
 
 
-class YamlStore(IStore):
+class JsonStore(IStore):
+    EXTENSAO = ".json"
+
     def __init__(self, root: Path):
         self.root = Path(root)
         self.dir_admins = self.root / "admins"
         self.dir_admin_groups = self.root / "admin-groups"
         self.dir_servers = self.root / "servers"
         self.dir_server_groups = self.root / "server-groups"
-        self.file_permissions = self.root / "permissions.yaml"
+        self.file_permissions = self.root / "permissions.json"
         self.file_lock = self.root / ".lock"
         self._lock_fd: int | None = None
         self._init_dirs()
@@ -66,7 +67,7 @@ class YamlStore(IStore):
             os.close(self._lock_fd)
             self._lock_fd = None
 
-    def __enter__(self) -> YamlStore:
+    def __enter__(self) -> JsonStore:
         self.lock()
         return self
 
@@ -74,16 +75,19 @@ class YamlStore(IStore):
         self.unlock()
 
     def _dump(self, data: dict) -> str:
-        return yaml.safe_dump(data, sort_keys=False, allow_unicode=True, default_flow_style=False)
+        return json.dumps(data, indent=2, ensure_ascii=False) + "\n"
 
     def _load(self, path: Path) -> dict:
         if not path.exists():
             return {}
         with path.open("r", encoding="utf-8") as f:
-            return yaml.safe_load(f) or {}
+            content = f.read().strip()
+            if not content:
+                return {}
+            return json.loads(content)
 
     def get_admin(self, username: str) -> Admin | None:
-        data = self._load(self.dir_admins / f"{username}.yaml")
+        data = self._load(self.dir_admins / f"{username}.json")
         if not data:
             return None
         return Admin(
@@ -96,7 +100,7 @@ class YamlStore(IStore):
 
     def list_admins(self) -> list[Admin]:
         admins = []
-        for arquivo in sorted(self.dir_admins.glob("*.yaml")):
+        for arquivo in sorted(self.dir_admins.glob("*.json")):
             a = self.get_admin(arquivo.stem)
             if a is not None:
                 admins.append(a)
@@ -111,14 +115,14 @@ class YamlStore(IStore):
             "status": admin.status.value,
             "credenciais": [],
         }
-        path = self.dir_admins / f"{admin.username}.yaml"
+        path = self.dir_admins / f"{admin.username}.json"
         existente = self._load(path)
         if "credenciais" in existente:
             data["credenciais"] = existente["credenciais"]
         write_atomic(path, self._dump(data))
 
     def list_credenciais(self, admin_username: str) -> list[CredencialSSH]:
-        data = self._load(self.dir_admins / f"{admin_username}.yaml")
+        data = self._load(self.dir_admins / f"{admin_username}.json")
         creds = []
         for c in data.get("credenciais", []):
             creds.append(
@@ -133,7 +137,7 @@ class YamlStore(IStore):
         return creds
 
     def save_credencial(self, cred: CredencialSSH) -> None:
-        path = self.dir_admins / f"{cred.admin_username}.yaml"
+        path = self.dir_admins / f"{cred.admin_username}.json"
         data = self._load(path)
         if not data:
             raise FileNotFoundError(f"admin '{cred.admin_username}' não existe")
@@ -165,7 +169,7 @@ class YamlStore(IStore):
         return None
 
     def get_servidor(self, hostname: str) -> Servidor | None:
-        data = self._load(self.dir_servers / f"{hostname}.yaml")
+        data = self._load(self.dir_servers / f"{hostname}.json")
         if not data:
             return None
         return Servidor(
@@ -179,7 +183,7 @@ class YamlStore(IStore):
 
     def list_servidores(self) -> list[Servidor]:
         out = []
-        for arquivo in sorted(self.dir_servers.glob("*.yaml")):
+        for arquivo in sorted(self.dir_servers.glob("*.json")):
             s = self.get_servidor(arquivo.stem)
             if s is not None:
                 out.append(s)
@@ -194,13 +198,13 @@ class YamlStore(IStore):
             "chave_host": servidor.chave_host,
             "chaves_instaladas": list(servidor.chaves_instaladas),
         }
-        write_atomic(self.dir_servers / f"{servidor.hostname}.yaml", self._dump(data))
+        write_atomic(self.dir_servers / f"{servidor.hostname}.json", self._dump(data))
 
     def delete_servidor(self, hostname: str) -> None:
-        (self.dir_servers / f"{hostname}.yaml").unlink(missing_ok=True)
+        (self.dir_servers / f"{hostname}.json").unlink(missing_ok=True)
 
     def get_grupo_admin(self, nome: str) -> GrupoAdmin | None:
-        data = self._load(self.dir_admin_groups / f"{nome}.yaml")
+        data = self._load(self.dir_admin_groups / f"{nome}.json")
         if not data:
             return None
         return GrupoAdmin(
@@ -209,7 +213,7 @@ class YamlStore(IStore):
 
     def list_grupos_admin(self) -> list[GrupoAdmin]:
         out = []
-        for arquivo in sorted(self.dir_admin_groups.glob("*.yaml")):
+        for arquivo in sorted(self.dir_admin_groups.glob("*.json")):
             g = self.get_grupo_admin(arquivo.stem)
             if g is not None:
                 out.append(g)
@@ -217,13 +221,13 @@ class YamlStore(IStore):
 
     def save_grupo_admin(self, grupo: GrupoAdmin) -> None:
         data = {"id": str(grupo.id), "nome": grupo.nome, "membros": list(grupo.membros)}
-        write_atomic(self.dir_admin_groups / f"{grupo.nome}.yaml", self._dump(data))
+        write_atomic(self.dir_admin_groups / f"{grupo.nome}.json", self._dump(data))
 
     def delete_grupo_admin(self, nome: str) -> None:
-        (self.dir_admin_groups / f"{nome}.yaml").unlink(missing_ok=True)
+        (self.dir_admin_groups / f"{nome}.json").unlink(missing_ok=True)
 
     def get_grupo_servidor(self, nome: str) -> GrupoServidor | None:
-        data = self._load(self.dir_server_groups / f"{nome}.yaml")
+        data = self._load(self.dir_server_groups / f"{nome}.json")
         if not data:
             return None
         return GrupoServidor(
@@ -232,7 +236,7 @@ class YamlStore(IStore):
 
     def list_grupos_servidor(self) -> list[GrupoServidor]:
         out = []
-        for arquivo in sorted(self.dir_server_groups.glob("*.yaml")):
+        for arquivo in sorted(self.dir_server_groups.glob("*.json")):
             g = self.get_grupo_servidor(arquivo.stem)
             if g is not None:
                 out.append(g)
@@ -240,10 +244,10 @@ class YamlStore(IStore):
 
     def save_grupo_servidor(self, grupo: GrupoServidor) -> None:
         data = {"id": str(grupo.id), "nome": grupo.nome, "membros": list(grupo.membros)}
-        write_atomic(self.dir_server_groups / f"{grupo.nome}.yaml", self._dump(data))
+        write_atomic(self.dir_server_groups / f"{grupo.nome}.json", self._dump(data))
 
     def delete_grupo_servidor(self, nome: str) -> None:
-        (self.dir_server_groups / f"{nome}.yaml").unlink(missing_ok=True)
+        (self.dir_server_groups / f"{nome}.json").unlink(missing_ok=True)
 
     def list_permissoes(self) -> list[Permissao]:
         data = self._load(self.file_permissions)

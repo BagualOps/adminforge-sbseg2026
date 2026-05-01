@@ -5,12 +5,12 @@ import pytest
 
 from adminforge.domain import Admin, GrupoAdmin, NivelPermissao, Permissao, Servidor
 from adminforge.exceptions import LockOcupado
-from adminforge.store.yaml_store import YamlStore
+from adminforge.store.json_store import JsonStore
 
 
 def test_lockfile_concorrencia(tmp_path: Path):
-    a = YamlStore(tmp_path)
-    b = YamlStore(tmp_path)
+    a = JsonStore(tmp_path)
+    b = JsonStore(tmp_path)
     a.lock()
     try:
         with pytest.raises(LockOcupado):
@@ -22,16 +22,16 @@ def test_lockfile_concorrencia(tmp_path: Path):
 
 
 def test_save_admin_permissao_0600(tmp_path: Path):
-    s = YamlStore(tmp_path)
+    s = JsonStore(tmp_path)
     s.save_admin(Admin(username="marina", nome="Marina", email="m@e.com"))
-    arquivo = tmp_path / "admins" / "marina.yaml"
+    arquivo = tmp_path / "admins" / "marina.json"
     assert arquivo.exists()
     modo = oct(arquivo.stat().st_mode)[-3:]
     assert modo == "600"
 
 
 def test_roundtrip_servidor(tmp_path: Path):
-    s = YamlStore(tmp_path)
+    s = JsonStore(tmp_path)
     serv = Servidor(
         hostname="web-01",
         ipv4="10.0.0.10",
@@ -47,7 +47,7 @@ def test_roundtrip_servidor(tmp_path: Path):
 
 
 def test_permissao_atualiza_em_vez_de_duplicar(tmp_path: Path):
-    s = YamlStore(tmp_path)
+    s = JsonStore(tmp_path)
     s.save_permissao(Permissao(grupo_admin="sa", grupo_servidor="prod", nivel=NivelPermissao.SHELL))
     s.save_permissao(Permissao(grupo_admin="sa", grupo_servidor="prod", nivel=NivelPermissao.SUDO))
     perms = s.list_permissoes()
@@ -56,7 +56,7 @@ def test_permissao_atualiza_em_vez_de_duplicar(tmp_path: Path):
 
 
 def test_delete_grupo(tmp_path: Path):
-    s = YamlStore(tmp_path)
+    s = JsonStore(tmp_path)
     s.save_grupo_admin(GrupoAdmin(nome="sa", membros=["x"]))
     assert s.get_grupo_admin("sa") is not None
     s.delete_grupo_admin("sa")
