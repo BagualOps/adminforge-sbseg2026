@@ -110,7 +110,3 @@ pytest -v
 ## Licença
 
 GNU AGPL-3.0.
-
-## Autor
-
-Cristhian Kapelinski — Porto Alegre, abril de 2026.
