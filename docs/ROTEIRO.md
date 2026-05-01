@@ -134,9 +134,15 @@ Configure as variáveis apontando pro seu user e desligando a criação automát
 
 ```bash
 export ADMINFORGE_SSH_USER=<seu-user-no-servidor>
-export ADMINFORGE_SSH_KEY=<sua-chave-privada-que-loga-no-servidor>
+export ADMINFORGE_SSH_KEY=~/.ssh/id_ed25519     # ou ~/.ssh/id_rsa, ou outra chave especifica
 export ADMINFORGE_CREATE_UNIX_USER=false
 ```
+
+> Pra descobrir qual chave seu SSH usa para esse host:
+> ```bash
+> ssh -G <servidor> | grep -i identityfile
+> ```
+> Ele lista os caminhos das chaves consultadas (default ou via `~/.ssh/config`). Pegue a primeira que existe e funciona.
 
 Com `ADMINFORGE_CREATE_UNIX_USER=false`, o `apply` falha com mensagem clara se algum admin cadastrado não existir como conta Unix no host — em vez de tentar `useradd`.
 
