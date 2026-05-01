@@ -5,15 +5,11 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "adminforge"
 version = "0.1.0"
-description = "CLI para gestão de identidades privilegiadas em frotas de servidores Linux"
-authors = [{ name = "Cristhian Kapelinski" }]
+description = "CLI para gestao de identidades privilegiadas em frotas de servidores Linux"
+authors = [{ name = "BagualOps" }]
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = [
-    "click>=8.1",
-    "PyYAML>=6.0",
-    "paramiko>=3.4",
-]
+dependencies = []
 
 [project.optional-dependencies]
 dev = [
@@ -24,7 +20,7 @@ dev = [
 ]
 
 [project.scripts]
-adminforge = "adminforge.cli.main:cli"
+adminforge = "adminforge.cli.main:main"
 
 [tool.setuptools.packages.find]
 include = ["adminforge*"]
