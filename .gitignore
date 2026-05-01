@@ -36,3 +36,4 @@ state/.lock
 !state/admin-groups/.gitkeep
 !state/servers/.gitkeep
 !state/server-groups/.gitkeep
+teste/
