@@ -141,7 +141,7 @@ Mais em [`docs/SECURITY.md`](docs/SECURITY.md).
 | [`docs/SECURITY.md`](docs/SECURITY.md)     | Modelo de ameaças, cuidados operacionais, escopo de auditoria. |
 | [`docs/CONFIG.md`](docs/CONFIG.md)         | Variáveis de ambiente e estrutura do `state/`. |
 | [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) | Como rodar testes, lint, contribuir. |
-| [`docs/ROTEIRO.md`](docs/ROTEIRO.md) | Roteiro completo de teste manual: 10 UCs + edge cases + servidor real (~20 min). |
+| [`docs/ROTEIRO.md`](docs/ROTEIRO.md) | Guia de operação completo: instalação, bootstrap, cadastro inicial, rotina diária. |
 | [`docs/modelagem-v1.pdf`](docs/modelagem-v1.pdf) | Modelagem original (sumário, diagramas, fluxos, questões em aberto). |
 
 ## Testes
@@ -152,9 +152,9 @@ pytest -v
 
 36 testes cobrem o fluxo end-to-end e edge cases (cadeia quebrada, duplicatas, idempotência, falha parcial, no-op, lockfile concorrente, permissão 0600).
 
-### Validação manual completa
+### Como usar em produção
 
-Para exercitar **todo** o sistema — `apply` real via SSH, markers em `authorized_keys`, sudoers, revogação, falha parcial, audit operacional, cadeia de hashes — siga o **[Roteiro completo de teste](docs/ROTEIRO.md)**: ~20 minutos cobrindo os 10 UCs com lab Docker (write) e instruções para validar contra servidor próprio (VM/VPS).
+Para começar a operar sua frota com AdminForge — bootstrap dos servidores, cadastro inicial, e fluxos do dia-a-dia (alguém entrou, alguém saiu, novo servidor, chave comprometida) — siga o **[Guia de operação](docs/ROTEIRO.md)**.
 
 ## Licença
 
