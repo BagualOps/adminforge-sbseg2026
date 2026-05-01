@@ -7,9 +7,42 @@ CLI Python para gestão de identidades privilegiadas em frotas de servidores Lin
 ## Estado do projeto
 
 - **M-0** Modelagem v1 — [`docs/modelagem-v1.pdf`](docs/modelagem-v1.pdf)
-- **M-1** Protótipo Python — **este repositório** (10/10 UCs implementados, 36 testes passando)
+- **M-1** Protótipo Python — **este repositório** (10/10 UCs implementados, 37 testes passando, integration test em Docker no CI)
 - **M-2** Robustez — retentativa automática, `apply verify`, cifragem seletiva
 - **M-3** Rust + modo *pull* — servidores puxam estado de repositório Git assinado
+
+### Footprint (zero deps de runtime)
+
+| Camada | Antes | Agora | Variação |
+|--------|-------|-------|----------|
+| Código nosso (produção) | 2.429 LOC | 2.358 LOC | -71 (-3%) |
+| Dependências de runtime | ~56.000 LOC (paramiko, click, PyYAML, cryptography, …) | **0** | **-100%** |
+| Total executado | ~58.400 LOC | 2.358 LOC | **-96%** |
+
+Substituições que compõem essa redução:
+
+- `paramiko + cryptography + bcrypt + pynacl + cffi` → `subprocess(ssh)` chamando OpenSSH binário
+- `click` → `argparse` (stdlib) + helpers ANSI
+- `PyYAML` → `json` (stdlib); arquivos de estado em `.json`
+
+Detalhes em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#zero-deps).
+
+### Endurecimentos do `apply` (revisão crítica)
+
+| # | Mudança | Status |
+|---|---------|--------|
+| 1 | Markers `# BEGIN/END adminforge: <ref>` em `authorized_keys` — não briga com edição manual | ✅ |
+| 2 | `visudo -cf` antes de mover sudoers — sintaxe ruim não quebra `sudo` da máquina | ✅ |
+| 3 | `ADMINFORGE_CREATE_UNIX_USER=false` desabilita `useradd` automático | ✅ |
+| 4 | Threshold UID >= 100 no `audit server` — captura service accounts (postgres, tomcat, etc.) | ✅ |
+| 5 | Strategy: `SSHDeployer` (real) e `DryRunDeployer` (testes) | ✅ |
+| 6 | Lockfile (`fcntl.flock`) — exclusão mútua entre operadores | ✅ |
+| 7 | Histórico append-only com cadeia SHA256; `verify` aponta divergência | ✅ |
+| 8 | Backup `authorized_keys.bak` antes da edição | M-2 |
+| 9 | Sudoers configurável por comando (não só `NOPASSWD:ALL`) | M-2 |
+| 10 | `apply verify` — confere `chaves_instaladas` declaradas vs reais | M-2 |
+| 11 | Paralelismo + taxa-falha-máxima no Deployer | M-2 |
+| 12 | `apply --diff` mostra antes/depois do `authorized_keys` | M-2 |
 
 ## Princípios
 
@@ -35,13 +68,18 @@ Detalhes em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Modelagem completa (
 
 ## Quickstart (60 segundos)
 
+**Zero dependências de runtime** — basta Python 3.11+ e o cliente OpenSSH (já vem em qualquer Linux).
+
 ```bash
 git clone https://github.com/BagualOps/adminforge-v1.git
 cd adminforge-v1
-python -m venv .venv && source .venv/bin/activate
-pip install -e .[dev]
+
+# Roda direto, sem pip install (nem venv):
+python3 -m adminforge.cli.main --help
 
 # Cadastros (mudam apenas o estado desejado)
+alias adminforge="python3 -m adminforge.cli.main"
+
 adminforge admin add marina --nome "Marina Silva" --email marina@empresa.com
 adminforge key add marina --file ~/.ssh/marina.pub
 adminforge group create sysadmins
@@ -58,6 +96,12 @@ adminforge preview                                        # read-only
 adminforge apply                                          # via SSH
 adminforge history list
 adminforge history verify
+```
+
+Pra instalar como comando do sistema (opcional):
+
+```bash
+pipx install .            # ou: pip install --user .
 ```
 
 Receitário completo por caso de uso: [`docs/USAGE.md`](docs/USAGE.md).

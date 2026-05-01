@@ -1,12 +1,34 @@
 # Arquitetura
 
-> **Visão de 30 segundos.** Seis componentes, cada um com uma responsabilidade clara. CLI é a única porta de entrada; os outros são internos. Estado declarado em YAML; estado real espelhado no campo `chaves_instaladas` de cada servidor; delta calculado em memória; aplicação via SSH; histórico append-only com cadeia de hashes.
+> **Visão de 30 segundos.** Seis componentes, cada um com uma responsabilidade clara. CLI é a única porta de entrada; os outros são internos. Estado declarado em JSON; estado real espelhado no campo `chaves_instaladas` de cada servidor; delta calculado em memória; aplicação via SSH (OpenSSH binário); histórico append-only com cadeia de hashes. **Zero dependências de runtime** — só stdlib + OpenSSH.
+
+## Zero deps {#zero-deps}
+
+A v1 (M-1) começou usando `paramiko` (SSH), `click` (CLI) e `PyYAML` (estado), totalizando ~56.000 linhas de código de terceiro para ~2.400 linhas próprias. Em revisão crítica, cada uma foi substituída por equivalente do stdlib:
+
+| Antes | Substituto | Linhas eliminadas |
+|-------|-----------|-------------------|
+| paramiko + cryptography + bcrypt + pynacl + cffi | `subprocess` chamando `ssh`/`ssh-keyscan` (OpenSSH) | ~38.000 |
+| click | `argparse` (stdlib) + helpers ANSI manuais | ~11.000 |
+| PyYAML | `json` (stdlib); estado em `.json` | ~6.000 |
+
+**Trade-offs aceitos:**
+
+- **Sem comentários nos arquivos de estado.** JSON não permite. Aceitável: na prática a auditoria fica no `history.jsonl` com cadeia de hashes.
+- **Pré-requisito: OpenSSH client.** Já universal em Linux/macOS; em Windows requer instalação.
+- **CLI com argparse mais verboso que click.** ~200 linhas a mais de definição de subcomandos, mas estática e legível.
+
+**Ganhos:**
+
+- **Superfície de ataque reduzida.** OpenSSH é a implementação SSH mais auditada do mundo; mais segura que paramiko com cryptography.
+- **Instalação trivial.** `git clone && python3 -m adminforge.cli.main` funciona — sem venv, sem `pip install`.
+- **Manutenção menor.** Zero CVEs de paramiko/cryptography/PyYAML pra acompanhar.
 
 ## Diagrama
 
 ```
                        ┌──────────────────┐
-                       │       CLI        │  (Click; única porta de entrada)
+                       │       CLI        │  (argparse; única porta de entrada)
                        └────────┬─────────┘
                                 │
                        ┌────────▼─────────┐
@@ -17,13 +39,13 @@
                 │             │    │             │
         ┌───────▼──────┐  ┌───▼────▼───┐  ┌──────▼──────┐
         │    Store     │  │  Planner   │  │   Auditor   │
-        │  YAML 0600   │  │   delta    │  │ history.jsonl│
+        │  JSON 0600   │  │   delta    │  │ history.jsonl│
         └──────────────┘  └─────┬──────┘  └─────────────┘
                                 │
                           ┌─────▼─────┐
                           │  Deployer │  (Strategy: SSH ou DryRun)
                           └─────┬─────┘
-                                │ SSH
+                                │ subprocess(ssh)
                           ┌─────▼─────┐
                           │ Frota Linux │
                           └───────────┘
@@ -33,11 +55,11 @@
 
 | Componente | O que faz | Não faz |
 |------------|-----------|---------|
-| **CLI** (`adminforge/cli`) | Lê argumentos, valida sintaxe, formata saída. | Não conhece YAML, SSH ou hash chain. |
+| **CLI** (`adminforge/cli`) | Lê argumentos (argparse), valida sintaxe, formata saída. | Não conhece JSON, SSH ou hash chain. |
 | **Núcleo** (`adminforge/core/nucleo.py`) | Aplica regras (duplicatas, validações), coordena demais. | Não escreve em arquivo nem conecta em servidor diretamente. |
-| **Store** (`adminforge/store/yaml_store.py`) | Persiste entidades em YAML; lockfile; escrita atômica; permissão 0600. | Não conhece SSH nem hash chain. |
+| **Store** (`adminforge/store/json_store.py`) | Persiste entidades em JSON; lockfile; escrita atômica; permissão 0600. | Não conhece SSH nem hash chain. |
 | **Planner** (`adminforge/planner/planner.py`) | Calcula `desejado − chaves_instaladas` e emite subações. | Não persiste, não conecta em servidor. |
-| **Deployer** (`adminforge/deployer/`) | Executa subações via SSH; faz inspeção operacional. | Não decide o que fazer; recebe lista pronta do Núcleo. |
+| **Deployer** (`adminforge/deployer/`) | Executa subações chamando `ssh`/`ssh-keyscan` via subprocess; faz inspeção operacional. | Não decide o que fazer; recebe lista pronta do Núcleo. |
 | **Auditor** (`adminforge/auditor/jsonl_auditor.py`) | Persiste histórico append-only com cadeia SHA256. | Não muda estado; só lê/escreve `history.jsonl`. |
 
 ## Persistência
@@ -45,15 +67,16 @@
 ```
 state/
 ├── admins/                # 1 arquivo por admin (inclui suas chaves)
-│   └── marina.yaml
+│   └── marina.json
 ├── admin-groups/
-│   └── sysadmins.yaml
-├── servers/               # cada server.yaml inclui chaves_instaladas
-│   └── web-01.yaml
+│   └── sysadmins.json
+├── servers/               # cada server.json inclui chaves_instaladas
+│   └── web-01.json
 ├── server-groups/
-│   └── producao.yaml
-├── permissions.yaml       # arquivo único: lista de (grupo_admin, grupo_servidor, nivel)
+│   └── producao.json
+├── permissions.json       # arquivo único: lista de (grupo_admin, grupo_servidor, nivel)
 ├── history.jsonl          # append-only, 1 linha por comando
+├── known_hosts            # OpenSSH known_hosts gerenciado pelo SSHDeployer
 └── .lock                  # fcntl.flock — exclusão mútua
 ```
 
@@ -66,8 +89,8 @@ Razões:
 
 Quatro padrões, cada um resolvendo problema concreto:
 
-- **Repository** no Store: esconde de onde os dados vêm. `IStore` permite trocar YAML por Git ou memória sem tocar Núcleo.
-- **Strategy** no Deployer: `SSHDeployer` (paramiko) e `DryRunDeployer` (testes); trocar por Ansible é substituição, não refatoração.
+- **Repository** no Store: esconde de onde os dados vêm. `IStore` permite trocar JSON por Git ou memória sem tocar Núcleo.
+- **Strategy** no Deployer: `SSHDeployer` (subprocess+OpenSSH) e `DryRunDeployer` (testes); trocar por Ansible é substituição, não refatoração.
 - **Command** na CLI: cada subcomando vira um método auditável do Núcleo; cada chamada gera Operação no histórico.
 - **Observer (light)** no Auditor: Núcleo registra Operação ao final de cada caso de uso.
 
@@ -77,7 +100,7 @@ Padrões deliberadamente **evitados**: Singleton, Abstract Factory, container DI
 
 - **S** Cada componente da tabela acima muda por um motivo só.
 - **O** Trocar Deployer SSH por Ansible é substituição (Open/Closed).
-- **L** Implementações de `IStore` (YAML, Git, memória) se comportam igual para o Núcleo.
+- **L** Implementações de `IStore` (JSON, Git, memória) se comportam igual para o Núcleo.
 - **I** Interfaces pequenas: Store não sabe de SSH; Deployer não lê arquivo.
 - **D** Núcleo depende de `IStore`/`IDeployer`/`IAuditor`, não das classes concretas. Facilita testes (DryRunDeployer no `conftest`).
 
@@ -124,9 +147,9 @@ Cada entrada de `history.jsonl` é um JSON com:
 
 | Decisão | Por quê | Trade-off |
 |---------|---------|-----------|
-| YAML em vez de banco | Escala pequena cabe em texto; versionável em Git. | Sem indexação; busca = leitura linear. Aceitável para dezenas de admins. |
+| JSON em vez de banco | Escala pequena cabe em texto; versionável em Git. | Sem indexação; busca = leitura linear. Aceitável para dezenas de admins. |
 | Fluxo síncrono | Sem latência crítica; um Superadmin opera por vez. | `apply` em 600 servidores depende de SSH paralelo no Deployer. |
-| Sem cache | Ler YAML é barato. | Cada leitura abre arquivos. |
+| Sem cache | Ler JSON é barato. | Cada leitura abre arquivos. |
 | `chaves_instaladas` no Servidor | Resposta direta a "o que já está deployado". | Reconciliação opcional (`apply verify`) fica para M-2. |
 | Lockfile | KISS para exclusão mútua. | Falha rápida se outra instância roda; aceitável. |
 | TOFU para host_key | KISS; conta com confirmação humana no cadastro. | Não detecta MitM no primeiro contato. |
@@ -143,17 +166,17 @@ adminforge/
 ├── interfaces/            # ABCs (Store, Deployer, Auditor)
 ├── store/
 │   ├── atomic.py          # write_atomic, append_line
-│   └── yaml_store.py      # IStore + lockfile
+│   └── json_store.py      # IStore JSON + lockfile
 ├── auditor/
 │   └── jsonl_auditor.py   # cadeia SHA256
 ├── planner/
 │   └── planner.py         # delta entre desejado e aplicado
 ├── deployer/
 │   ├── dry_run.py         # IDeployer fake p/ testes
-│   └── ssh_deployer.py    # paramiko + RejectPolicy
+│   └── ssh_deployer.py    # subprocess(ssh) + StrictHostKeyChecking
 ├── core/
 │   └── nucleo.py          # orquestrador
 └── cli/
-    ├── main.py            # Click — 10 UCs
-    └── ui.py              # cores, tabelas, confirmações
+    ├── main.py            # argparse — 10 UCs
+    └── ui.py              # cores ANSI, tabelas, confirmações
 ```

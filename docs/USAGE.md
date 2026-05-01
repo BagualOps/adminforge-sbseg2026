@@ -2,7 +2,7 @@
 
 Cada caso de uso da modelagem v1, com gatilho, fluxo e exemplo copiável.
 
-> **Convenção.** Operações que mudam o estado **desejado** não tocam servidor nenhum — tocam apenas os YAMLs em `state/`. As mudanças vão para os servidores no próximo `apply`. Excessão: `audit server` é read-only direto no servidor.
+> **Convenção.** Operações que mudam o estado **desejado** não tocam servidor nenhum — tocam apenas os JSONs em `state/`. As mudanças vão para os servidores no próximo `apply`. Excessão: `audit server` é read-only direto no servidor.
 
 ---
 
@@ -193,7 +193,7 @@ Quando `--user X` aparece em usuários mas não em serviços, AdminForge sinaliz
 
 | Variável                  | Padrão                        | Para que serve |
 |---------------------------|-------------------------------|----------------|
-| `ADMINFORGE_STATE`        | `./state`                     | Diretório dos YAMLs e do `history.jsonl`. |
+| `ADMINFORGE_STATE`        | `./state`                     | Diretório dos JSONs e do `history.jsonl`. |
 | `ADMINFORGE_SUPERADMIN`   | `$USER`                       | Identifica quem está executando (vai pro histórico). |
 | `ADMINFORGE_SSH_KEY`      | `~/.ssh/adminforge_id`        | Chave privada usada pelo Deployer SSH. |
 | `ADMINFORGE_SSH_USER`     | `adminforge`                  | Usuário de serviço nos servidores gerenciados. |

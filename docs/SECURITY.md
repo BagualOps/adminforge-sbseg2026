@@ -9,7 +9,7 @@
 | Operador descuidado revoga acesso e esquece um servidor | `apply` calcula delta; remoção é propagada na próxima execução. |
 | Admin sai da empresa | `admin disable` revoga todas as chaves; próximo `apply` remove dos servidores. |
 | Adulteração retroativa do histórico | Cadeia SHA256 — `history verify` aponta primeiro divergente. |
-| MitM no SSH em conexão recorrente | Host key armazenada; `RejectPolicy` rejeita divergência. |
+| MitM no SSH em conexão recorrente | Host key armazenada em `state/known_hosts`; `ssh -o StrictHostKeyChecking=yes` rejeita divergência. |
 | Concorrência (dois operadores rodando ao mesmo tempo) | Lockfile via `fcntl.flock`; segundo processo falha rápido. |
 | Vazamento de leitura do `state/` por outro usuário do host | Diretório `0700`, arquivos `0600`. |
 | Compromisso da chave privada do AdminForge | M-2: rotação. Hoje: trocar manualmente; questão em aberto na modelagem. |
@@ -19,14 +19,14 @@
 - **Logins dos admins nos servidores.** Isso é papel do `sshd` + `auditd` de cada máquina.
 - **Comandos executados pelos admins.** Mesma resposta — auditoria nativa do host.
 - **Vazamento de chave privada do admin** (Marina perdeu o laptop). Resposta: revogar fingerprint via `key revoke`, rodar `apply`. Speed-of-revocation depende do operador, não do AdminForge.
-- **Ataques de cadeia de suprimentos** ao próprio Python/paramiko. Mitigação fora de escopo da v1.
+- **Ataques de cadeia de suprimentos** ao próprio Python ou ao OpenSSH. Mitigação fora de escopo da v1, mas note: a v1 zerou dependências de runtime, o que reduz a superfície de ataque drasticamente. Detalhes em [`ARCHITECTURE.md`](ARCHITECTURE.md#zero-deps).
 
 ## Permissões em disco
 
 ```bash
 state/                 # 0700
 ├── admins/            # 0700
-│   └── marina.yaml    # 0600
+│   └── marina.json    # 0600
 ├── ...
 └── history.jsonl      # 0600
 ```
@@ -67,7 +67,7 @@ adminforge server add web-01 --ip 10.0.0.10 --auto
 # > Confirma o fingerprint? [y/N]: y
 ```
 
-A partir daí, `paramiko` usa `RejectPolicy` com a chave armazenada. **`StrictHostKeyChecking=no` é proibido na implementação.**
+A partir daí, todas as conexões usam `ssh -o StrictHostKeyChecking=yes -o UserKnownHostsFile=state/known_hosts`. Se a chave do servidor mudar, o SSH rejeita a conexão. **`StrictHostKeyChecking=no` é proibido na implementação.**
 
 Trocou host key em manutenção?
 1. Verifique a nova fingerprint via console / canal seguro.
@@ -85,7 +85,7 @@ Limitação: alguém com acesso de escrita ao `state/` pode **reescrever a cadei
 
 ## Cifragem em repouso (opcional)
 
-Por padrão, os YAMLs são texto claro. Para cifrar seletivamente (chaves públicas não exigem, mas pode-se proteger e-mails, host keys, etc.):
+Por padrão, os arquivos JSON do estado são texto claro. Para cifrar seletivamente (chaves públicas não exigem, mas pode-se proteger e-mails, host keys, etc.):
 
 - `age` ou `sops` por arquivo;
 - chave gerenciada por `gpg-agent`/HSM/KMS conforme política do CPD.

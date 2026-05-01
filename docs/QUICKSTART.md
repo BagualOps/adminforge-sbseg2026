@@ -4,18 +4,33 @@
 
 ## 1. Instalar
 
+**Zero dependências de runtime.** Basta Python 3.11+ e cliente OpenSSH (presente em qualquer Linux).
+
 ```bash
 git clone https://github.com/BagualOps/adminforge-v1.git
 cd adminforge-v1
-python -m venv .venv && source .venv/bin/activate
-pip install -e .
+
+# Forma mais simples (sem venv, sem pip install):
+python3 -m adminforge.cli.main --version
+python3 -m adminforge.cli.main --help
+
+# Para encurtar:
+alias adminforge='python3 -m adminforge.cli.main'
 ```
 
-Verifique:
+Se preferir o comando `adminforge` instalado de verdade, qualquer uma das opções abaixo:
 
 ```bash
-adminforge --version
-adminforge --help
+pipx install .                       # isolado, recomendado
+pip install --user .                 # no PATH do usuario
+pip install -e . --break-system-packages   # ultimo recurso em distros estritas
+```
+
+Para rodar a suíte de testes (depende de pytest):
+
+```bash
+pip install -e .[dev]
+pytest -q
 ```
 
 ## 2. Configurar diretório de estado
