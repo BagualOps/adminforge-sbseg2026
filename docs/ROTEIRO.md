@@ -164,17 +164,23 @@ Não há bootstrap adicional aqui: a configuração SSH+sudo do seu user já é 
 
 ### 5.1 Servidores
 
+**Substitua `MEU_HOST_IP` pelo IP real do seu servidor antes de executar.** Pode usar hostname também (ex: `--ip 192.0.2.50` ou `--ip srv01.empresa.com`).
+
 ```bash
-af server add prod-web-01 --ip 10.0.0.10 --auto
+af server add prod-web-01 --ip MEU_HOST_IP --auto
 # > host_key capturada: SHA256:...
 # > Confirma o fingerprint? [y/N]: y
 
-af server add prod-web-02 --ip 10.0.0.11 --auto
-af server add prod-db-01  --ip 10.0.1.20 --auto
+# Repita para cada servidor da frota, com seu apelido e IP/hostname:
+# af server add prod-web-02 --ip OUTRO_IP --auto
+# af server add prod-db-01  --ip MAIS_UM_IP --auto
+
 af server list
 ```
 
 Confira a fingerprint contra um canal seguro (console do hypervisor, doc do CPD, ssh-keyscan paralelo) antes de aceitar.
+
+> Se o `--auto` travar/falhar com timeout, é porque o IP não responde ou o `ssh-keyscan` não consegue alcançar a porta 22. Confirme que dá pra logar com `ssh MEU_USER@MEU_HOST_IP` antes.
 
 ### 5.2 Grupos de servidor
 
