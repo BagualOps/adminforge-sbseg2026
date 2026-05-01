@@ -31,3 +31,6 @@ target-version = "py311"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "integration: testes que sobem containers Docker (opt-in via ADMINFORGE_INTEGRATION=1)",
+]
