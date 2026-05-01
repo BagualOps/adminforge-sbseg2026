@@ -3,7 +3,7 @@
 Validação manual de **todo** o sistema AdminForge: 10 casos de uso + edge cases + (opcional) auditoria em servidor real.
 
 > **Tempo estimado:** 15-20 minutos
-> **Risco:** zero (lab isolado em containers); a parte opcional em a9 é read-only.
+> **Risco:** zero (lab isolado em containers); a parte opcional contra servidor real é read-only.
 > **Pré-requisito mínimo:** Python 3.11+ e cliente OpenSSH. Para o lab Docker: `docker compose v2`.
 
 ---
@@ -449,33 +449,37 @@ Esperado:
 
 ---
 
-## PARTE E — (Opcional) Auditoria read-only em servidor real (a9)
+## PARTE E — (Opcional) Auditoria read-only em servidor real
 
-A9 é máquina compartilhada. **Apenas operações read-only** — não rode `apply` lá.
+Se você tem acesso SSH a um servidor (qualquer um — pode ser compartilhado, desde que respeite a política do lugar), dá pra exercitar o `audit server` contra ele. **Apenas operações read-only** — não rode `apply` em servidor que não é seu.
+
+Substitua os placeholders pelos valores do seu host:
 
 ```bash
-export ADMINFORGE_STATE=/tmp/teste-a9
-export ADMINFORGE_SSH_USER=cristhian
-export ADMINFORGE_SSH_KEY=$HOME/.ssh/id_ed25519
-export ADMINFORGE_SUPERADMIN=cristhian
-mkdir -p /tmp/teste-a9
+export ADMINFORGE_STATE=/tmp/audit-real
+export ADMINFORGE_SSH_USER=<seu-usuario-no-servidor>
+export ADMINFORGE_SSH_KEY=<caminho-da-sua-chave-privada>
+export ADMINFORGE_SUPERADMIN=<seu-username-local>
+mkdir -p /tmp/audit-real
 
-af server add a9 --ip 10.0.0.10 --auto
-# Confira fingerprint contra ssh-keygen -lf ~/.ssh/known_hosts -F servidor.exemplo.com
+af server add <apelido> --ip <IP-DO-SERVIDOR> --auto
+# Confira o fingerprint exibido contra um canal seguro
+# (ex: ssh-keygen -lf ~/.ssh/known_hosts -F <hostname>)
 
-af audit server a9                          # 31 usuarios + 18 servicos
-af audit server a9 --user iperf3            # ALERTA: usuario sem servico
-af audit server a9 --user docker-registry   # OK (tem docker-registry.service)
-af audit server a9 --service docker         # destaca docker.service e relacionados
+af audit server <apelido>                       # lista usuarios e servicos
+af audit server <apelido> --user <username>     # destaca + alerta se sem servico
+af audit server <apelido> --service <nome>      # destaca servicos relacionados
 
 af history list
 af history verify
 ```
 
+O `audit` é estritamente leitura: roda `getent passwd` e `systemctl list-units` via SSH. Não escreve nada no servidor remoto. O único efeito local é uma entrada no `state/history.jsonl`.
+
 Limpeza:
 
 ```bash
-rm -rf /tmp/teste-a9
+rm -rf /tmp/audit-real
 unset ADMINFORGE_STATE ADMINFORGE_SSH_USER ADMINFORGE_SSH_KEY ADMINFORGE_SUPERADMIN
 ```
 
@@ -512,6 +516,6 @@ rm -f /tmp/marina /tmp/marina.pub /tmp/rui /tmp/rui.pub /tmp/joao /tmp/joao.pub 
 | C.4 | Validacoes de formato e regras de negocio | | |
 | C.5 | Lockfile bloqueia segunda instancia | | |
 | D | JSON de estado bem-formado, permissoes 0600 | | |
-| E | (Opcional) audit a9 read-only com alerta | | |
+| E | (Opcional) audit em servidor real, read-only | | |
 
 Se qualquer linha falhar, abra issue com a saída completa.
