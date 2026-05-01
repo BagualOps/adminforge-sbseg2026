@@ -36,7 +36,7 @@ Detalhes em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Modelagem completa (
 ## Quickstart (60 segundos)
 
 ```bash
-git clone https://github.com/CristhianKapelinski/adminforge-v1.git
+git clone https://github.com/BagualOps/adminforge-v1.git
 cd adminforge-v1
 python -m venv .venv && source .venv/bin/activate
 pip install -e .[dev]
@@ -97,6 +97,7 @@ Mais em [`docs/SECURITY.md`](docs/SECURITY.md).
 | [`docs/SECURITY.md`](docs/SECURITY.md)     | Modelo de ameaças, cuidados operacionais, escopo de auditoria. |
 | [`docs/CONFIG.md`](docs/CONFIG.md)         | Variáveis de ambiente e estrutura do `state/`. |
 | [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) | Como rodar testes, lint, contribuir. |
+| [`infra/testlab/ROTEIRO.md`](infra/testlab/ROTEIRO.md) | Roteiro de teste manual no lab Docker (9 cenários, ~10 min). |
 | [`docs/modelagem-v1.pdf`](docs/modelagem-v1.pdf) | Modelagem original (sumário, diagramas, fluxos, questões em aberto). |
 
 ## Testes
@@ -106,6 +107,10 @@ pytest -v
 ```
 
 36 testes cobrem o fluxo end-to-end e edge cases (cadeia quebrada, duplicatas, idempotência, falha parcial, no-op, lockfile concorrente, permissão 0600).
+
+### Validação manual em lab Docker
+
+Para exercitar o `apply` real (SSH, criação de conta, sudoers, markers em `authorized_keys`) num ambiente isolado de 3 containers Debian, siga o **[Roteiro de teste](infra/testlab/ROTEIRO.md)** — 9 cenários sequenciais (~10 min) com comando + saída esperada em cada passo.
 
 ## Licença
 

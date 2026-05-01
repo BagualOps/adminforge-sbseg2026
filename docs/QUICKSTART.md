@@ -5,7 +5,7 @@
 ## 1. Instalar
 
 ```bash
-git clone https://github.com/CristhianKapelinski/adminforge-v1.git
+git clone https://github.com/BagualOps/adminforge-v1.git
 cd adminforge-v1
 python -m venv .venv && source .venv/bin/activate
 pip install -e .
