@@ -71,10 +71,12 @@ Crie um usuário **dedicado** chamado `adminforge`. É a forma mais limpa: separ
 
 > **Heredoc com aspas (`<<'EOF'`) é importante** — sem aspas, `$(...)` é expandido localmente e pode pegar a chave errada. Pra evitar a armadilha completamente, copie a pubkey antes:
 
-```bash
-scp ~/.ssh/adminforge_id.pub <seu-acesso-sudo>@<servidor>:/tmp/adminforge.pub
+**Substitua `MEU_USER` e `MEU_HOST` pelos seus valores antes de colar:**
 
-ssh <seu-acesso-sudo>@<servidor> bash -s <<'EOF'
+```bash
+scp ~/.ssh/adminforge_id.pub MEU_USER@MEU_HOST:/tmp/adminforge.pub
+
+ssh MEU_USER@MEU_HOST bash -s <<'EOF'
 set -ex
 sudo useradd -m -s /bin/bash adminforge 2>/dev/null || true
 echo 'adminforge ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/adminforge >/dev/null
@@ -101,7 +103,7 @@ users:
 #### Verifique antes de continuar
 
 ```bash
-ssh -i ~/.ssh/adminforge_id -o BatchMode=yes adminforge@<servidor> 'whoami; sudo -n whoami'
+ssh -i ~/.ssh/adminforge_id -o BatchMode=yes adminforge@MEU_HOST 'whoami; sudo -n whoami'
 # Esperado: adminforge / root
 ```
 
@@ -123,7 +125,7 @@ Comum em CPDs/labs onde o `sshd_config` tem `AllowUsers <lista-fixa>` e você n�
 1. Sua conta no servidor tem `sudo NOPASSWD`. Confirme:
 
    ```bash
-   ssh -o BatchMode=yes <seu-user>@<servidor> 'sudo -n whoami'
+   ssh -o BatchMode=yes MEU_USER@MEU_HOST 'sudo -n whoami'
    # Esperado: root
    # Se pedir senha: precisa configurar NOPASSWD pra seu user (peça pro admin do CPD).
    ```
@@ -151,7 +153,7 @@ Não há bootstrap adicional aqui: a configuração SSH+sudo do seu user já é 
 > **Diagnóstico rápido se a Opção 1 falha mesmo com a chave instalada.** Se `ssh -i ... adminforge@<host>` der `Permission denied (publickey,password)` mas o `authorized_keys` está correto, provavelmente é `AllowUsers` no sshd. Confirma com:
 >
 > ```bash
-> ssh <seu-user>@<servidor> 'sudo journalctl -u ssh -n 20 --no-pager | grep AllowUsers'
+> ssh MEU_USER@MEU_HOST 'sudo journalctl -u ssh -n 20 --no-pager | grep AllowUsers'
 > ```
 >
 > Se aparecer `User adminforge ... not allowed because not listed in AllowUsers`, vá pro Cenário 2 (ou peça acesso pra incluir `adminforge` no `AllowUsers`).
@@ -265,7 +267,7 @@ af apply                    # remove a chave do bruno de TODOS os servidores
 A conta Unix `bruno` permanece nos servidores (apaga arquivos dele em todos é decisão sua). O acesso some no `apply`. Se quiser remover a conta também:
 
 ```bash
-ssh -i ~/.ssh/adminforge_id adminforge@<servidor> 'sudo userdel -r bruno'
+ssh -i ~/.ssh/adminforge_id adminforge@MEU_HOST 'sudo userdel -r bruno'
 # Atenção: -r apaga /home/bruno
 ```
 
