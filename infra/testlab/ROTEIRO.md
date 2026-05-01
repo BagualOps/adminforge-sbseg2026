@@ -1,73 +1,65 @@
-# Roteiro de teste — lab Docker
+# Roteiro completo de teste
 
-Roteiro passo a passo para validar o AdminForge end-to-end contra 3 containers Debian. Tudo isolado: sem afetar produção, fácil de derrubar.
+Validação manual de **todo** o sistema AdminForge: 10 casos de uso + edge cases + (opcional) auditoria em servidor real.
 
-> **Tempo estimado:** 10 minutos.
-> **Nível:** sequencial — execute na ordem.
-> **Onde rodar:** raiz do repositório (`/mnt/win_ssd/adminForge`).
-
----
-
-## 0. Pré-requisitos
-
-```bash
-docker --version          # >= 24
-docker compose version    # v2 ou superior
-python3 --version         # >= 3.11
-```
-
-Instalar o AdminForge em modo editável:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e .
-```
+> **Tempo estimado:** 15-20 minutos
+> **Risco:** zero (lab isolado em containers); a parte opcional em a9 é read-only.
+> **Pré-requisito mínimo:** Python 3.11+ e cliente OpenSSH. Para o lab Docker: `docker compose v2`.
 
 ---
 
-## 1. Preparar o lab
+## PARTE A — Setup (3 min)
 
-### 1.1 Gerar chave do AdminForge
+### A.1 Clone
+
+```bash
+git clone https://github.com/BagualOps/adminforge-v1.git
+cd adminforge-v1
+```
+
+Não precisa de `pip install` nem `venv` — zero deps de runtime.
+
+### A.2 Atalho pro CLI
+
+```bash
+alias af='python3 -m adminforge.cli.main'
+af --version    # adminforge 0.1.0
+af --help | head -25
+```
+
+### A.3 Suba o lab Docker
 
 ```bash
 mkdir -p infra/testlab/keys
 ssh-keygen -t ed25519 -N "" -f infra/testlab/keys/adminforge_id -C "adminforge@testlab"
 
-# A chave precisa de permissão 0600 num filesystem que respeite POSIX:
+# A chave precisa de 0600 num filesystem POSIX (alguns mounts /mnt/* nao preservam):
 cp infra/testlab/keys/adminforge_id /tmp/adminforge_id
-cp infra/testlab/keys/adminforge_id.pub /tmp/adminforge_id.pub
 chmod 600 /tmp/adminforge_id
-```
 
-### 1.2 Configurar o `.env` do lab
-
-```bash
 cat > infra/testlab/.env <<EOF
 ADMINFORGE_PUBKEY=$(cat infra/testlab/keys/adminforge_id.pub)
 EOF
-```
 
-### 1.3 Subir os containers
-
-```bash
 docker compose -f infra/testlab/docker-compose.yml --env-file infra/testlab/.env up -d --build
-sleep 2
+sleep 3
 docker compose -f infra/testlab/docker-compose.yml ps
 ```
 
-**Esperado:** `adminforge-web-01`, `adminforge-web-02`, `adminforge-db-03` em `Up`, expostos em `2201`, `2202`, `2203`.
+Esperado: 3 containers `Up`, expostos em `2201`, `2202`, `2203`.
 
-### 1.4 Validar SSH inicial
+### A.4 Verifique conectividade
 
 ```bash
-ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-    -i /tmp/adminforge_id -p 2201 adminforge@127.0.0.1 'whoami; hostname'
+for p in 2201 2202 2203; do
+  ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+      -i /tmp/adminforge_id -p $p adminforge@127.0.0.1 'echo OK $(hostname)'
+done
 ```
 
-**Esperado:** `adminforge` / `web-01`. Repita para `2202` (web-02) e `2203` (db-03).
+Esperado: `OK web-01`, `OK web-02`, `OK db-03`.
 
-### 1.5 Configurar variáveis de ambiente
+### A.5 Configure variáveis de ambiente
 
 ```bash
 export ADMINFORGE_STATE=/tmp/lab-state
@@ -80,360 +72,446 @@ rm -rf /tmp/lab-state && mkdir -p /tmp/lab-state
 
 ---
 
-## 2. Cenário A — Caminho feliz
+## PARTE B — Os 10 casos de uso (10 min)
 
-### 2.1 Cadastrar 2 admins com suas chaves
+### UC-1 — Cadastrar admin
+
+```bash
+af admin add marina --nome "Marina Silva" --email marina@empresa.com
+af admin add rui    --nome "Rui Costa"    --email rui@empresa.com
+af admin add joao   --nome "João Pereira" --email joao@empresa.com
+```
+
+Validações:
+
+```bash
+af admin list                # tabela: 3 admins, status=ativo
+af admin show marina         # detalhes + 0 credenciais + 0 grupos
+```
+
+**Edge case — duplicata:**
+
+```bash
+af admin add marina --nome X --email x@e.com
+# Esperado: ERRO  ... username 'marina' ja existe
+```
+
+**Edge case — formato:**
+
+```bash
+af admin add "Marina!" --nome X --email x@e.com
+# Esperado: ERRO  ... username invalido
+af admin add valid --nome X --email "nao-e-email"
+# Esperado: ERRO  ... email invalido
+```
+
+### UC-2 — Cadastrar / revogar chave SSH
 
 ```bash
 ssh-keygen -t ed25519 -N "" -f /tmp/marina -C "marina@laptop"
 ssh-keygen -t ed25519 -N "" -f /tmp/rui    -C "rui@laptop"
+ssh-keygen -t ed25519 -N "" -f /tmp/joao   -C "joao@laptop"
 
-adminforge admin add marina --nome "Marina Silva" --email marina@empresa.com
-adminforge admin add rui    --nome "Rui Costa"     --email rui@empresa.com
-adminforge key add marina --file /tmp/marina.pub
-adminforge key add rui    --file /tmp/rui.pub
+af key add marina --file /tmp/marina.pub
+af key add rui    --file /tmp/rui.pub
+af key add joao   --file /tmp/joao.pub
+
+af key list marina           # 1 credencial, status=ativa
 ```
 
-**Esperado:** 4 linhas `OK ... (OP-000n)`.
+**Edge case — tipo não suportado:**
 
 ```bash
-adminforge admin list
-adminforge admin show marina
+af key add marina --string "ssh-dss AAAA..."
+# Esperado: ERRO  ... tipo de chave nao suportado
 ```
 
-**Esperado:** marina e rui com status `ativo`, cada um com 1 credencial `ativa`.
-
-### 2.2 Cadastrar grupo e servidores
+**Edge case — duplicada:**
 
 ```bash
-adminforge group create sysadmins
-adminforge group add-member sysadmins marina
-adminforge group add-member sysadmins rui
+af key add marina --file /tmp/marina.pub
+# Esperado: ERRO  ... chave ja cadastrada
+```
 
+### UC-3 — Gerenciar grupo de admin
+
+```bash
+af group create sysadmins
+af group add-member sysadmins marina
+af group add-member sysadmins rui
+
+af group create dba
+af group add-member dba joao
+af group add-member dba marina    # marina em 2 grupos
+
+af group list
+af admin show marina              # mostra "Grupos: sysadmins, dba"
+```
+
+**Edge case — idempotência:**
+
+```bash
+af group add-member sysadmins marina
+# Esperado: OK   (operacao registrada como sucesso, sem duplicar)
+```
+
+**Edge case — grupo com permissão associada:**
+
+```bash
+af group create temp
+af group delete temp              # OK (sem permissao, deleta)
+```
+
+### UC-4 — Cadastrar servidor
+
+Capture as host_keys (todas iguais nos 3 containers porque foram geradas no build):
+
+```bash
 HK=$(ssh-keyscan -t ed25519 -p 2201 127.0.0.1 2>/dev/null | grep ssh-ed25519 | awk '{print $2" "$3}')
+echo "$HK" | head -c 80; echo
 
-adminforge server add web-01 --ip 127.0.0.1 --porta 2201 --host-key "$HK"
-adminforge server add web-02 --ip 127.0.0.1 --porta 2202 --host-key "$HK"
-adminforge server add db-03  --ip 127.0.0.1 --porta 2203 --host-key "$HK"
+af server add web-01 --ip 127.0.0.1 --porta 2201 --host-key "$HK"
+af server add web-02 --ip 127.0.0.1 --porta 2202 --host-key "$HK"
+af server add db-03  --ip 127.0.0.1 --porta 2203 --host-key "$HK"
 
-adminforge server-group create producao
-adminforge server-group add-member producao web-01
-adminforge server-group add-member producao web-02
-adminforge server-group add-member producao db-03
+af server list                   # tabela: 3 servidores, 0 chaves
+af server show web-01            # detalha host_key e chaves_instaladas (vazio)
 ```
 
-> Os 3 containers compartilham a mesma host_key (`ssh-keygen -A` rodou no build do Dockerfile, não no boot). Em produção, cada servidor teria a sua.
-
-### 2.3 Conceder acesso e ver prévia
+### UC-5 — Gerenciar grupo de servidor
 
 ```bash
-adminforge grant sysadmins producao --nivel sudo
-adminforge preview
+af server-group create producao
+af server-group add-member producao web-01
+af server-group add-member producao web-02
+
+af server-group create bancos
+af server-group add-member bancos db-03
+
+af server-group list
 ```
 
-**Esperado:**
+### UC-6 — Conceder / revogar acesso
+
+```bash
+af grant sysadmins producao --nivel sudo
+af grant dba       bancos    --nivel sudo
+af grant sysadmins bancos    --nivel shell    # sysadmins acesso shell em bancos
+
+cat /tmp/lab-state/permissions.json
+```
+
+Esperado: 3 permissões.
+
+**Edge case — atualizar nível (não duplica):**
+
+```bash
+af grant sysadmins producao --nivel shell
+cat /tmp/lab-state/permissions.json | python3 -c "import json,sys;d=json.load(sys.stdin);print(len(d['permissoes']))"
+# Esperado: 3 (mesma quantidade, nivel atualizado)
+af grant sysadmins producao --nivel sudo     # restaura para sudo
+```
+
+**Edge case — revogar inexistente:**
+
+```bash
+af revoke fantasma producao
+# Esperado: ERRO  ... permissao nao existe
+```
+
+### UC-7 — Preview
+
+```bash
+af preview
+```
+
+Esperado: lista subações agrupadas por servidor com `+` (verde, adicionar) e `-` (vermelho, remover):
 
 ```
 i  6 subacoes em 3 servidores
 
 db-03
-  + adicionar_chave    marina:SHA256:...  sudo
-  + adicionar_chave    rui:SHA256:...     sudo
-web-01
-  + adicionar_chave    marina:SHA256:...  sudo
-  + adicionar_chave    rui:SHA256:...     sudo
-web-02
-  + adicionar_chave    marina:SHA256:...  sudo
-  + adicionar_chave    rui:SHA256:...     sudo
+  + adicionar_chave    joao:SHA256:...     sudo
+  + adicionar_chave    marina:SHA256:...   shell
+
+producao (web-01, web-02)
+  + adicionar_chave    marina:SHA256:...   sudo
+  + adicionar_chave    rui:SHA256:...      sudo
+  ...
 ```
 
-### 2.4 Aplicar
+> Note: marina aparece em `db-03` com nível `shell` (via grupo `sysadmins → bancos`), mas no `producao` ela está com `sudo` (`sysadmins → producao --nivel sudo`).
+
+**Edge case — preview é read-only:**
 
 ```bash
-adminforge apply --yes
+af history list -n 1
+# A entrada mais recente NAO eh preview (nao gera operacao mutadora)
 ```
 
-**Esperado:** 6 linhas `OK`, `status: SUCESSO`, `sucessos: 6`, `falhas: 0`.
-
----
-
-## 3. Cenário B — Verificar diretamente nos containers
-
-### 3.1 `authorized_keys` com markers
+### UC-8 — Apply (real, via SSH)
 
 ```bash
+af apply --yes
+```
+
+Esperado: cada subação executada via SSH real, todas com status `sucesso`.
+
+```
+  OK  db-03    adicionar_chave    joao:SHA256:...
+  OK  db-03    adicionar_chave    marina:SHA256:...
+  ...
+operacao: OP-001x
+status: SUCESSO
+sucessos: 7
+falhas: 0
+```
+
+**Validar dentro dos containers:**
+
+```bash
+echo "--- web-01: marina ---"
 docker exec adminforge-web-01 sudo cat /home/marina/.ssh/authorized_keys
-```
-
-**Esperado:**
-
-```
-# BEGIN adminforge: marina:SHA256:...
-ssh-ed25519 AAAA... marina@laptop
-# END adminforge: marina:SHA256:...
-```
-
-### 3.2 Conta Unix criada
-
-```bash
+echo "--- web-01: sudoers da marina ---"
+docker exec adminforge-web-01 sudo cat /etc/sudoers.d/adminforge-marina
+echo "--- visudo -c (sintaxe valida) ---"
+docker exec adminforge-web-01 sudo visudo -c
+echo "--- conta unix marina ---"
 docker exec adminforge-web-01 id marina
 ```
 
-**Esperado:** `uid=1001(marina) gid=1001(marina) groups=1001(marina)`.
+Esperado:
+- `authorized_keys` tem o bloco `# BEGIN adminforge: marina:SHA256:...` ... `# END adminforge: marina:SHA256:...` envolvendo a chave
+- sudoers `marina ALL=(ALL) NOPASSWD:ALL`
+- `visudo -c` parsed OK
+- `id marina` retorna UID/GID
 
-### 3.3 Sudoers válido
-
-```bash
-docker exec adminforge-web-01 sudo cat /etc/sudoers.d/adminforge-marina
-docker exec adminforge-web-01 sudo visudo -c
-```
-
-**Esperado:** linha `marina ALL=(ALL) NOPASSWD:ALL` e `parsed OK` para todos os arquivos.
-
-### 3.4 Marina loga e usa sudo
+**Smoke test — marina loga e usa sudo:**
 
 ```bash
 ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
     -i /tmp/marina -p 2201 marina@127.0.0.1 'whoami; sudo whoami'
+# Esperado: marina / root
 ```
 
-**Esperado:** `marina` / `root`.
-
----
-
-## 4. Cenário C — Idempotência
+**Idempotência:**
 
 ```bash
-adminforge apply --yes
+af apply --yes
+# Esperado: OK  nada a fazer — estado sincronizado
 ```
 
-**Esperado:** `OK nada a fazer — estado sincronizado`. Nenhuma conexão SSH é aberta.
+### UC-9 — Histórico
+
+```bash
+af history list                     # ultimas 50, 1 linha por operacao
+af history list -n 5                # so as 5 mais recentes
+af history show OP-0001             # detalhes + cadeia de hash
+af history failed                   # so falhas e parciais (deveria estar vazio)
+af history verify
+# Esperado: OK  cadeia integra (ultimo hash: ...)
+```
+
+**Edge case — adulteração detectada:**
+
+```bash
+HIST=/tmp/lab-state/history.jsonl
+sed -i '1s/sucesso/falha/' "$HIST"
+af history verify
+# Esperado: ERRO  cadeia quebrada: hash divergente em OP-0001
+sed -i '1s/falha/sucesso/' "$HIST"
+af history verify       # volta a OK
+```
+
+### UC-10 — Auditar usuários e serviços
+
+```bash
+af audit server web-01
+```
+
+Esperado: lista 3 usuários (`adminforge`, `marina`, `rui`) com UID/shell + serviços rodando (`ssh`, etc.).
+
+```bash
+af audit server web-01 --user marina    # destaca marina em amarelo
+af audit server web-01 --user fantasma  # nao destaca; nao alerta
+```
 
 ---
 
-## 5. Cenário D — Briga com edição manual (markers funcionam)
+## PARTE C — Cenários de robustez
 
-### 5.1 Marina adiciona chave dela manualmente, fora do AdminForge
+### C.1 Briga com edição manual (markers preservam linha pessoal)
 
 ```bash
 docker exec --user marina adminforge-web-01 \
-    bash -c 'echo "ssh-ed25519 AAAA... marina-pessoal@home" >> ~/.ssh/authorized_keys'
+    bash -c 'echo "ssh-ed25519 AAAA-FakeManualKey marina@home" >> ~/.ssh/authorized_keys'
 
 docker exec --user marina adminforge-web-01 cat /home/marina/.ssh/authorized_keys
+# Esperado: bloco AdminForge + linha manual da marina
 ```
 
-**Esperado:** o bloco do AdminForge + a linha pessoal.
-
-### 5.2 AdminForge revoga a chave gerenciada
+Revogue a chave gerenciada:
 
 ```bash
-FP=$(adminforge key list marina | tail -1 | awk '{print $1}')
-adminforge key revoke "$FP"
-adminforge apply --yes
-```
+FP=$(af key list marina | tail -1 | awk '{print $1}')
+af key revoke "$FP"
+af apply --yes
 
-**Esperado:** 3 linhas `OK remover_chave`.
-
-### 5.3 Conferir que **só** o bloco gerenciado sumiu
-
-```bash
 docker exec --user marina adminforge-web-01 cat /home/marina/.ssh/authorized_keys
+# Esperado: APENAS a linha manual sobra; o bloco com markers desapareceu
 ```
 
-**Esperado:** **apenas** `ssh-ed25519 AAAA... marina-pessoal@home`. O bloco com markers desapareceu.
+> Markers funcionam. AdminForge respeita o que o usuário coloca à mão.
+
+### C.2 Desabilitar admin
 
 ```bash
-docker exec adminforge-web-01 ls /etc/sudoers.d/
-```
+af admin disable rui --yes
 
-**Esperado:** `adminforge-rui` continua, `adminforge-marina` foi removido.
+af preview              # 2 subacoes 'remover_chave' para rui
+af apply --yes
 
----
-
-## 6. Cenário E — Desabilitar admin
-
-```bash
-adminforge admin disable rui --yes
-adminforge preview
-```
-
-**Esperado:** 3 subações `remover_chave` para rui (uma por servidor).
-
-```bash
-adminforge apply --yes
 docker exec adminforge-web-01 sudo cat /home/rui/.ssh/authorized_keys
+# Esperado: arquivo vazio ou so newlines
+
+docker exec adminforge-web-01 ls /etc/sudoers.d/ | grep rui
+# Esperado: vazio (sudoers do rui foi removido)
 ```
 
-**Esperado:** arquivo vazio (ou só com newlines).
-
-```bash
-docker exec adminforge-web-01 ls /etc/sudoers.d/
-```
-
-**Esperado:** `adminforge-rui` foi removido. Restou apenas `adminforge` (do bootstrap) e `README`.
-
----
-
-## 7. Cenário F — Histórico
-
-### 7.1 Listar e detalhar
-
-```bash
-adminforge history list
-adminforge history show OP-0019
-```
-
-**Esperado:** tabela cronológica com as ~25 operações; `show` exibe metadados + cadeia de hashes + lista de subações.
-
-### 7.2 Verificar cadeia íntegra
-
-```bash
-adminforge history verify
-```
-
-**Esperado:** `OK cadeia integra (ultimo hash: ...)`.
-
-### 7.3 Detectar adulteração retroativa
-
-Edite manualmente o histórico para simular um ataque:
-
-```bash
-# Pega a primeira linha e troca 'sucesso' por 'falha' nela
-HIST=$ADMINFORGE_STATE/history.jsonl
-sed -i '1s/sucesso/falha/' "$HIST"
-adminforge history verify
-```
-
-**Esperado:** sai com `ERRO cadeia quebrada: hash divergente em OP-0001` (ou o ID da entrada adulterada).
-
-Restaurar:
-
-```bash
-sed -i '1s/falha/sucesso/' "$HIST"
-adminforge history verify   # volta a OK
-```
-
----
-
-## 8. Cenário G — Auditoria operacional (UC-10)
-
-```bash
-adminforge audit server web-01
-```
-
-**Esperado:** lista usuários (`adminforge`, `marina`, `rui`) e serviços rodando (`sshd` no mínimo).
-
-```bash
-adminforge audit server web-01 --user marina
-adminforge audit server web-01 --user kreutz   # usuario que nao existe
-```
-
-**Esperado:** primeiro destaca `marina` em amarelo; segundo lista normalmente sem destaque.
-
----
-
-## 9. Cenário H — Falha parcial (servidor offline)
+### C.3 Falha parcial (servidor offline)
 
 ```bash
 docker stop adminforge-db-03
 
-# Restaurar marina para gerar diff
-adminforge admin add marina2 --nome "Marina Dois" --email m2@e.com
-ssh-keygen -t ed25519 -N "" -f /tmp/marina2 -C "marina2@laptop"
-adminforge key add marina2 --file /tmp/marina2.pub
-adminforge group add-member sysadmins marina2
+af admin add carla --nome "Carla" --email c@e.com
+ssh-keygen -t ed25519 -N "" -f /tmp/carla -C "carla@laptop"
+af key add carla --file /tmp/carla.pub
+af group add-member sysadmins carla
 
-adminforge apply --yes
+af apply --yes
 ```
 
-**Esperado:** 2 OKs (web-01, web-02), 1 ERRO em db-03 com mensagem `ssh: ...connect... timeout` ou similar. Status final `SUCESSO_PARCIAL`. `sucessos: 2`, `falhas: 1`.
+Esperado:
+- `web-01` e `web-02`: OK
+- `db-03`: ERRO `ssh: connect ... timed out`
+- Status final: `SUCESSO_PARCIAL`, sucessos: 2, falhas: 1
 
 ```bash
 docker start adminforge-db-03
-sleep 2
-adminforge apply --yes
+sleep 3
+af apply --yes
+# Esperado: SO a subacao que faltou em db-03 entra no delta
 ```
 
-**Esperado:** apenas a subação que faltou (db-03 ↦ marina2) entra no delta. Status `SUCESSO`.
-
----
-
-## 10. Cenário I — Validações
-
-### 10.1 Username inválido
+### C.4 Validações
 
 ```bash
-adminforge admin add "Inv@lid" --nome "X" --email x@e.com
+af admin add "Inv@lid" --nome X --email x@e.com    # username invalido
+af admin add valido --nome X --email "ruim"        # email invalido
+af group delete sysadmins                          # bloqueia: tem permissao associada
+af revoke fantasma producao                        # permissao nao existe
 ```
 
-**Esperado:** `ERRO admin add Inv@lid` com mensagem sobre formato.
+Cada um deve dar **ERRO** com mensagem clara.
 
-### 10.2 Chave duplicada
+### C.5 Lockfile concorrente
 
-```bash
-adminforge key add marina --file /tmp/marina.pub   # ja foi cadastrada
-```
-
-**Esperado:** `ERRO ... chave ja cadastrada`.
-
-### 10.3 Excluir grupo com permissão associada
-
-```bash
-adminforge group delete sysadmins
-```
-
-**Esperado:** `ERRO ... grupo 'sysadmins' tem permissoes associadas; revogue antes`.
-
-### 10.4 Revogar permissão inexistente
-
-```bash
-adminforge revoke fantasma producao
-```
-
-**Esperado:** `ERRO ... permissao nao existe`.
-
-### 10.5 Lockfile ativo
-
-Em **dois terminais** simultaneamente:
+Em **dois terminais simultaneamente**:
 
 ```bash
 # terminal 1
-adminforge apply --yes
+af apply --yes
 
-# terminal 2 (no mesmo instante)
-adminforge admin add teste --nome "T" --email t@e.com
+# terminal 2 (no mesmo momento)
+af admin add teste --nome T --email t@e.com
 ```
 
-**Esperado:** terminal 2 falha com `outra instância do AdminForge está em execução`.
+Esperado no terminal 2: `outra instância do AdminForge está em execução` (exit 3).
 
 ---
 
-## 11. Limpeza
+## PARTE D — Estado em disco (JSON)
 
 ```bash
-docker compose -f infra/testlab/docker-compose.yml --env-file infra/testlab/.env down
-rm -rf /tmp/lab-state
-rm -f /tmp/adminforge_id /tmp/adminforge_id.pub /tmp/marina /tmp/marina.pub /tmp/rui /tmp/rui.pub /tmp/marina2 /tmp/marina2.pub
+ls -la /tmp/lab-state/
+cat /tmp/lab-state/admins/marina.json
+cat /tmp/lab-state/servers/web-01.json
+cat /tmp/lab-state/permissions.json
+cat /tmp/lab-state/known_hosts
+head -3 /tmp/lab-state/history.jsonl
+```
+
+Esperado:
+- Diretório `0700`, arquivos `0600`
+- JSON formatado e legível
+- `known_hosts` no formato OpenSSH padrão
+- `history.jsonl`: 1 linha por operação, com `hash` e `hash_anterior`
+
+---
+
+## PARTE E — (Opcional) Auditoria read-only em servidor real (a9)
+
+A9 é máquina compartilhada. **Apenas operações read-only** — não rode `apply` lá.
+
+```bash
+export ADMINFORGE_STATE=/tmp/teste-a9
+export ADMINFORGE_SSH_USER=cristhian
+export ADMINFORGE_SSH_KEY=$HOME/.ssh/id_ed25519
+export ADMINFORGE_SUPERADMIN=cristhian
+mkdir -p /tmp/teste-a9
+
+af server add a9 --ip 10.0.0.10 --auto
+# Confira fingerprint contra ssh-keygen -lf ~/.ssh/known_hosts -F servidor.exemplo.com
+
+af audit server a9                          # 31 usuarios + 18 servicos
+af audit server a9 --user iperf3            # ALERTA: usuario sem servico
+af audit server a9 --user docker-registry   # OK (tem docker-registry.service)
+af audit server a9 --service docker         # destaca docker.service e relacionados
+
+af history list
+af history verify
+```
+
+Limpeza:
+
+```bash
+rm -rf /tmp/teste-a9
+unset ADMINFORGE_STATE ADMINFORGE_SSH_USER ADMINFORGE_SSH_KEY ADMINFORGE_SUPERADMIN
 ```
 
 ---
 
-## Tabela de checagem rápida
+## PARTE F — Limpeza do lab Docker
 
-| # | Cenário | Comando | Resultado esperado |
-|---|---------|---------|--------------------|
-| A | Caminho feliz | `apply --yes` | 6 OK, status SUCESSO |
-| B | Markers no `authorized_keys` | `docker exec ... cat` | Bloco `# BEGIN/END adminforge:` |
-| B | Sudoers válido | `visudo -c` | parsed OK |
-| B | Login do admin | `ssh marina@... sudo whoami` | `root` |
-| C | Idempotência | `apply --yes` | nada a fazer |
-| D | Edição manual preservada | revoke + apply + cat | só linha manual sobra |
-| E | Desabilitar admin | `admin disable + apply` | chaves removidas |
-| F | Histórico íntegro | `history verify` | cadeia integra |
-| F | Adulteração detectada | edita JSONL + verify | cadeia quebrada em OP-XXXX |
-| G | Audit operacional | `audit server` | lista users + services |
-| H | Falha parcial | `docker stop + apply` | SUCESSO_PARCIAL, falha entra no delta |
-| I | Validações | comandos inválidos | mensagens claras de erro |
-| I | Lockfile | apply + cmd paralelo | LockOcupado |
+```bash
+docker compose -f infra/testlab/docker-compose.yml --env-file infra/testlab/.env down -v
 
-Se qualquer linha falhar, abrir um issue com a saída completa do comando.
+rm -rf /tmp/lab-state
+rm -f /tmp/marina /tmp/marina.pub /tmp/rui /tmp/rui.pub /tmp/joao /tmp/joao.pub /tmp/carla /tmp/carla.pub /tmp/adminforge_id
+```
+
+---
+
+## Checklist final (cole o que verificou)
+
+| # | Cenário | OK? | Observação |
+|---|---------|-----|------------|
+| UC-1 | Cadastrar admin (3 admins) + duplicata + formato | | |
+| UC-2 | Cadastrar/revogar chave + tipo invalido + duplicada | | |
+| UC-3 | Gerenciar grupo de admin + idempotencia | | |
+| UC-4 | Cadastrar servidor (3 servidores) | | |
+| UC-5 | Gerenciar grupo de servidor | | |
+| UC-6 | grant/revoke + atualizar nivel + revoke inexistente | | |
+| UC-7 | preview lista delta agrupado | | |
+| UC-8 | apply real via SSH; markers e sudoers nos containers | | |
+| UC-9 | history list/show/verify + adulteracao detectada | | |
+| UC-10 | audit server + filtros --user/--service | | |
+| C.1 | Markers preservam edicao manual | | |
+| C.2 | Desabilitar admin remove dos servidores | | |
+| C.3 | Falha parcial; retentativa pega so o que faltou | | |
+| C.4 | Validacoes de formato e regras de negocio | | |
+| C.5 | Lockfile bloqueia segunda instancia | | |
+| D | JSON de estado bem-formado, permissoes 0600 | | |
+| E | (Opcional) audit a9 read-only com alerta | | |
+
+Se qualquer linha falhar, abra issue com a saída completa.
