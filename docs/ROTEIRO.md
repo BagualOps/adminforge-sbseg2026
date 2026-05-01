@@ -134,7 +134,7 @@ Configure as variáveis apontando pro seu user e desligando a criação automát
 
 ```bash
 export ADMINFORGE_SSH_USER=<seu-user-no-servidor>
-export ADMINFORGE_SSH_KEY=~/.ssh/id_ed25519
+export ADMINFORGE_SSH_KEY=~/.ssh/<arquivo-da-chave>     # tipicamente em ~/.ssh/
 export ADMINFORGE_CREATE_UNIX_USER=false
 ```
 
