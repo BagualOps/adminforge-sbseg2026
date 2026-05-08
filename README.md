@@ -80,16 +80,16 @@ python3 -m adminforge.cli.main --help
 # Cadastros (mudam apenas o estado desejado)
 alias adminforge="python3 -m adminforge.cli.main"
 
-adminforge admin add alice --nome "Alice Silva" --email alice@empresa.com
-adminforge key add alice --file ~/.ssh/alice.pub
-adminforge group create sysadmins
-adminforge group add-member sysadmins alice
+adminforge user add --username alice --name "Alice Silva" --email alice@empresa.com
+adminforge user key add --username alice --file ~/.ssh/alice.pub
+adminforge user-group create --name sysadmins
+adminforge user-group add-member --group sysadmins --username alice bob carla   # N de uma vez
 
-adminforge server add web-01 --ip 10.0.0.10 --auto       # TOFU host_key
-adminforge server-group create producao
-adminforge server-group add-member producao web-01
+adminforge server add --hostname web-01 --ip 10.0.0.10 --auto                   # TOFU host_key
+adminforge server-group create --name producao
+adminforge server-group add-member --group producao --hostname web-01 web-02
 
-adminforge grant sysadmins producao --nivel sudo
+adminforge grant --user-group sysadmins --server-group producao --level sudo
 
 # Ver e aplicar
 adminforge preview                                        # read-only
@@ -132,16 +132,17 @@ Receitário completo por caso de uso: [`docs/USAGE.md`](docs/USAGE.md).
 
 | ID    | Comando                                                | O que faz |
 |-------|--------------------------------------------------------|-----------|
-| UC-1  | `adminforge admin add`                                 | Cadastra admin (sem grupo, sem acesso). |
-| UC-2  | `adminforge key add` / `key revoke`                    | Cadastra/revoga chave SSH (ed25519, rsa, ecdsa). |
-| UC-3  | `adminforge group ...`                                 | Cria/edita/exclui grupo de admin. |
+| UC-1  | `adminforge user add`                                  | Cadastra usuário (sem grupo, sem acesso). |
+| UC-2  | `adminforge user key add` / `user key revoke`          | Cadastra/revoga chave SSH (ed25519, rsa, ecdsa). |
+| UC-3  | `adminforge user-group ...`                            | Cria/edita/exclui grupo de usuários (aceita N membros). |
 | UC-4  | `adminforge server add`                                | Registra servidor com TOFU de host key. |
-| UC-5  | `adminforge server-group ...`                          | Cria/edita grupo de servidor. |
+| UC-5  | `adminforge server-group ...`                          | Cria/edita grupo de servidores (aceita N membros). |
 | UC-6  | `adminforge grant` / `revoke`                          | Liga grupos com nível `shell` ou `sudo`. |
 | UC-7  | `adminforge preview`                                   | Mostra o delta sem tocar em servidores. |
 | UC-8  | `adminforge apply`                                     | Propaga o delta via SSH em paralelo. |
 | UC-9  | `adminforge history list/show/failed/verify`           | Auditoria do que o Superadmin fez. |
 | UC-10 | `adminforge audit server`                              | Inspeção operacional read-only do servidor. |
+| —     | `adminforge dump --format json\|table`                 | Lista o estado declarado completo de uma vez. |
 
 ## Segurança
 

@@ -560,7 +560,17 @@ def _build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="cmd", required=True, metavar="COMMAND")
 
     # user
-    p_user = sub.add_parser("user", help="Cadastro, ciclo de vida e chaves de usuarios.")
+    p_user = sub.add_parser(
+        "user",
+        help="Cadastro, ciclo de vida e chaves de usuarios.",
+        epilog=(
+            "Exemplos:\n"
+            "  adminforge user add --username marina --name 'Marina' --email marina@empresa.com\n"
+            "  adminforge user key add --username marina --file ~/.ssh/marina.pub\n"
+            "  adminforge user disable --username marina"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     s_user = p_user.add_subparsers(dest="sub", required=True)
     a = s_user.add_parser("add", help="Cadastra um novo usuario.")
     a.add_argument("--username", required=True)
@@ -593,7 +603,17 @@ def _build_parser() -> argparse.ArgumentParser:
     a.set_defaults(func=cmd_user_key_list)
 
     # user-group
-    p_ug = sub.add_parser("user-group", help="Grupos de usuarios.")
+    p_ug = sub.add_parser(
+        "user-group",
+        help="Grupos de usuarios.",
+        epilog=(
+            "Exemplos:\n"
+            "  adminforge user-group create --name sysadmins\n"
+            "  adminforge user-group add-member --group sysadmins --username alice bob carla\n"
+            "  adminforge user-group remove-member --group sysadmins --username bob"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     s_ug = p_ug.add_subparsers(dest="sub", required=True)
 
     a = s_ug.add_parser("create")
@@ -618,7 +638,18 @@ def _build_parser() -> argparse.ArgumentParser:
     a.set_defaults(func=cmd_ug_list)
 
     # server
-    p_server = sub.add_parser("server", help="Cadastro de servidores.")
+    p_server = sub.add_parser(
+        "server",
+        help="Cadastro de servidores.",
+        epilog=(
+            "Exemplos:\n"
+            "  adminforge server add --hostname web-01 --ip 10.0.0.10 --auto\n"
+            "  adminforge server show --hostname web-01\n"
+            "\n"
+            "Sobre --auto e fingerprint: ver docs/USAGE.md (UC-4)."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     s_server = p_server.add_subparsers(dest="sub", required=True)
     a = s_server.add_parser("add", help="Cadastra servidor (TOFU host_key).")
     a.add_argument("--hostname", required=True)
@@ -641,7 +672,16 @@ def _build_parser() -> argparse.ArgumentParser:
     a.set_defaults(func=cmd_server_remove)
 
     # server-group
-    p_sg = sub.add_parser("server-group", help="Grupos de servidores.")
+    p_sg = sub.add_parser(
+        "server-group",
+        help="Grupos de servidores.",
+        epilog=(
+            "Exemplos:\n"
+            "  adminforge server-group create --name producao\n"
+            "  adminforge server-group add-member --group producao --hostname web-01 web-02 db-03"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     s_sg = p_sg.add_subparsers(dest="sub", required=True)
 
     a = s_sg.add_parser("create")
