@@ -417,6 +417,55 @@ def cmd_history_verify(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Migracao de state v1 (admin*) -> v2 (user*)
+# ---------------------------------------------------------------------------
+def cmd_migrate_state(args: argparse.Namespace) -> int:
+    state = _state_dir(args)
+    pares = [
+        (state / "admins", state / "users"),
+        (state / "admin-groups", state / "user-groups"),
+    ]
+    def _precisa(src: Path, dst: Path) -> bool:
+        if not src.is_dir():
+            return False
+        if not dst.exists():
+            return True
+        return dst.is_dir() and not any(dst.iterdir())
+
+    pendencias = [src for src, dst in pares if _precisa(src, dst)]
+    perms = state / "permissions.json"
+    perms_precisa = perms.is_file() and "grupo_admin" in perms.read_text(encoding="utf-8")
+
+    if not pendencias and not perms_precisa:
+        ui.ok("nada a migrar — state ja esta no formato novo")
+        return 0
+
+    ui.heading("Migracao state v1 -> v2")
+    for src in pendencias:
+        ui.echo(f"  {src.name}/ -> {src.name.replace('admin', 'user')}/")
+    if perms_precisa:
+        ui.echo(f"  {perms.name}: campo grupo_admin -> grupo_user")
+
+    if not args.yes and not ui.confirmar("Aplicar?"):
+        ui.warn("migracao cancelada")
+        return 1
+
+    for src, dst in pares:
+        if not _precisa(src, dst):
+            continue
+        if dst.exists():
+            dst.rmdir()
+        src.rename(dst)
+    if perms_precisa:
+        perms.write_text(
+            perms.read_text(encoding="utf-8").replace('"grupo_admin"', '"grupo_user"'),
+            encoding="utf-8",
+        )
+    ui.ok("migracao concluida")
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # Dump global
 # ---------------------------------------------------------------------------
 def _coletar_estado(nucleo: Nucleo) -> dict:
@@ -721,6 +770,14 @@ def _build_parser() -> argparse.ArgumentParser:
     a = sub.add_parser("dump", help="Lista o estado declarado completo (users, grupos, servidores, permissoes).")
     a.add_argument("--format", choices=["table", "json"], default="table")
     a.set_defaults(func=cmd_dump)
+
+    # migrate-state
+    a = sub.add_parser(
+        "migrate-state",
+        help="Migra um state/ no formato antigo (admin*) para o novo (user*).",
+    )
+    a.add_argument("--yes", action="store_true", help="Pula confirmacao.")
+    a.set_defaults(func=cmd_migrate_state)
 
     # preview
     a = sub.add_parser("preview", help="Mostra o delta sem aplicar.")
