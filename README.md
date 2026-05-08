@@ -106,8 +106,15 @@ pipx install .            # ou: pip install --user .
 
 ### Autocomplete (bash/zsh)
 
-Habilitar tab-complete para subcomandos, flags **e valores cadastrados**
-(usernames, grupos, hostnames, fingerprints lidos do `state/`):
+Tab-complete para subcomandos, flags **e valores cadastrados** (usernames,
+grupos, hostnames, fingerprints lidos do `state/`).
+
+> **Totalmente opcional.** Sem `argcomplete` instalado, a CLI funciona
+> idêntica — o import vive em `try/except ImportError`. Custo no caminho
+> principal: zero. Adiciona ~80 linhas de código próprio e 1 dependência
+> externa (`argcomplete`), ambas entram só se você instalar o extra.
+
+Habilitar:
 
 ```bash
 pipx install '.[completion]'                    # ou: pip install '.[completion]'
