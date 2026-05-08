@@ -129,26 +129,26 @@ ssh -i $ADMINFORGE_SSH_KEY -o BatchMode=yes $ADMINFORGE_SSH_USER@<servidor> 'who
 
 Esperado: o usuário e `root` na segunda linha. Se a segunda linha pedir senha ou der erro, ajuste o sudoers antes de seguir.
 
-> **Por que o AdminForge não faz esse bootstrap sozinho?** Porque ele precisa da chave **já dentro** do servidor para entrar — é o problema clássico do "ovo e galinha". Bootstrap é o passo único pré-AdminForge; depois disso, a ferramenta cuida de todas as chaves dos admins reais.
+> **Por que o AdminForge não faz esse bootstrap sozinho?** Porque ele precisa da chave **já dentro** do servidor para entrar — é o problema clássico do "ovo e galinha". Bootstrap é o passo único pré-AdminForge; depois disso, a ferramenta cuida de todas as chaves dos usuários reais.
 
 ## 4. Cadastros
 
 ```bash
-adminforge admin add alice --nome "Alice Silva" --email alice@empresa.com
-adminforge key add alice --file ~/.ssh/alice.pub
+adminforge user add --username alice --name "Alice Silva" --email alice@empresa.com
+adminforge user key add --username alice --file ~/.ssh/alice.pub
 
-adminforge group create sysadmins
-adminforge group add-member sysadmins alice
+adminforge user-group create --name sysadmins
+adminforge user-group add-member --group sysadmins --username alice
 
-adminforge server add web-01 --ip 10.0.0.10 --auto
+adminforge server add --hostname web-01 --ip 10.0.0.10 --auto
 # > host_key capturada: SHA256:abc...
 # > Confirma o fingerprint? [y/N]: y
 # > OK   server add web-01  (OP-0007)
 
-adminforge server-group create producao
-adminforge server-group add-member producao web-01
+adminforge server-group create --name producao
+adminforge server-group add-member --group producao --hostname web-01
 
-adminforge grant sysadmins producao --nivel sudo
+adminforge grant --user-group sysadmins --server-group producao --level sudo
 ```
 
 ## 5. Preview e apply
@@ -173,15 +173,15 @@ adminforge apply
 
 ```bash
 adminforge history list
-adminforge history show OP-0008
+adminforge history show --id OP-0008
 adminforge history verify       # checa cadeia SHA256
 ```
 
 Inspeção operacional do servidor (read-only):
 
 ```bash
-adminforge audit server web-01
-adminforge audit server web-01 --user tomcat
+adminforge audit server --hostname web-01
+adminforge audit server --hostname web-01 --user tomcat
 ```
 
 ## Próximos passos

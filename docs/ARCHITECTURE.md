@@ -66,22 +66,22 @@ A v1 (M-1) começou usando `paramiko` (SSH), `click` (CLI) e `PyYAML` (estado), 
 
 ```
 state/
-├── admins/                # 1 arquivo por admin (inclui suas chaves)
+├── users/                 # 1 arquivo por usuário gerenciado (inclui suas chaves)
 │   └── alice.json
-├── admin-groups/
+├── user-groups/
 │   └── sysadmins.json
 ├── servers/               # cada server.json inclui chaves_instaladas
 │   └── web-01.json
 ├── server-groups/
 │   └── producao.json
-├── permissions.json       # arquivo único: lista de (grupo_admin, grupo_servidor, nivel)
+├── permissions.json       # arquivo único: lista de (grupo_user, grupo_servidor, nivel)
 ├── history.jsonl          # append-only, 1 linha por comando
 ├── known_hosts            # OpenSSH known_hosts gerenciado pelo SSHDeployer
 └── .lock                  # fcntl.flock — exclusão mútua
 ```
 
 Razões:
-- **Texto simples.** Cabe na escala (≈20 admins, 600 servidores), versável em Git, lê-se a olho nu.
+- **Texto simples.** Cabe na escala (≈20 usuários, 600 servidores), versável em Git, lê-se a olho nu.
 - **Sem banco.** Sem ACID, sem schema migration, sem processo separado.
 - **Lockfile.** Evita escrita simultânea; falha rápida é aceitável.
 
@@ -147,7 +147,7 @@ Cada entrada de `history.jsonl` é um JSON com:
 
 | Decisão | Por quê | Trade-off |
 |---------|---------|-----------|
-| JSON em vez de banco | Escala pequena cabe em texto; versionável em Git. | Sem indexação; busca = leitura linear. Aceitável para dezenas de admins. |
+| JSON em vez de banco | Escala pequena cabe em texto; versionável em Git. | Sem indexação; busca = leitura linear. Aceitável para dezenas de usuários. |
 | Fluxo síncrono | Sem latência crítica; um Superadmin opera por vez. | `apply` em 600 servidores depende de SSH paralelo no Deployer. |
 | Sem cache | Ler JSON é barato. | Cada leitura abre arquivos. |
 | `chaves_instaladas` no Servidor | Resposta direta a "o que já está deployado". | Reconciliação opcional (`apply verify`) fica para M-2. |

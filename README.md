@@ -1,23 +1,26 @@
 # AdminForge
 
-CLI Python para gestão de identidades privilegiadas em frotas de servidores Linux. Pensado para um cenário concreto: ~600 máquinas, ~20 admins, equipes que mudam, sem o peso de FreeIPA/LDAP+Kerberos.
+CLI Python para gestão de identidades privilegiadas em frotas de servidores Linux. Pensado para um cenário concreto: ~600 máquinas, ~20 usuários gerenciados, equipes que mudam, sem o peso de FreeIPA/LDAP+Kerberos.
 
-> **Por que existe.** Hoje o acesso é configurado servidor a servidor. Quando alguém entra, instala-se a chave em todas as máquinas que esse admin precisa. Quando alguém sai, fica fácil esquecer um servidor. AdminForge declara o estado desejado em YAML, calcula o delta e propaga só o que mudou — com histórico verificável.
+> **Por que existe.** Hoje o acesso é configurado servidor a servidor. Quando alguém entra, instala-se a chave em todas as máquinas que essa pessoa precisa. Quando alguém sai, fica fácil esquecer um servidor. AdminForge declara o estado desejado em JSON, calcula o delta e propaga só o que mudou — com histórico verificável.
 
 ## Estado do projeto
 
 - **M-0** Modelagem v1 — [`docs/modelagem-v1.pdf`](docs/modelagem-v1.pdf)
-- **M-1** Protótipo Python — **este repositório** (10/10 UCs implementados, 37 testes passando, integration test em Docker no CI)
+- **M-1** Protótipo Python — **este repositório** (10/10 UCs implementados, 49 testes passando, integration test em Docker no CI)
 - **M-2** Robustez — retentativa automática, `apply verify`, cifragem seletiva
 - **M-3** Rust + modo *pull* — servidores puxam estado de repositório Git assinado
 
-### Footprint (zero deps de runtime)
+### Footprint (zero deps de runtime obrigatórias)
 
 | Camada | Antes | Agora | Variação |
 |--------|-------|-------|----------|
-| Código nosso (produção) | 2.429 LOC | 2.358 LOC | -71 (-3%) |
-| Dependências de runtime | ~56.000 LOC (paramiko, click, PyYAML, cryptography, …) | **0** | **-100%** |
-| Total executado | ~58.400 LOC | 2.358 LOC | **-96%** |
+| Código nosso (produção) | 2.429 LOC | 2.677 LOC | +248 (+10%) |
+| Dependências de runtime obrigatórias | ~56.000 LOC (paramiko, click, PyYAML, cryptography, …) | **0** | **-100%** |
+| Total executado (sem extras) | ~58.400 LOC | 2.677 LOC | **-95%** |
+| Extra opcional `completion` | — | +2.200 LOC (`argcomplete`) | opt-in |
+
+O crescimento de produção em relação ao protótipo inicial vem do refactor de UX: comando `dump`, métodos plurais no Núcleo (N membros), `migrate-state`, autocomplete com completers dinâmicos e exemplos no help.
 
 Substituições que compõem essa redução:
 
@@ -52,15 +55,15 @@ Detalhes em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#zero-deps).
 | **Independente em uso** | AdminForge fora do ar não tira ninguém de servidor algum. |
 | **Só CLI na v1** | Sem GUI; o Superadmin opera no terminal. |
 | **Tudo registrado** | Cada comando vira entrada no histórico, com cadeia de hashes. |
-| **Só aplica o que mudou** | Servidor com 5 chaves + admin novo no grupo → só a 6ª chave é propagada. |
+| **Só aplica o que mudou** | Servidor com 5 chaves + usuário novo no grupo → só a 6ª chave é propagada. |
 | **Inspeciona o real sob demanda** | `audit server` lê usuários/serviços via SSH, sem alterar nada. |
 
 ## Arquitetura — visão de 30 segundos
 
 ```
-CLI ──► Núcleo ─┬─► Store    (YAML em ./state/)
+CLI ──► Núcleo ─┬─► Store    (JSON em ./state/)
                 ├─► Planner  (delta = desejado − chaves_instaladas)
-                ├─► Deployer (SSH paramiko, ou DryRun para testes)
+                ├─► Deployer (subprocess(ssh) via OpenSSH, ou DryRun para testes)
                 └─► Auditor  (history.jsonl com cadeia de SHA256)
 ```
 
@@ -80,16 +83,16 @@ python3 -m adminforge.cli.main --help
 # Cadastros (mudam apenas o estado desejado)
 alias adminforge="python3 -m adminforge.cli.main"
 
-adminforge admin add alice --nome "Alice Silva" --email alice@empresa.com
-adminforge key add alice --file ~/.ssh/alice.pub
-adminforge group create sysadmins
-adminforge group add-member sysadmins alice
+adminforge user add --username alice --name "Alice Silva" --email alice@empresa.com
+adminforge user key add --username alice --file ~/.ssh/alice.pub
+adminforge user-group create --name sysadmins
+adminforge user-group add-member --group sysadmins --username alice bob carla   # N de uma vez
 
-adminforge server add web-01 --ip 10.0.0.10 --auto       # TOFU host_key
-adminforge server-group create producao
-adminforge server-group add-member producao web-01
+adminforge server add --hostname web-01 --ip 10.0.0.10 --auto                   # TOFU host_key
+adminforge server-group create --name producao
+adminforge server-group add-member --group producao --hostname web-01 web-02
 
-adminforge grant sysadmins producao --nivel sudo
+adminforge grant --user-group sysadmins --server-group producao --level sudo
 
 # Ver e aplicar
 adminforge preview                                        # read-only
@@ -104,30 +107,62 @@ Pra instalar como comando do sistema (opcional):
 pipx install .            # ou: pip install --user .
 ```
 
+### Autocomplete (bash/zsh)
+
+Tab-complete para subcomandos, flags **e valores cadastrados** (usernames,
+grupos, hostnames, fingerprints lidos do `state/`).
+
+> **Totalmente opcional.** Sem `argcomplete` instalado, a CLI funciona
+> idêntica — o import vive em `try/except ImportError`. Custo no caminho
+> principal: zero. Se você optar por instalar o extra `completion`, entra
+> **~2.200 linhas externas** (`argcomplete`, sem deps transitivas) além
+> das ~80 linhas de código próprio.
+
+Habilitar:
+
+```bash
+pipx install '.[completion]'                    # ou: pip install '.[completion]'
+activate-global-python-argcomplete              # registra eval em /etc/bash_completion.d
+```
+
+Para ativar só para o usuário atual em bash:
+
+```bash
+eval "$(register-python-argcomplete adminforge)"
+```
+
+Em zsh, adicione ao `.zshrc`:
+
+```bash
+autoload -U bashcompinit && bashcompinit
+eval "$(register-python-argcomplete adminforge)"
+```
+
 Receitário completo por caso de uso: [`docs/USAGE.md`](docs/USAGE.md).
 
 ## Casos de uso (UC-1 a UC-10)
 
 | ID    | Comando                                                | O que faz |
 |-------|--------------------------------------------------------|-----------|
-| UC-1  | `adminforge admin add`                                 | Cadastra admin (sem grupo, sem acesso). |
-| UC-2  | `adminforge key add` / `key revoke`                    | Cadastra/revoga chave SSH (ed25519, rsa, ecdsa). |
-| UC-3  | `adminforge group ...`                                 | Cria/edita/exclui grupo de admin. |
+| UC-1  | `adminforge user add`                                  | Cadastra usuário (sem grupo, sem acesso). |
+| UC-2  | `adminforge user key add` / `user key revoke`          | Cadastra/revoga chave SSH (ed25519, rsa, ecdsa). |
+| UC-3  | `adminforge user-group ...`                            | Cria/edita/exclui grupo de usuários (aceita N membros). |
 | UC-4  | `adminforge server add`                                | Registra servidor com TOFU de host key. |
-| UC-5  | `adminforge server-group ...`                          | Cria/edita grupo de servidor. |
+| UC-5  | `adminforge server-group ...`                          | Cria/edita grupo de servidores (aceita N membros). |
 | UC-6  | `adminforge grant` / `revoke`                          | Liga grupos com nível `shell` ou `sudo`. |
 | UC-7  | `adminforge preview`                                   | Mostra o delta sem tocar em servidores. |
 | UC-8  | `adminforge apply`                                     | Propaga o delta via SSH em paralelo. |
 | UC-9  | `adminforge history list/show/failed/verify`           | Auditoria do que o Superadmin fez. |
 | UC-10 | `adminforge audit server`                              | Inspeção operacional read-only do servidor. |
+| —     | `adminforge dump --format json\|table`                 | Lista o estado declarado completo de uma vez. |
 
 ## Segurança
 
-- YAMLs em diretório `0700`, arquivos `0600`.
+- JSONs em diretório `0700`, arquivos `0600`.
 - Chave SSH dedicada do AdminForge (não a do Superadmin).
 - `StrictHostKeyChecking=no` é proibido — host key armazenada por servidor.
 - Histórico append-only com cadeia SHA256; `verify` aponta primeiro ponto de divergência.
-- O escopo de auditoria é estrito: AdminForge audita o **Superadmin**; logins dos admins nos servidores ficam com `sshd`/`auditd` de cada máquina.
+- O escopo de auditoria é estrito: AdminForge audita o **Superadmin**; logins dos usuários nos servidores ficam com `sshd`/`auditd` de cada máquina.
 
 Mais em [`docs/SECURITY.md`](docs/SECURITY.md).
 
@@ -150,7 +185,7 @@ Mais em [`docs/SECURITY.md`](docs/SECURITY.md).
 pytest -v
 ```
 
-36 testes cobrem o fluxo end-to-end e edge cases (cadeia quebrada, duplicatas, idempotência, falha parcial, no-op, lockfile concorrente, permissão 0600).
+49 testes cobrem o fluxo end-to-end e edge cases (cadeia quebrada, duplicatas, idempotência, falha parcial, no-op, lockfile concorrente, permissão 0600, N membros atômicos, completers, migrate-state).
 
 ### Como usar em produção
 

@@ -9,15 +9,15 @@ from .conftest import CHAVE_ALICE, CHAVE_BOB, HOST_KEY_FAKE
 
 
 def test_fluxo_completo(nucleo: Nucleo):
-    assert nucleo.cadastrar_admin("alice", "Alice", "m@empresa.com").status == StatusOperacao.SUCESSO
-    assert nucleo.cadastrar_admin("bob", "Bob", "bob@empresa.com").status == StatusOperacao.SUCESSO
+    assert nucleo.cadastrar_user("alice", "Alice", "m@empresa.com").status == StatusOperacao.SUCESSO
+    assert nucleo.cadastrar_user("bob", "Bob", "bob@empresa.com").status == StatusOperacao.SUCESSO
 
     assert nucleo.cadastrar_chave("alice", CHAVE_ALICE).status == StatusOperacao.SUCESSO
     assert nucleo.cadastrar_chave("bob", CHAVE_BOB).status == StatusOperacao.SUCESSO
 
-    nucleo.criar_grupo_admin("sysadmins")
-    nucleo.adicionar_membro_grupo_admin("sysadmins", "alice")
-    nucleo.adicionar_membro_grupo_admin("sysadmins", "bob")
+    nucleo.criar_grupo_user("sysadmins")
+    nucleo.adicionar_membro_grupo_user("sysadmins", "alice")
+    nucleo.adicionar_membro_grupo_user("sysadmins", "bob")
 
     nucleo.cadastrar_servidor("web-01", "10.0.0.10", 22, HOST_KEY_FAKE)
     nucleo.cadastrar_servidor("web-02", "10.0.0.11", 22, HOST_KEY_FAKE)
@@ -47,7 +47,7 @@ def test_fluxo_completo(nucleo: Nucleo):
     assert op_apply_2.status == StatusOperacao.SUCESSO
     assert op_apply_2.subacoes == []
 
-    nucleo.desabilitar_admin("bob")
+    nucleo.desabilitar_user("bob")
     subacoes_remover = nucleo.preview()
     assert len(subacoes_remover) == 3
     assert all(s.acao == TipoAcao.REMOVER_CHAVE for s in subacoes_remover)
@@ -74,10 +74,10 @@ def test_apply_com_falha_parcial(state_dir):
     auditor = JsonlAuditor(state_dir / "history.jsonl")
     nucleo = Nucleo(store, auditor, deployer, superadmin="operador")
 
-    nucleo.cadastrar_admin("alice", "Alice", "m@e.com")
+    nucleo.cadastrar_user("alice", "Alice", "m@e.com")
     nucleo.cadastrar_chave("alice", CHAVE_ALICE)
-    nucleo.criar_grupo_admin("sa")
-    nucleo.adicionar_membro_grupo_admin("sa", "alice")
+    nucleo.criar_grupo_user("sa")
+    nucleo.adicionar_membro_grupo_user("sa", "alice")
     nucleo.cadastrar_servidor("web-01", "10.0.0.10", 22, HOST_KEY_FAKE)
     nucleo.cadastrar_servidor("db-03", "10.0.0.30", 22, HOST_KEY_FAKE)
     nucleo.criar_grupo_servidor("prod")

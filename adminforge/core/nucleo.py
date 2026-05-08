@@ -8,19 +8,19 @@ from adminforge import ssh_keys
 from adminforge.auditor.jsonl_auditor import JsonlAuditor
 from adminforge.deployer.dry_run import DryRunDeployer
 from adminforge.domain import (
-    Admin,
     CredencialSSH,
-    GrupoAdmin,
     GrupoServidor,
+    GrupoUser,
     NivelPermissao,
     Operacao,
     Permissao,
     Servidor,
-    StatusAdmin,
     StatusCredencial,
     StatusOperacao,
+    StatusUser,
     Subacao,
     TipoAcao,
+    User,
 )
 from adminforge.exceptions import (
     EstadoInvalido,
@@ -84,8 +84,8 @@ class Nucleo:
         )
         return self._registrar(op, StatusOperacao.FALHA)
 
-    def cadastrar_admin(self, username: str, nome: str, email: str) -> Operacao:
-        op = self._nova_op(f"admin add {username}")
+    def cadastrar_user(self, username: str, nome: str, email: str) -> Operacao:
+        op = self._nova_op(f"user add {username}")
         try:
             with self.store:
                 if not _RE_USERNAME.match(username):
@@ -94,22 +94,22 @@ class Nucleo:
                     raise FormatoInvalido("nome obrigatorio")
                 if not _RE_EMAIL.match(email):
                     raise FormatoInvalido(f"email invalido: '{email}'")
-                if self.store.get_admin(username):
+                if self.store.get_user(username):
                     raise JaExiste(f"username '{username}' ja existe")
-                self.store.save_admin(Admin(username=username, nome=nome, email=email))
+                self.store.save_user(User(username=username, nome=nome, email=email))
                 return self._registrar(op, StatusOperacao.SUCESSO)
         except Exception as e:
             return self._registrar_falha(op, str(e))
 
-    def desabilitar_admin(self, username: str) -> Operacao:
-        op = self._nova_op(f"admin disable {username}")
+    def desabilitar_user(self, username: str) -> Operacao:
+        op = self._nova_op(f"user disable {username}")
         try:
             with self.store:
-                admin = self.store.get_admin(username)
-                if not admin:
-                    raise NaoExiste(f"admin '{username}' nao existe")
-                admin.status = StatusAdmin.INATIVO
-                self.store.save_admin(admin)
+                user = self.store.get_user(username)
+                if not user:
+                    raise NaoExiste(f"usuario '{username}' nao existe")
+                user.status = StatusUser.INATIVO
+                self.store.save_user(user)
                 for cred in self.store.list_credenciais(username):
                     if cred.status == StatusCredencial.ATIVA:
                         cred.status = StatusCredencial.REVOGADA
@@ -119,12 +119,12 @@ class Nucleo:
             return self._registrar_falha(op, str(e))
 
     def cadastrar_chave(self, username: str, chave_raw: str) -> Operacao:
-        op = self._nova_op(f"key add {username}")
+        op = self._nova_op(f"user key add {username}")
         try:
             with self.store:
-                admin = self.store.get_admin(username)
-                if not admin:
-                    raise NaoExiste(f"admin '{username}' nao existe")
+                user = self.store.get_user(username)
+                if not user:
+                    raise NaoExiste(f"usuario '{username}' nao existe")
                 fp = ssh_keys.fingerprint(chave_raw)
                 canonica = ssh_keys.chave_canonica(chave_raw)
                 for c in self.store.list_credenciais(username):
@@ -132,7 +132,7 @@ class Nucleo:
                         raise JaExiste(f"chave ja cadastrada para '{username}' ({fp})")
                 self.store.save_credencial(
                     CredencialSSH(
-                        admin_username=username, chave_publica=canonica, fingerprint=fp
+                        username=username, chave_publica=canonica, fingerprint=fp
                     )
                 )
                 return self._registrar(op, StatusOperacao.SUCESSO)
@@ -140,7 +140,7 @@ class Nucleo:
             return self._registrar_falha(op, str(e))
 
     def revogar_chave(self, fingerprint: str) -> Operacao:
-        op = self._nova_op(f"key revoke {fingerprint}")
+        op = self._nova_op(f"user key revoke {fingerprint}")
         try:
             with self.store:
                 cred = self.store.get_credencial_por_fingerprint(fingerprint)
@@ -152,62 +152,73 @@ class Nucleo:
         except Exception as e:
             return self._registrar_falha(op, str(e))
 
-    def criar_grupo_admin(self, nome: str) -> Operacao:
-        op = self._nova_op(f"group create {nome}")
+    def criar_grupo_user(self, nome: str) -> Operacao:
+        op = self._nova_op(f"user-group create {nome}")
         try:
             with self.store:
                 if not _RE_NOME_GRUPO.match(nome):
                     raise FormatoInvalido(f"nome de grupo invalido: '{nome}'")
-                if self.store.get_grupo_admin(nome):
-                    raise JaExiste(f"grupo de admin '{nome}' ja existe")
-                self.store.save_grupo_admin(GrupoAdmin(nome=nome))
+                if self.store.get_grupo_user(nome):
+                    raise JaExiste(f"user-group '{nome}' ja existe")
+                self.store.save_grupo_user(GrupoUser(nome=nome))
                 return self._registrar(op, StatusOperacao.SUCESSO)
         except Exception as e:
             return self._registrar_falha(op, str(e))
 
-    def adicionar_membro_grupo_admin(self, grupo: str, username: str) -> Operacao:
-        op = self._nova_op(f"group add-member {grupo} {username}")
+    def adicionar_membro_grupo_user(self, grupo: str, username: str) -> Operacao:
+        return self.adicionar_membros_grupo_user(grupo, [username])
+
+    def adicionar_membros_grupo_user(self, grupo: str, usernames: list[str]) -> Operacao:
+        op = self._nova_op(f"user-group add-member {grupo} {' '.join(usernames)}")
         try:
             with self.store:
-                g = self.store.get_grupo_admin(grupo)
+                g = self.store.get_grupo_user(grupo)
                 if not g:
                     raise NaoExiste(f"grupo '{grupo}' nao existe")
-                if not self.store.get_admin(username):
-                    raise NaoExiste(f"admin '{username}' nao existe")
-                if username in g.membros:
+                inexistentes = [u for u in usernames if not self.store.get_user(u)]
+                if inexistentes:
+                    raise NaoExiste(f"usuarios inexistentes: {', '.join(inexistentes)}")
+                membros = set(g.membros)
+                membros.update(usernames)
+                if membros == set(g.membros):
                     return self._registrar(op, StatusOperacao.SUCESSO)
-                g.membros = sorted({*g.membros, username})
-                self.store.save_grupo_admin(g)
+                g.membros = sorted(membros)
+                self.store.save_grupo_user(g)
                 return self._registrar(op, StatusOperacao.SUCESSO)
         except Exception as e:
             return self._registrar_falha(op, str(e))
 
-    def remover_membro_grupo_admin(self, grupo: str, username: str) -> Operacao:
-        op = self._nova_op(f"group remove-member {grupo} {username}")
+    def remover_membro_grupo_user(self, grupo: str, username: str) -> Operacao:
+        return self.remover_membros_grupo_user(grupo, [username])
+
+    def remover_membros_grupo_user(self, grupo: str, usernames: list[str]) -> Operacao:
+        op = self._nova_op(f"user-group remove-member {grupo} {' '.join(usernames)}")
         try:
             with self.store:
-                g = self.store.get_grupo_admin(grupo)
+                g = self.store.get_grupo_user(grupo)
                 if not g:
                     raise NaoExiste(f"grupo '{grupo}' nao existe")
-                if username not in g.membros:
+                alvo = set(usernames)
+                novos = [m for m in g.membros if m not in alvo]
+                if novos == g.membros:
                     return self._registrar(op, StatusOperacao.SUCESSO)
-                g.membros = [m for m in g.membros if m != username]
-                self.store.save_grupo_admin(g)
+                g.membros = novos
+                self.store.save_grupo_user(g)
                 return self._registrar(op, StatusOperacao.SUCESSO)
         except Exception as e:
             return self._registrar_falha(op, str(e))
 
-    def excluir_grupo_admin(self, nome: str) -> Operacao:
-        op = self._nova_op(f"group delete {nome}")
+    def excluir_grupo_user(self, nome: str) -> Operacao:
+        op = self._nova_op(f"user-group delete {nome}")
         try:
             with self.store:
-                if not self.store.get_grupo_admin(nome):
+                if not self.store.get_grupo_user(nome):
                     raise NaoExiste(f"grupo '{nome}' nao existe")
-                if any(p.grupo_admin == nome for p in self.store.list_permissoes()):
+                if any(p.grupo_user == nome for p in self.store.list_permissoes()):
                     raise EstadoInvalido(
                         f"grupo '{nome}' tem permissoes associadas; revogue antes"
                     )
-                self.store.delete_grupo_admin(nome)
+                self.store.delete_grupo_user(nome)
                 return self._registrar(op, StatusOperacao.SUCESSO)
         except Exception as e:
             return self._registrar_falha(op, str(e))
@@ -266,39 +277,50 @@ class Nucleo:
                 if not _RE_NOME_GRUPO.match(nome):
                     raise FormatoInvalido(f"nome de grupo invalido: '{nome}'")
                 if self.store.get_grupo_servidor(nome):
-                    raise JaExiste(f"grupo de servidor '{nome}' ja existe")
+                    raise JaExiste(f"server-group '{nome}' ja existe")
                 self.store.save_grupo_servidor(GrupoServidor(nome=nome))
                 return self._registrar(op, StatusOperacao.SUCESSO)
         except Exception as e:
             return self._registrar_falha(op, str(e))
 
     def adicionar_membro_grupo_servidor(self, grupo: str, hostname: str) -> Operacao:
-        op = self._nova_op(f"server-group add-member {grupo} {hostname}")
+        return self.adicionar_membros_grupo_servidor(grupo, [hostname])
+
+    def adicionar_membros_grupo_servidor(self, grupo: str, hostnames: list[str]) -> Operacao:
+        op = self._nova_op(f"server-group add-member {grupo} {' '.join(hostnames)}")
         try:
             with self.store:
                 g = self.store.get_grupo_servidor(grupo)
                 if not g:
                     raise NaoExiste(f"grupo '{grupo}' nao existe")
-                if not self.store.get_servidor(hostname):
-                    raise NaoExiste(f"servidor '{hostname}' nao existe")
-                if hostname in g.membros:
+                inexistentes = [h for h in hostnames if not self.store.get_servidor(h)]
+                if inexistentes:
+                    raise NaoExiste(f"servidores inexistentes: {', '.join(inexistentes)}")
+                membros = set(g.membros)
+                membros.update(hostnames)
+                if membros == set(g.membros):
                     return self._registrar(op, StatusOperacao.SUCESSO)
-                g.membros = sorted({*g.membros, hostname})
+                g.membros = sorted(membros)
                 self.store.save_grupo_servidor(g)
                 return self._registrar(op, StatusOperacao.SUCESSO)
         except Exception as e:
             return self._registrar_falha(op, str(e))
 
     def remover_membro_grupo_servidor(self, grupo: str, hostname: str) -> Operacao:
-        op = self._nova_op(f"server-group remove-member {grupo} {hostname}")
+        return self.remover_membros_grupo_servidor(grupo, [hostname])
+
+    def remover_membros_grupo_servidor(self, grupo: str, hostnames: list[str]) -> Operacao:
+        op = self._nova_op(f"server-group remove-member {grupo} {' '.join(hostnames)}")
         try:
             with self.store:
                 g = self.store.get_grupo_servidor(grupo)
                 if not g:
                     raise NaoExiste(f"grupo '{grupo}' nao existe")
-                if hostname not in g.membros:
+                alvo = set(hostnames)
+                novos = [m for m in g.membros if m not in alvo]
+                if novos == g.membros:
                     return self._registrar(op, StatusOperacao.SUCESSO)
-                g.membros = [m for m in g.membros if m != hostname]
+                g.membros = novos
                 self.store.save_grupo_servidor(g)
                 return self._registrar(op, StatusOperacao.SUCESSO)
         except Exception as e:
@@ -319,17 +341,17 @@ class Nucleo:
         except Exception as e:
             return self._registrar_falha(op, str(e))
 
-    def conceder(self, grupo_admin: str, grupo_servidor: str, nivel: NivelPermissao) -> Operacao:
-        op = self._nova_op(f"grant {grupo_admin} {grupo_servidor} --nivel {nivel.value}")
+    def conceder(self, grupo_user: str, grupo_servidor: str, nivel: NivelPermissao) -> Operacao:
+        op = self._nova_op(f"grant {grupo_user} {grupo_servidor} --level {nivel.value}")
         try:
             with self.store:
-                if not self.store.get_grupo_admin(grupo_admin):
-                    raise NaoExiste(f"grupo de admin '{grupo_admin}' nao existe")
+                if not self.store.get_grupo_user(grupo_user):
+                    raise NaoExiste(f"user-group '{grupo_user}' nao existe")
                 if not self.store.get_grupo_servidor(grupo_servidor):
-                    raise NaoExiste(f"grupo de servidor '{grupo_servidor}' nao existe")
+                    raise NaoExiste(f"server-group '{grupo_servidor}' nao existe")
                 self.store.save_permissao(
                     Permissao(
-                        grupo_admin=grupo_admin,
+                        grupo_user=grupo_user,
                         grupo_servidor=grupo_servidor,
                         nivel=nivel,
                     )
@@ -338,11 +360,11 @@ class Nucleo:
         except Exception as e:
             return self._registrar_falha(op, str(e))
 
-    def revogar(self, grupo_admin: str, grupo_servidor: str) -> Operacao:
-        op = self._nova_op(f"revoke {grupo_admin} {grupo_servidor}")
+    def revogar(self, grupo_user: str, grupo_servidor: str) -> Operacao:
+        op = self._nova_op(f"revoke {grupo_user} {grupo_servidor}")
         try:
             with self.store:
-                self.store.delete_permissao(grupo_admin, grupo_servidor)
+                self.store.delete_permissao(grupo_user, grupo_servidor)
                 return self._registrar(op, StatusOperacao.SUCESSO)
         except FileNotFoundError:
             return self._registrar_falha(op, "permissao nao existe")

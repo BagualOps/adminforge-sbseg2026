@@ -7,15 +7,15 @@ from pathlib import Path
 from uuid import UUID
 
 from adminforge.domain import (
-    Admin,
     CredencialSSH,
-    GrupoAdmin,
     GrupoServidor,
+    GrupoUser,
     NivelPermissao,
     Permissao,
     Servidor,
-    StatusAdmin,
     StatusCredencial,
+    StatusUser,
+    User,
 )
 from adminforge.exceptions import LockOcupado
 from adminforge.interfaces.store import IStore
@@ -27,8 +27,8 @@ class JsonStore(IStore):
 
     def __init__(self, root: Path):
         self.root = Path(root)
-        self.dir_admins = self.root / "admins"
-        self.dir_admin_groups = self.root / "admin-groups"
+        self.dir_users = self.root / "users"
+        self.dir_user_groups = self.root / "user-groups"
         self.dir_servers = self.root / "servers"
         self.dir_server_groups = self.root / "server-groups"
         self.file_permissions = self.root / "permissions.json"
@@ -39,8 +39,8 @@ class JsonStore(IStore):
     def _init_dirs(self) -> None:
         for d in (
             self.root,
-            self.dir_admins,
-            self.dir_admin_groups,
+            self.dir_users,
+            self.dir_user_groups,
             self.dir_servers,
             self.dir_server_groups,
         ):
@@ -86,49 +86,49 @@ class JsonStore(IStore):
                 return {}
             return json.loads(content)
 
-    def get_admin(self, username: str) -> Admin | None:
-        data = self._load(self.dir_admins / f"{username}.json")
+    def get_user(self, username: str) -> User | None:
+        data = self._load(self.dir_users / f"{username}.json")
         if not data:
             return None
-        return Admin(
+        return User(
             username=data["username"],
             nome=data["nome"],
             email=data["email"],
-            status=StatusAdmin(data.get("status", "ativo")),
+            status=StatusUser(data.get("status", "ativo")),
             id=UUID(data["id"]),
         )
 
-    def list_admins(self) -> list[Admin]:
-        admins = []
-        for arquivo in sorted(self.dir_admins.glob("*.json")):
-            a = self.get_admin(arquivo.stem)
-            if a is not None:
-                admins.append(a)
-        return admins
+    def list_users(self) -> list[User]:
+        users = []
+        for arquivo in sorted(self.dir_users.glob("*.json")):
+            u = self.get_user(arquivo.stem)
+            if u is not None:
+                users.append(u)
+        return users
 
-    def save_admin(self, admin: Admin) -> None:
+    def save_user(self, user: User) -> None:
         data: dict = {
-            "id": str(admin.id),
-            "username": admin.username,
-            "nome": admin.nome,
-            "email": admin.email,
-            "status": admin.status.value,
+            "id": str(user.id),
+            "username": user.username,
+            "nome": user.nome,
+            "email": user.email,
+            "status": user.status.value,
             "credenciais": [],
         }
-        path = self.dir_admins / f"{admin.username}.json"
+        path = self.dir_users / f"{user.username}.json"
         existente = self._load(path)
         if "credenciais" in existente:
             data["credenciais"] = existente["credenciais"]
         write_atomic(path, self._dump(data))
 
-    def list_credenciais(self, admin_username: str) -> list[CredencialSSH]:
-        data = self._load(self.dir_admins / f"{admin_username}.json")
+    def list_credenciais(self, username: str) -> list[CredencialSSH]:
+        data = self._load(self.dir_users / f"{username}.json")
         creds = []
         for c in data.get("credenciais", []):
             creds.append(
                 CredencialSSH(
                     id=UUID(c["id"]),
-                    admin_username=admin_username,
+                    username=username,
                     chave_publica=c["chave_publica"],
                     fingerprint=c["fingerprint"],
                     status=StatusCredencial(c.get("status", "ativa")),
@@ -137,10 +137,10 @@ class JsonStore(IStore):
         return creds
 
     def save_credencial(self, cred: CredencialSSH) -> None:
-        path = self.dir_admins / f"{cred.admin_username}.json"
+        path = self.dir_users / f"{cred.username}.json"
         data = self._load(path)
         if not data:
-            raise FileNotFoundError(f"admin '{cred.admin_username}' não existe")
+            raise FileNotFoundError(f"user '{cred.username}' não existe")
         creds = data.setdefault("credenciais", [])
         encontrou = False
         for c in creds:
@@ -162,8 +162,8 @@ class JsonStore(IStore):
         write_atomic(path, self._dump(data))
 
     def get_credencial_por_fingerprint(self, fingerprint: str) -> CredencialSSH | None:
-        for admin in self.list_admins():
-            for c in self.list_credenciais(admin.username):
+        for user in self.list_users():
+            for c in self.list_credenciais(user.username):
                 if c.fingerprint == fingerprint:
                     return c
         return None
@@ -203,28 +203,28 @@ class JsonStore(IStore):
     def delete_servidor(self, hostname: str) -> None:
         (self.dir_servers / f"{hostname}.json").unlink(missing_ok=True)
 
-    def get_grupo_admin(self, nome: str) -> GrupoAdmin | None:
-        data = self._load(self.dir_admin_groups / f"{nome}.json")
+    def get_grupo_user(self, nome: str) -> GrupoUser | None:
+        data = self._load(self.dir_user_groups / f"{nome}.json")
         if not data:
             return None
-        return GrupoAdmin(
+        return GrupoUser(
             id=UUID(data["id"]), nome=data["nome"], membros=list(data.get("membros", []))
         )
 
-    def list_grupos_admin(self) -> list[GrupoAdmin]:
+    def list_grupos_user(self) -> list[GrupoUser]:
         out = []
-        for arquivo in sorted(self.dir_admin_groups.glob("*.json")):
-            g = self.get_grupo_admin(arquivo.stem)
+        for arquivo in sorted(self.dir_user_groups.glob("*.json")):
+            g = self.get_grupo_user(arquivo.stem)
             if g is not None:
                 out.append(g)
         return out
 
-    def save_grupo_admin(self, grupo: GrupoAdmin) -> None:
+    def save_grupo_user(self, grupo: GrupoUser) -> None:
         data = {"id": str(grupo.id), "nome": grupo.nome, "membros": list(grupo.membros)}
-        write_atomic(self.dir_admin_groups / f"{grupo.nome}.json", self._dump(data))
+        write_atomic(self.dir_user_groups / f"{grupo.nome}.json", self._dump(data))
 
-    def delete_grupo_admin(self, nome: str) -> None:
-        (self.dir_admin_groups / f"{nome}.json").unlink(missing_ok=True)
+    def delete_grupo_user(self, nome: str) -> None:
+        (self.dir_user_groups / f"{nome}.json").unlink(missing_ok=True)
 
     def get_grupo_servidor(self, nome: str) -> GrupoServidor | None:
         data = self._load(self.dir_server_groups / f"{nome}.json")
@@ -256,7 +256,7 @@ class JsonStore(IStore):
             out.append(
                 Permissao(
                     id=UUID(p["id"]),
-                    grupo_admin=p["grupo_admin"],
+                    grupo_user=p["grupo_user"],
                     grupo_servidor=p["grupo_servidor"],
                     nivel=NivelPermissao(p["nivel"]),
                 )
@@ -269,7 +269,7 @@ class JsonStore(IStore):
         atualizou = False
         for p in permissoes:
             if (
-                p["grupo_admin"] == permissao.grupo_admin
+                p["grupo_user"] == permissao.grupo_user
                 and p["grupo_servidor"] == permissao.grupo_servidor
             ):
                 p["nivel"] = permissao.nivel.value
@@ -279,20 +279,20 @@ class JsonStore(IStore):
             permissoes.append(
                 {
                     "id": str(permissao.id),
-                    "grupo_admin": permissao.grupo_admin,
+                    "grupo_user": permissao.grupo_user,
                     "grupo_servidor": permissao.grupo_servidor,
                     "nivel": permissao.nivel.value,
                 }
             )
         write_atomic(self.file_permissions, self._dump(data))
 
-    def delete_permissao(self, grupo_admin: str, grupo_servidor: str) -> None:
+    def delete_permissao(self, grupo_user: str, grupo_servidor: str) -> None:
         data = self._load(self.file_permissions) or {"permissoes": []}
         antes = len(data.get("permissoes", []))
         data["permissoes"] = [
             p
             for p in data.get("permissoes", [])
-            if not (p["grupo_admin"] == grupo_admin and p["grupo_servidor"] == grupo_servidor)
+            if not (p["grupo_user"] == grupo_user and p["grupo_servidor"] == grupo_servidor)
         ]
         if len(data["permissoes"]) == antes:
             raise FileNotFoundError("permissão não existe")
