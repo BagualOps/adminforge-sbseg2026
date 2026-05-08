@@ -43,7 +43,7 @@ class SSHDeployer(IDeployer):
 
     def _opcoes_ssh(self, servidor: Servidor) -> list[str]:
         if not servidor.chave_host:
-            raise HostKeyDivergente(f"servidor {servidor.hostname} sem host_key registrada")
+            raise HostKeyDivergente(f"server {servidor.hostname} has no registered host_key")
         self._sincronizar_host_key(servidor)
         return [
             "-o", "BatchMode=yes",
@@ -88,7 +88,7 @@ class SSHDeployer(IDeployer):
         cmd = ["ssh-keyscan", "-T", str(self.timeout), "-t", "ed25519,rsa,ecdsa", "-p", str(porta), host]
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=self.timeout * 2)
         if proc.returncode != 0 and not proc.stdout.strip():
-            raise HostKeyDivergente(f"ssh-keyscan falhou: {proc.stderr.strip()}")
+            raise HostKeyDivergente(f"ssh-keyscan failed: {proc.stderr.strip()}")
 
         preferida = None
         for linha in proc.stdout.splitlines():
@@ -106,7 +106,7 @@ class SSHDeployer(IDeployer):
                 preferida = key
 
         if preferida is None:
-            raise HostKeyDivergente(f"nenhuma host_key retornada por ssh-keyscan para {host}")
+            raise HostKeyDivergente(f"no host_key returned by ssh-keyscan for {host}")
 
         partes = preferida.split(None, 2)
         blob_b64 = partes[1]
@@ -127,7 +127,7 @@ class SSHDeployer(IDeployer):
         if rc != 0:
             for s in subacoes:
                 s.status = "falha"
-                s.erro = f"ssh: {err.strip() or 'conexao falhou'}"
+                s.erro = f"ssh: {err.strip() or 'connection failed'}"
             return subacoes
 
         for s in subacoes:
@@ -149,12 +149,12 @@ class SSHDeployer(IDeployer):
             return
         if not self.criar_conta_unix:
             raise RuntimeError(
-                f"usuario '{username}' nao existe e criacao automatica esta desabilitada "
+                f"unix user '{username}' does not exist and auto-create is disabled "
                 f"(ADMINFORGE_CREATE_UNIX_USER=false)"
             )
         rc, _, err = self._executar_ssh(servidor, f"sudo useradd -m -s /bin/bash {u}")
         if rc != 0:
-            raise RuntimeError(f"falha ao criar usuario unix '{username}': {err.strip()}")
+            raise RuntimeError(f"failed to create unix user '{username}': {err.strip()}")
 
     def _bloco_chave(self, ref: str, chave: str) -> str:
         return (
@@ -182,7 +182,7 @@ class SSHDeployer(IDeployer):
         )
         rc, _, err = self._executar_ssh(servidor, comando)
         if rc != 0:
-            raise RuntimeError(f"falha ao escrever authorized_keys: {err.strip()}")
+            raise RuntimeError(f"failed to write authorized_keys: {err.strip()}")
 
     def _substituir_bloco(self, conteudo: str, ref: str, bloco_novo: str) -> str:
         marcador_inicio = f"{self.MARCADOR_INICIO}{ref}"
@@ -207,7 +207,7 @@ class SSHDeployer(IDeployer):
 
     def _adicionar_chave(self, servidor: Servidor, sub: Subacao) -> None:
         if not sub.chave_publica or not sub.username or not sub.credencial:
-            raise ValueError("subacao sem chave_publica, username ou credencial")
+            raise ValueError("sub-action missing chave_publica, username or credencial")
         self._garantir_usuario_unix(servidor, sub.username)
         atual = self._ler_authorized_keys(servidor, sub.username)
         novo = self._substituir_bloco(
@@ -236,11 +236,11 @@ class SSHDeployer(IDeployer):
         rc, _, err = self._executar_ssh(servidor, comando)
         if rc != 0:
             self._executar_ssh(servidor, f"sudo rm -f {tmp}")
-            raise RuntimeError(f"falha ao escrever sudoers: {err.strip()}")
+            raise RuntimeError(f"failed to write sudoers: {err.strip()}")
 
     def _remover_chave(self, servidor: Servidor, sub: Subacao) -> None:
         if not sub.username or not sub.credencial:
-            raise ValueError("subacao sem username ou credencial")
+            raise ValueError("sub-action missing username or credencial")
         atual = self._ler_authorized_keys(servidor, sub.username)
         novo = self._substituir_bloco(atual, sub.credencial, "")
         self._escrever_authorized_keys(servidor, sub.username, novo)

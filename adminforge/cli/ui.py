@@ -69,7 +69,7 @@ def imprimir_resultado(op: Operacao) -> int:
         ok(f"{op.comando}  ({op.id})")
         return 0
     if op.status == StatusOperacao.SUCESSO_PARCIAL:
-        warn(f"{op.comando}  ({op.id}) — parcial")
+        warn(f"{op.comando}  ({op.id}) — partial")
         return 1
     erro = next((s.erro for s in op.subacoes if s.erro), op.comando)
     fail(f"{op.comando}  ({op.id})")

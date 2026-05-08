@@ -58,7 +58,7 @@ class JsonStore(IStore):
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             os.close(fd)
-            raise LockOcupado("outra instância do AdminForge está em execução") from None
+            raise LockOcupado("another AdminForge instance is running") from None
         self._lock_fd = fd
 
     def unlock(self) -> None:
@@ -140,7 +140,7 @@ class JsonStore(IStore):
         path = self.dir_users / f"{cred.username}.json"
         data = self._load(path)
         if not data:
-            raise FileNotFoundError(f"user '{cred.username}' não existe")
+            raise FileNotFoundError(f"user '{cred.username}' does not exist")
         creds = data.setdefault("credenciais", [])
         encontrou = False
         for c in creds:
@@ -295,5 +295,5 @@ class JsonStore(IStore):
             if not (p["grupo_user"] == grupo_user and p["grupo_servidor"] == grupo_servidor)
         ]
         if len(data["permissoes"]) == antes:
-            raise FileNotFoundError("permissão não existe")
+            raise FileNotFoundError("permission does not exist")
         write_atomic(self.file_permissions, self._dump(data))

@@ -19,7 +19,7 @@ from adminforge.exceptions import LockOcupado
 
 
 EPILOG_GERAL = """\
-EXEMPLOS
+EXAMPLES
   adminforge user add --username marina --name "Marina Silva" --email marina@empresa.com
   adminforge user key add --username marina --file ~/.ssh/marina.pub
   adminforge user-group create --name sysadmins
@@ -31,9 +31,9 @@ EXEMPLOS
   adminforge preview
   adminforge apply
 
-DOCUMENTACAO
-  Modelagem detalhada: docs/modelagem-v1.pdf
-  Cookbook por caso de uso: docs/USAGE.md
+DOCS
+  Detailed model: docs/modelagem-v1.pdf
+  Use-case cookbook: docs/USAGE.md
 """
 
 
@@ -82,7 +82,7 @@ def cmd_user_add(args: argparse.Namespace) -> int:
 def cmd_user_list(args: argparse.Namespace) -> int:
     nucleo = _nucleo(args)
     linhas = [[u.username, u.nome, u.email, u.status.value] for u in nucleo.store.list_users()]
-    ui.tabela(["USERNAME", "NOME", "EMAIL", "STATUS"], linhas)
+    ui.tabela(["USERNAME", "NAME", "EMAIL", "STATUS"], linhas)
     return 0
 
 
@@ -90,30 +90,30 @@ def cmd_user_show(args: argparse.Namespace) -> int:
     nucleo = _nucleo(args)
     u = nucleo.store.get_user(args.username)
     if not u:
-        ui.fail(f"user '{args.username}' nao existe")
+        ui.fail(f"user '{args.username}' does not exist")
         return 2
     ui.heading("User")
     ui.kv("username", u.username)
-    ui.kv("nome", u.nome)
+    ui.kv("name", u.nome)
     ui.kv("email", u.email)
     ui.kv("status", u.status.value)
     creds = nucleo.store.list_credenciais(args.username)
-    ui.heading(f"Credenciais ({len(creds)})")
+    ui.heading(f"Credentials ({len(creds)})")
     ui.tabela(["FINGERPRINT", "STATUS"], [[c.fingerprint, c.status.value] for c in creds])
     grupos = [g.nome for g in nucleo.store.list_grupos_user() if args.username in g.membros]
-    ui.heading(f"Grupos ({len(grupos)})")
+    ui.heading(f"Groups ({len(grupos)})")
     if grupos:
         ui.echo("  " + ", ".join(grupos))
     else:
-        ui.secho("  (nenhum)", dim=True)
+        ui.secho("  (none)", dim=True)
     return 0
 
 
 def cmd_user_disable(args: argparse.Namespace) -> int:
     if not args.yes and not ui.confirmar(
-        f"Desabilitar '{args.username}' e revogar suas chaves? (apply remove dos servidores)"
+        f"Disable '{args.username}' and revoke their keys? (apply removes them from servers)"
     ):
-        ui.warn("operacao cancelada")
+        ui.warn("operation cancelled")
         return 1
     op = _nucleo(args).desabilitar_user(args.username)
     return ui.imprimir_resultado(op)
@@ -124,13 +124,13 @@ def cmd_user_disable(args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 def cmd_user_key_add(args: argparse.Namespace) -> int:
     if args.file and args.string:
-        ui.fail("use --file OU --string, nao ambos")
+        ui.fail("use --file OR --string, not both")
         return 2
     chave = args.string
     if args.file:
         chave = Path(args.file).read_text(encoding="utf-8")
     if not chave:
-        ui.fail("forneca --file ou --string")
+        ui.fail("provide --file or --string")
         return 2
     op = _nucleo(args).cadastrar_chave(args.username, chave)
     return ui.imprimir_resultado(op)
@@ -170,7 +170,7 @@ def cmd_ug_delete(args: argparse.Namespace) -> int:
 def cmd_ug_list(args: argparse.Namespace) -> int:
     nucleo = _nucleo(args)
     linhas = [[g.nome, ", ".join(g.membros) or "-"] for g in nucleo.store.list_grupos_user()]
-    ui.tabela(["NOME", "MEMBROS"], linhas)
+    ui.tabela(["NAME", "MEMBERS"], linhas)
     return 0
 
 
@@ -189,14 +189,14 @@ def cmd_server_add(args: argparse.Namespace) -> int:
         try:
             host_key, fp = deployer.capturar_host_key(args.hostname, args.ip, args.port)
         except Exception as e:
-            ui.fail(f"falha ao capturar host_key: {e}")
+            ui.fail(f"failed to capture host_key: {e}")
             return 2
-        ui.info(f"host_key capturada: {fp}")
-        if not ui.confirmar("Confirma o fingerprint?"):
-            ui.warn("cadastro abortado")
+        ui.info(f"captured host_key: {fp}")
+        if not ui.confirmar("Confirm the fingerprint?"):
+            ui.warn("registration aborted")
             return 1
     if not host_key:
-        ui.fail("forneca --host-key ou --auto")
+        ui.fail("provide --host-key or --auto")
         return 2
     op = _nucleo(args).cadastrar_servidor(args.hostname, args.ip, args.port, host_key)
     return ui.imprimir_resultado(op)
@@ -208,7 +208,7 @@ def cmd_server_list(args: argparse.Namespace) -> int:
         [s.hostname, s.ipv4, str(s.porta_ssh), str(len(s.chaves_instaladas))]
         for s in nucleo.store.list_servidores()
     ]
-    ui.tabela(["HOSTNAME", "IPV4", "PORTA", "CHAVES"], linhas)
+    ui.tabela(["HOSTNAME", "IPV4", "PORT", "KEYS"], linhas)
     return 0
 
 
@@ -216,29 +216,29 @@ def cmd_server_show(args: argparse.Namespace) -> int:
     nucleo = _nucleo(args)
     s = nucleo.store.get_servidor(args.hostname)
     if not s:
-        ui.fail(f"servidor '{args.hostname}' nao existe")
+        ui.fail(f"server '{args.hostname}' does not exist")
         return 2
-    ui.heading("Servidor")
+    ui.heading("Server")
     ui.kv("hostname", s.hostname)
     ui.kv("ipv4", s.ipv4)
-    ui.kv("porta", str(s.porta_ssh))
+    ui.kv("port", str(s.porta_ssh))
     ui.kv("host_key", s.chave_host[:80] + ("..." if len(s.chave_host) > 80 else ""))
-    ui.heading(f"Chaves instaladas ({len(s.chaves_instaladas)})")
+    ui.heading(f"Installed keys ({len(s.chaves_instaladas)})")
     linhas = []
     for item in s.chaves_instaladas:
         if isinstance(item, dict):
             linhas.append([item.get("ref", "?"), item.get("nivel", "?")])
         else:
             linhas.append([str(item), "shell"])
-    ui.tabela(["REF", "NIVEL"], linhas)
+    ui.tabela(["REF", "LEVEL"], linhas)
     return 0
 
 
 def cmd_server_remove(args: argparse.Namespace) -> int:
     if not args.yes and not ui.confirmar(
-        f"Remover '{args.hostname}' do AdminForge? (nao limpa chaves no servidor)"
+        f"Remove '{args.hostname}' from AdminForge? (does not clean keys on the server)"
     ):
-        ui.warn("operacao cancelada")
+        ui.warn("operation cancelled")
         return 1
     return ui.imprimir_resultado(_nucleo(args).excluir_servidor(args.hostname))
 
@@ -265,7 +265,7 @@ def cmd_sg_delete(args: argparse.Namespace) -> int:
 def cmd_sg_list(args: argparse.Namespace) -> int:
     nucleo = _nucleo(args)
     linhas = [[g.nome, ", ".join(g.membros) or "-"] for g in nucleo.store.list_grupos_servidor()]
-    ui.tabela(["NOME", "MEMBROS"], linhas)
+    ui.tabela(["NAME", "MEMBERS"], linhas)
     return 0
 
 
@@ -289,9 +289,9 @@ def cmd_preview(args: argparse.Namespace) -> int:
     nucleo = _nucleo(args)
     subacoes = nucleo.preview()
     if not subacoes:
-        ui.ok("nada a fazer — estado sincronizado")
+        ui.ok("nothing to do — state in sync")
         return 0
-    ui.info(f"{len(subacoes)} subacoes em {len({s.servidor for s in subacoes})} servidores")
+    ui.info(f"{len(subacoes)} sub-actions across {len({s.servidor for s in subacoes})} servers")
     for hostname in sorted({s.servidor for s in subacoes}):
         ui.heading(hostname)
         for s in subacoes:
@@ -310,10 +310,10 @@ def cmd_apply(args: argparse.Namespace) -> int:
     nucleo = _nucleo(args, com_ssh=not args.dry_run)
     subacoes = nucleo.preview()
     if not subacoes:
-        ui.ok("nada a fazer — estado sincronizado")
+        ui.ok("nothing to do — state in sync")
         return 0
 
-    ui.info(f"{len(subacoes)} subacoes em {len({s.servidor for s in subacoes})} servidores")
+    ui.info(f"{len(subacoes)} sub-actions across {len({s.servidor for s in subacoes})} servers")
     for hostname in sorted({s.servidor for s in subacoes}):
         ui.secho(f"  {hostname}", bold=True)
         for s in subacoes:
@@ -322,27 +322,27 @@ def cmd_apply(args: argparse.Namespace) -> int:
             sinal = "+" if s.acao == TipoAcao.ADICIONAR_CHAVE else "-"
             ui.echo(f"    {sinal} {s.acao.value:18} {s.credencial}")
 
-    if not args.yes and not ui.confirmar("Aplicar agora?"):
-        ui.warn("apply cancelado")
+    if not args.yes and not ui.confirmar("Apply now?"):
+        ui.warn("apply cancelled")
         return 1
 
     op = nucleo.aplicar()
     sucessos = sum(1 for s in op.subacoes if s.status == "sucesso")
     falhas = sum(1 for s in op.subacoes if s.status == "falha")
-    ui.heading("Resultado")
+    ui.heading("Result")
     for s in op.subacoes:
         if s.status == "sucesso":
             ui.ok(f"{s.servidor:24} {s.acao.value:18} {s.credencial or ''}")
         else:
             ui.fail(f"{s.servidor:24} {s.acao.value:18} {s.credencial or ''} — {s.erro}")
     ui.echo()
-    ui.kv("operacao", op.id)
+    ui.kv("operation", op.id)
     ui.kv("status", op.status.value.upper())
-    ui.kv("sucessos", str(sucessos))
-    ui.kv("falhas", str(falhas))
+    ui.kv("successes", str(sucessos))
+    ui.kv("failures", str(falhas))
     if falhas:
         ui.echo()
-        ui.info("reaplicar com 'adminforge apply' retentativa apenas as subacoes em falha")
+        ui.info("re-running 'adminforge apply' retries only the failed sub-actions")
         return 1 if sucessos else 2
     return 0
 
@@ -363,7 +363,7 @@ def cmd_history_list(args: argparse.Namespace) -> int:
         ]
         for op in ops
     ]
-    ui.tabela(["ID", "MOMENTO", "SUPERADMIN", "COMANDO", "STATUS"], linhas)
+    ui.tabela(["ID", "WHEN", "SUPERADMIN", "COMMAND", "STATUS"], linhas)
     return 0
 
 
@@ -371,17 +371,17 @@ def cmd_history_show(args: argparse.Namespace) -> int:
     nucleo = _nucleo(args)
     op = nucleo.auditor.buscar(args.op_id)
     if not op:
-        ui.fail(f"operacao '{args.op_id}' nao existe")
+        ui.fail(f"operation '{args.op_id}' does not exist")
         return 2
-    ui.heading("Operacao")
+    ui.heading("Operation")
     ui.kv("id", op.id)
-    ui.kv("momento", op.momento.isoformat())
+    ui.kv("when", op.momento.isoformat())
     ui.kv("superadmin", op.superadmin)
-    ui.kv("comando", op.comando)
+    ui.kv("command", op.comando)
     ui.kv("status", op.status.value)
     ui.kv("hash", op.hash or "-")
-    ui.kv("hash_anterior", op.hash_anterior or "-")
-    ui.heading(f"Subacoes ({len(op.subacoes)})")
+    ui.kv("prev_hash", op.hash_anterior or "-")
+    ui.heading(f"Sub-actions ({len(op.subacoes)})")
     linhas = [
         [
             s.servidor or "-",
@@ -392,7 +392,7 @@ def cmd_history_show(args: argparse.Namespace) -> int:
         ]
         for s in op.subacoes
     ]
-    ui.tabela(["SERVIDOR", "ACAO", "ALVO", "STATUS", "DETALHE"], linhas)
+    ui.tabela(["SERVER", "ACTION", "TARGET", "STATUS", "DETAIL"], linhas)
     return 0
 
 
@@ -409,7 +409,7 @@ def cmd_history_failed(args: argparse.Namespace) -> int:
         ]
         for op in ops
     ]
-    ui.tabela(["ID", "MOMENTO", "SUPERADMIN", "COMANDO", "STATUS"], linhas)
+    ui.tabela(["ID", "WHEN", "SUPERADMIN", "COMMAND", "STATUS"], linhas)
     return 0
 
 
@@ -418,9 +418,9 @@ def cmd_history_verify(args: argparse.Namespace) -> int:
     try:
         _, ultimo = nucleo.auditor.verificar_cadeia()
     except Exception as e:
-        ui.fail(f"cadeia quebrada: {e}")
+        ui.fail(f"chain broken: {e}")
         return 2
-    ui.ok(f"cadeia integra (ultimo hash: {ultimo or '-'})")
+    ui.ok(f"chain intact (last hash: {ultimo or '-'})")
     return 0
 
 
@@ -534,10 +534,10 @@ def cmd_audit_server(args: argparse.Namespace) -> int:
     if args.humans:
         usuarios = [u for u in usuarios if u.get("categoria") == "humano"]
 
-    # Usuarios
-    titulo = f"Usuarios ({len(usuarios)})"
+    # Users
+    titulo = f"Users ({len(usuarios)})"
     if args.humans:
-        titulo += " — apenas humanos (UID >= 1000)"
+        titulo += " — humans only (UID >= 1000)"
     ui.heading(titulo)
     if usuarios:
         linhas = []
@@ -545,75 +545,75 @@ def cmd_audit_server(args: argparse.Namespace) -> int:
             destacar = bool(args.user and args.user in u["nome"])
             marca = "*" if destacar else " "
             grupos_str = ",".join(u.get("grupos", []))[:40]
-            sudo_str = "sim" if u.get("sudo") else "—"
+            sudo_str = "yes" if u.get("sudo") else "—"
             linhas.append([marca, u["nome"], str(u["uid"]), u["categoria"], u["shell"], grupos_str, sudo_str])
-        ui.tabela([" ", "USERNAME", "UID", "CATEGORIA", "SHELL", "GRUPOS", "SUDO"], linhas)
+        ui.tabela([" ", "USERNAME", "UID", "CATEGORY", "SHELL", "GROUPS", "SUDO"], linhas)
     else:
-        ui.secho("  (nenhum)", dim=True)
+        ui.secho("  (none)", dim=True)
 
-    # Grupos
+    # Groups
     if args.group:
         alvo = [g for g in grupos if args.group in g["nome"]]
-        ui.heading(f"Grupos com '{args.group}' ({len(alvo)})")
+        ui.heading(f"Groups matching '{args.group}' ({len(alvo)})")
         for g in alvo:
             membros = ", ".join(g["membros"]) or "-"
             ui.echo(f"  {g['nome']} (gid={g['gid']}): {membros}")
     else:
-        ui.heading(f"Grupos ({len(grupos)})")
+        ui.heading(f"Groups ({len(grupos)})")
         com_membros = [g for g in grupos if g["membros"]]
         if com_membros:
             ui.tabela(
-                ["NOME", "GID", "MEMBROS"],
+                ["NAME", "GID", "MEMBERS"],
                 [[g["nome"], str(g["gid"]), ", ".join(g["membros"])[:60]] for g in com_membros],
             )
         else:
-            ui.secho("  (nenhum grupo com membros explicitos)", dim=True)
+            ui.secho("  (no group with explicit members)", dim=True)
 
     # Sudoers
-    ui.heading(f"Sudoers — arquivos em /etc/sudoers.d/ ({len(arquivos_sudoers)})")
+    ui.heading(f"Sudoers — files in /etc/sudoers.d/ ({len(arquivos_sudoers)})")
     if arquivos_sudoers:
         for a in arquivos_sudoers:
             origem = "adminforge" if a["adminforge"] else "manual"
             cor = ui._GREEN if a["adminforge"] else ui._YELLOW
             ui.secho(f"  [{origem:10}] {a['nome']}", cor)
     else:
-        ui.secho("  (nao foi possivel listar — ssh sem sudo no servidor?)", dim=True)
+        ui.secho("  (could not list — ssh has no sudo on the server?)", dim=True)
 
     if regras_sudo:
-        ui.heading(f"Regras sudo ativas ({len(regras_sudo)})")
+        ui.heading(f"Active sudo rules ({len(regras_sudo)})")
         for r in regras_sudo[:20]:
             ui.echo(f"  {r}")
         if len(regras_sudo) > 20:
-            ui.secho(f"  ... +{len(regras_sudo) - 20} regras (use --format json para tudo)", dim=True)
+            ui.secho(f"  ... +{len(regras_sudo) - 20} rules (use --format json for full output)", dim=True)
 
-    # Servicos
-    ui.heading(f"Servicos em execucao ({len(servicos)})")
+    # Services
+    ui.heading(f"Running services ({len(servicos)})")
     for s in servicos:
         if args.service and args.service in s:
             ui.secho(f"  * {s}", ui._YELLOW, bold=True)
         else:
             ui.echo(f"    {s}")
 
-    # Alertas heuristicos
+    # Heuristic alerts
     alertas = []
     if args.user:
         nomes = {u["nome"] for u in usuarios}
         if args.user in nomes and not any(args.user in s for s in servicos):
-            alertas.append(f"usuario '{args.user}' existe mas nenhum servico correspondente esta rodando")
+            alertas.append(f"user '{args.user}' exists but no matching service is running")
     sudoers_manuais = [a["nome"] for a in arquivos_sudoers if not a["adminforge"]]
     if sudoers_manuais:
         alertas.append(
-            f"{len(sudoers_manuais)} arquivo(s) em /etc/sudoers.d/ fora do AdminForge: "
+            f"{len(sudoers_manuais)} file(s) in /etc/sudoers.d/ outside AdminForge: "
             + ", ".join(sudoers_manuais[:5])
             + (" ..." if len(sudoers_manuais) > 5 else "")
         )
 
     if alertas:
-        ui.heading("Alertas")
+        ui.heading("Alerts")
         for a in alertas:
             ui.warn(a)
 
-    ui.kv("operacao", op.id)
+    ui.kv("operation", op.id)
     return 0
 
 
@@ -623,9 +623,9 @@ def cmd_audit_server(args: argparse.Namespace) -> int:
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="adminforge",
-        description="AdminForge - gestao de identidades privilegiadas em frotas Linux.\n\n"
-        "Operacoes mudam o estado desejado; 'apply' faz o real convergir para o "
-        "desejado via SSH. Cada comando vira uma entrada auditada em history.jsonl.",
+        description="AdminForge - privileged identity management for Linux server fleets.\n\n"
+        "Operations change the desired state; 'apply' converges the real state to it "
+        "via SSH. Every command is recorded in history.jsonl.",
         epilog=EPILOG_GERAL,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -633,14 +633,14 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--state",
         default=os.environ.get("ADMINFORGE_STATE", "./state"),
-        help="Diretorio de estado (default: ./state ou $ADMINFORGE_STATE).",
+        help="State directory (default: ./state or $ADMINFORGE_STATE).",
     )
     sub = parser.add_subparsers(dest="cmd", required=True, metavar="COMMAND")
 
     # user
     p_user = sub.add_parser(
         "user",
-        help="Cadastro, ciclo de vida e chaves de usuarios.",
+        help="Register, lifecycle and SSH keys of users.",
         epilog=(
             "Exemplos:\n"
             "  adminforge user add --username marina --name 'Marina' --email marina@empresa.com\n"
@@ -650,40 +650,40 @@ def _build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     s_user = p_user.add_subparsers(dest="sub", required=True)
-    a = s_user.add_parser("add", help="Cadastra um novo usuario.")
+    a = s_user.add_parser("add", help="Register a new user.")
     a.add_argument("--username", required=True)
     a.add_argument("--name", required=True)
     a.add_argument("--email", required=True)
     a.set_defaults(func=cmd_user_add)
-    a = s_user.add_parser("list", help="Lista usuarios.")
+    a = s_user.add_parser("list", help="List users.")
     a.set_defaults(func=cmd_user_list)
-    a = s_user.add_parser("show", help="Detalha usuario.")
+    a = s_user.add_parser("show", help="Show user details.")
     a.add_argument("--username", required=True).completer = completers.usernames
     a.set_defaults(func=cmd_user_show)
-    a = s_user.add_parser("disable", help="Desabilita usuario.")
+    a = s_user.add_parser("disable", help="Disable user (revokes all keys).")
     a.add_argument("--username", required=True).completer = completers.usernames
     a.add_argument("--yes", action="store_true")
     a.set_defaults(func=cmd_user_disable)
 
     # user key (subcomando aninhado de user)
-    p_uk = s_user.add_parser("key", help="Cadastro e revogacao de chaves SSH do usuario.")
+    p_uk = s_user.add_parser("key", help="Register and revoke user SSH keys.")
     s_uk = p_uk.add_subparsers(dest="key_sub", required=True)
-    a = s_uk.add_parser("add", help="Cadastra chave SSH.")
+    a = s_uk.add_parser("add", help="Register an SSH key.")
     a.add_argument("--username", required=True).completer = completers.usernames
-    a.add_argument("--file", help="Caminho de um .pub.")
-    a.add_argument("--string", help="Cola a chave inteira.")
+    a.add_argument("--file", help="Path to a .pub file.")
+    a.add_argument("--string", help="Paste the full key.")
     a.set_defaults(func=cmd_user_key_add)
-    a = s_uk.add_parser("revoke", help="Revoga chave por fingerprint.")
+    a = s_uk.add_parser("revoke", help="Revoke a key by fingerprint.")
     a.add_argument("--fingerprint", required=True).completer = completers.fingerprints
     a.set_defaults(func=cmd_user_key_revoke)
-    a = s_uk.add_parser("list", help="Lista chaves do usuario.")
+    a = s_uk.add_parser("list", help="List user keys.")
     a.add_argument("--username", required=True).completer = completers.usernames
     a.set_defaults(func=cmd_user_key_list)
 
     # user-group
     p_ug = sub.add_parser(
         "user-group",
-        help="Grupos de usuarios.",
+        help="User groups.",
         epilog=(
             "Exemplos:\n"
             "  adminforge user-group create --name sysadmins\n"
@@ -700,12 +700,12 @@ def _build_parser() -> argparse.ArgumentParser:
 
     a = s_ug.add_parser("add-member")
     a.add_argument("--group", required=True).completer = completers.user_groups
-    a.add_argument("--username", required=True, nargs="+", help="um ou mais usernames (separados por espaco ou virgula)").completer = completers.usernames
+    a.add_argument("--username", required=True, nargs="+", help="one or more usernames (separated by space or comma)").completer = completers.usernames
     a.set_defaults(func=cmd_ug_add_member)
 
     a = s_ug.add_parser("remove-member")
     a.add_argument("--group", required=True).completer = completers.user_groups
-    a.add_argument("--username", required=True, nargs="+", help="um ou mais usernames (separados por espaco ou virgula)").completer = completers.usernames
+    a.add_argument("--username", required=True, nargs="+", help="one or more usernames (separated by space or comma)").completer = completers.usernames
     a.set_defaults(func=cmd_ug_remove_member)
 
     a = s_ug.add_parser("delete")
@@ -718,7 +718,7 @@ def _build_parser() -> argparse.ArgumentParser:
     # server
     p_server = sub.add_parser(
         "server",
-        help="Cadastro de servidores.",
+        help="Server registration.",
         epilog=(
             "Exemplos:\n"
             "  adminforge server add --hostname web-01 --ip 10.0.0.10 --auto\n"
@@ -729,12 +729,12 @@ def _build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     s_server = p_server.add_subparsers(dest="sub", required=True)
-    a = s_server.add_parser("add", help="Cadastra servidor (TOFU host_key).")
+    a = s_server.add_parser("add", help="Register a server (TOFU host_key).")
     a.add_argument("--hostname", required=True)
-    a.add_argument("--ip", required=True, help="IPv4 do servidor.")
+    a.add_argument("--ip", required=True, help="Server IPv4.")
     a.add_argument("--port", type=int, default=22)
-    a.add_argument("--host-key", help="ssh-keyscan: 'ssh-ed25519 AAAA...'")
-    a.add_argument("--auto", action="store_true", help="Captura host_key via ssh-keyscan.")
+    a.add_argument("--host-key", help="ssh-keyscan output, e.g. 'ssh-ed25519 AAAA...'")
+    a.add_argument("--auto", action="store_true", help="Capture host_key via ssh-keyscan.")
     a.set_defaults(func=cmd_server_add)
 
     a = s_server.add_parser("list")
@@ -752,7 +752,7 @@ def _build_parser() -> argparse.ArgumentParser:
     # server-group
     p_sg = sub.add_parser(
         "server-group",
-        help="Grupos de servidores.",
+        help="Server groups.",
         epilog=(
             "Exemplos:\n"
             "  adminforge server-group create --name producao\n"
@@ -768,12 +768,12 @@ def _build_parser() -> argparse.ArgumentParser:
 
     a = s_sg.add_parser("add-member")
     a.add_argument("--group", required=True).completer = completers.server_groups
-    a.add_argument("--hostname", required=True, nargs="+", help="um ou mais hostnames").completer = completers.hostnames
+    a.add_argument("--hostname", required=True, nargs="+", help="one or more hostnames (separated by space or comma)").completer = completers.hostnames
     a.set_defaults(func=cmd_sg_add)
 
     a = s_sg.add_parser("remove-member")
     a.add_argument("--group", required=True).completer = completers.server_groups
-    a.add_argument("--hostname", required=True, nargs="+", help="um ou mais hostnames").completer = completers.hostnames
+    a.add_argument("--hostname", required=True, nargs="+", help="one or more hostnames (separated by space or comma)").completer = completers.hostnames
     a.set_defaults(func=cmd_sg_rm)
 
     a = s_sg.add_parser("delete")
@@ -784,34 +784,34 @@ def _build_parser() -> argparse.ArgumentParser:
     a.set_defaults(func=cmd_sg_list)
 
     # grant / revoke
-    a = sub.add_parser("grant", help="Concede acesso de grupo de usuarios a grupo de servidores.")
+    a = sub.add_parser("grant", help="Grant access from a user-group to a server-group.")
     a.add_argument("--user-group", dest="user_group", required=True).completer = completers.user_groups
     a.add_argument("--server-group", dest="server_group", required=True).completer = completers.server_groups
     a.add_argument("--level", choices=["shell", "sudo"], required=True)
     a.set_defaults(func=cmd_grant)
 
-    a = sub.add_parser("revoke", help="Revoga acesso entre dois grupos.")
+    a = sub.add_parser("revoke", help="Revoke access between two groups.")
     a.add_argument("--user-group", dest="user_group", required=True).completer = completers.user_groups
     a.add_argument("--server-group", dest="server_group", required=True).completer = completers.server_groups
     a.set_defaults(func=cmd_revoke)
 
     # dump
-    a = sub.add_parser("dump", help="Lista o estado declarado completo (users, grupos, servidores, permissoes).")
+    a = sub.add_parser("dump", help="List the full declared state (users, groups, servers, permissions).")
     a.add_argument("--format", choices=["table", "json"], default="table")
     a.set_defaults(func=cmd_dump)
 
     # preview
-    a = sub.add_parser("preview", help="Mostra o delta sem aplicar.")
+    a = sub.add_parser("preview", help="Show the delta without applying.")
     a.set_defaults(func=cmd_preview)
 
     # apply
-    a = sub.add_parser("apply", help="Aplica o delta nos servidores via SSH.")
-    a.add_argument("--yes", action="store_true", help="Pula confirmacao.")
-    a.add_argument("--dry-run", action="store_true", help="Usa Deployer fake.")
+    a = sub.add_parser("apply", help="Apply the delta to servers via SSH.")
+    a.add_argument("--yes", action="store_true", help="Skip confirmation.")
+    a.add_argument("--dry-run", action="store_true", help="Use the fake Deployer.")
     a.set_defaults(func=cmd_apply)
 
     # history
-    p_hist = sub.add_parser("history", help="Consulta de historico operacional.")
+    p_hist = sub.add_parser("history", help="Query operational history.")
     s_hist = p_hist.add_subparsers(dest="sub", required=True)
 
     a = s_hist.add_parser("list")
@@ -830,17 +830,17 @@ def _build_parser() -> argparse.ArgumentParser:
     a.set_defaults(func=cmd_history_verify)
 
     # audit
-    p_audit = sub.add_parser("audit", help="Auditoria operacional (read-only via SSH).")
+    p_audit = sub.add_parser("audit", help="Operational audit (read-only via SSH).")
     s_audit = p_audit.add_subparsers(dest="sub", required=True)
     a = s_audit.add_parser(
         "server",
-        help="Inspeciona usuarios, grupos, sudoers e servicos do servidor.",
+        help="Inspect users, groups, sudoers and services of the server.",
     )
     a.add_argument("--hostname", required=True).completer = completers.hostnames
-    a.add_argument("--user", help="Destaca ocorrencias do usuario.")
-    a.add_argument("--group", help="Filtra grupos por substring.")
-    a.add_argument("--service", help="Destaca ocorrencias do servico.")
-    a.add_argument("--humans", action="store_true", help="Mostra so usuarios humanos (UID >= 1000).")
+    a.add_argument("--user", help="Highlight occurrences of this user.")
+    a.add_argument("--group", help="Filter groups by substring.")
+    a.add_argument("--service", help="Highlight occurrences of this service.")
+    a.add_argument("--humans", action="store_true", help="Show only human users (UID >= 1000).")
     a.add_argument("--dry-run", action="store_true")
     a.set_defaults(func=cmd_audit_server)
 

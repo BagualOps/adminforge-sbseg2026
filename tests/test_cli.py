@@ -137,4 +137,4 @@ def test_cli_help(env, capsys):
     assert exc.value.code == 0
     captured = capsys.readouterr()
     assert "AdminForge" in captured.out
-    assert "EXEMPLOS" in captured.out
+    assert "EXAMPLES" in captured.out
