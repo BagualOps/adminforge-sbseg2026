@@ -40,6 +40,23 @@ _RE_NOME_GRUPO = re.compile(r"^[a-z0-9][a-z0-9_-]{0,30}$")
 _RE_IPV4 = re.compile(r"^(?:\d{1,3}\.){3}\d{1,3}$")
 
 
+def _msg_permissoes_associadas(tipo: str, nome: str, perms: list[Permissao]) -> str:
+    """Mensagem de erro do delete bloqueado: lista as N permissões e sugere o comando."""
+    pares = [(p.grupo_user, p.grupo_servidor, p.nivel.value) for p in perms]
+    if tipo == "user-group":
+        linhas = [f"  - {gs} ({lvl})" for _gu, gs, lvl in pares]
+        comandos = [f"  adminforge revoke --user-group {nome} --server-group {gs}" for _gu, gs, _ in pares]
+    else:
+        linhas = [f"  - {gu} ({lvl})" for gu, _gs, lvl in pares]
+        comandos = [f"  adminforge revoke --user-group {gu} --server-group {nome}" for gu, _gs, _ in pares]
+    return (
+        f"{tipo} '{nome}' has {len(perms)} associated permission(s):\n"
+        + "\n".join(linhas)
+        + "\nRevoke them first:\n"
+        + "\n".join(comandos)
+    )
+
+
 class Nucleo:
     def __init__(
         self,
@@ -215,10 +232,9 @@ class Nucleo:
             with self.store:
                 if not self.store.get_grupo_user(nome):
                     raise NaoExiste(f"group '{nome}' does not exist")
-                if any(p.grupo_user == nome for p in self.store.list_permissoes()):
-                    raise EstadoInvalido(
-                        f"group '{nome}' has associated permissions; revoke them first"
-                    )
+                associadas = [p for p in self.store.list_permissoes() if p.grupo_user == nome]
+                if associadas:
+                    raise EstadoInvalido(_msg_permissoes_associadas("user-group", nome, associadas))
                 self.store.delete_grupo_user(nome)
                 return self._registrar(op, StatusOperacao.SUCESSO)
         except Exception as e:
@@ -333,10 +349,9 @@ class Nucleo:
             with self.store:
                 if not self.store.get_grupo_servidor(nome):
                     raise NaoExiste(f"group '{nome}' does not exist")
-                if any(p.grupo_servidor == nome for p in self.store.list_permissoes()):
-                    raise EstadoInvalido(
-                        f"group '{nome}' has associated permissions; revoke them first"
-                    )
+                associadas = [p for p in self.store.list_permissoes() if p.grupo_servidor == nome]
+                if associadas:
+                    raise EstadoInvalido(_msg_permissoes_associadas("server-group", nome, associadas))
                 self.store.delete_grupo_servidor(nome)
                 return self._registrar(op, StatusOperacao.SUCESSO)
         except Exception as e:
