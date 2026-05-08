@@ -148,7 +148,6 @@ def test_apply_falha_se_leitura_authorized_keys_falhou(state_dir, monkeypatch):
 
         def aplicar(self, servidor, subacoes):
             # roda a logica real do adicionar_chave/remover_chave em vez de simular
-            from adminforge.deployer.ssh_deployer import SSHDeployer
             for s in subacoes:
                 try:
                     atual, ok = self.ler_authorized_keys(servidor, s.username)

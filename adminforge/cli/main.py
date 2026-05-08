@@ -397,7 +397,7 @@ def _imprimir_diff(nucleo: Nucleo, subacoes: list) -> None:
             ui.fail(f"    ssh: {e}")
             continue
         if not ok:
-            ui.fail(f"    ssh: could not read authorized_keys (sudo blocked?)")
+            ui.fail("    ssh: could not read authorized_keys (sudo blocked?)")
             continue
         novo = atual
         for s in lote:
