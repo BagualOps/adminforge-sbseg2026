@@ -23,6 +23,8 @@ state/
 │   └── <hostname>.json
 ├── server-groups/
 │   └── <nome>.json
+├── sudo-profiles/          # 1 arquivo por perfil nomeado de comandos sudo
+│   └── <nome>.json
 ├── permissions.json        # arquivo único
 ├── history.jsonl           # append-only
 └── .lock                   # fcntl flock
@@ -104,13 +106,29 @@ Permissões: diretórios `0700`, arquivos `0600`.
       "id": "...",
       "grupo_user": "sysadmins",
       "grupo_servidor": "producao",
-      "nivel": "sudo"
+      "nivel": "sudo",
+      "profile": "read-logs"
     }
   ]
 }
 ```
 
-`nivel`: `shell | sudo`.
+`nivel`: `shell | sudo`. `profile` é opcional (apenas com `nivel: sudo`); aponta para um arquivo em `sudo-profiles/`. Sem `profile`, o `apply` instala `NOPASSWD:ALL`.
+
+### `sudo-profiles/<nome>.json`
+
+```json
+{
+  "id": "...",
+  "nome": "read-logs",
+  "comandos": [
+    "/bin/journalctl",
+    "/bin/cat /var/log/*"
+  ]
+}
+```
+
+Cada `comando` precisa ser um caminho absoluto (`/...`) — sudoers exige absolute paths. Quando uma `Permissao` aponta para este profile, o `apply` escreve `/etc/sudoers.d/adminforge-<username>` com uma linha `<username> ALL=(ALL) NOPASSWD: <comando>` para cada item.
 
 ### `known_hosts`
 

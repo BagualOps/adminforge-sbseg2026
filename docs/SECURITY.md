@@ -92,13 +92,15 @@ Por padrão, os arquivos JSON do estado são texto claro. Para cifrar seletivame
 
 Isso é roadmap M-2.
 
-## Apply em lotes — limitar estrago
+## Apply — limitar estrago
 
-`apply` futuro (M-2) terá:
-- Limite de paralelismo configurável.
-- Taxa de falha máxima — interrompe o lote se ultrapassar (ex.: 50%), evita que erro sistêmico (DNS quebrado) propague chave errada para 600 máquinas.
+Salvaguardas existentes (M-1):
 
-Hoje (M-1) o `DryRunDeployer` simula falhas em testes; o `SSHDeployer` aplica subação a subação por servidor.
+- `adminforge apply --diff` mostra o unified diff do `authorized_keys` por `(servidor, user)` antes da confirmação — operador revisa o que vai mudar antes de qualquer SSH de escrita.
+- `adminforge apply verify` lê o real e compara com o declarado, sem aplicar nada (rc=2 se houver drift).
+- Backup automático em `~/<user>/.ssh/authorized_keys.bak` antes de cada edição (mesmo dono, `0600`) — rollback manual se algo der errado.
+- `visudo -cf` valida a sintaxe do sudoers antes do `mv` para `/etc/sudoers.d/`; sintaxe ruim não derruba o `sudo` da máquina.
+- Aplicação **sequencial** por servidor: erro sistêmico (ex.: DNS quebrado, host key divergente) afeta um servidor de cada vez, não todos em paralelo.
 
 ## Escopo de auditoria
 
