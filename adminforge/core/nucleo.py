@@ -107,7 +107,7 @@ class Nucleo:
             with self.store:
                 user = self.store.get_user(username)
                 if not user:
-                    raise NaoExiste(f"user '{username}' nao existe")
+                    raise NaoExiste(f"usuario '{username}' nao existe")
                 user.status = StatusUser.INATIVO
                 self.store.save_user(user)
                 for cred in self.store.list_credenciais(username):
@@ -124,7 +124,7 @@ class Nucleo:
             with self.store:
                 user = self.store.get_user(username)
                 if not user:
-                    raise NaoExiste(f"user '{username}' nao existe")
+                    raise NaoExiste(f"usuario '{username}' nao existe")
                 fp = ssh_keys.fingerprint(chave_raw)
                 canonica = ssh_keys.chave_canonica(chave_raw)
                 for c in self.store.list_credenciais(username):
@@ -159,7 +159,7 @@ class Nucleo:
                 if not _RE_NOME_GRUPO.match(nome):
                     raise FormatoInvalido(f"nome de grupo invalido: '{nome}'")
                 if self.store.get_grupo_user(nome):
-                    raise JaExiste(f"grupo de user '{nome}' ja existe")
+                    raise JaExiste(f"user-group '{nome}' ja existe")
                 self.store.save_grupo_user(GrupoUser(nome=nome))
                 return self._registrar(op, StatusOperacao.SUCESSO)
         except Exception as e:
@@ -177,7 +177,7 @@ class Nucleo:
                     raise NaoExiste(f"grupo '{grupo}' nao existe")
                 inexistentes = [u for u in usernames if not self.store.get_user(u)]
                 if inexistentes:
-                    raise NaoExiste(f"users inexistentes: {', '.join(inexistentes)}")
+                    raise NaoExiste(f"usuarios inexistentes: {', '.join(inexistentes)}")
                 membros = set(g.membros)
                 membros.update(usernames)
                 if membros == set(g.membros):
@@ -277,7 +277,7 @@ class Nucleo:
                 if not _RE_NOME_GRUPO.match(nome):
                     raise FormatoInvalido(f"nome de grupo invalido: '{nome}'")
                 if self.store.get_grupo_servidor(nome):
-                    raise JaExiste(f"grupo de servidor '{nome}' ja existe")
+                    raise JaExiste(f"server-group '{nome}' ja existe")
                 self.store.save_grupo_servidor(GrupoServidor(nome=nome))
                 return self._registrar(op, StatusOperacao.SUCESSO)
         except Exception as e:
@@ -346,9 +346,9 @@ class Nucleo:
         try:
             with self.store:
                 if not self.store.get_grupo_user(grupo_user):
-                    raise NaoExiste(f"grupo de user '{grupo_user}' nao existe")
+                    raise NaoExiste(f"user-group '{grupo_user}' nao existe")
                 if not self.store.get_grupo_servidor(grupo_servidor):
-                    raise NaoExiste(f"grupo de servidor '{grupo_servidor}' nao existe")
+                    raise NaoExiste(f"server-group '{grupo_servidor}' nao existe")
                 self.store.save_permissao(
                     Permissao(
                         grupo_user=grupo_user,
