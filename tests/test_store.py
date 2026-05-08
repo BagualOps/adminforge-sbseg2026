@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from adminforge.domain import Admin, GrupoAdmin, NivelPermissao, Permissao, Servidor
+from adminforge.domain import GrupoUser, NivelPermissao, Permissao, Servidor, User
 from adminforge.exceptions import LockOcupado
 from adminforge.store.json_store import JsonStore
 
@@ -20,10 +20,10 @@ def test_lockfile_concorrencia(tmp_path: Path):
     b.unlock()
 
 
-def test_save_admin_permissao_0600(tmp_path: Path):
+def test_save_user_permissao_0600(tmp_path: Path):
     s = JsonStore(tmp_path)
-    s.save_admin(Admin(username="alice", nome="Alice", email="m@e.com"))
-    arquivo = tmp_path / "admins" / "alice.json"
+    s.save_user(User(username="alice", nome="Alice", email="m@e.com"))
+    arquivo = tmp_path / "users" / "alice.json"
     assert arquivo.exists()
     modo = oct(arquivo.stat().st_mode)[-3:]
     assert modo == "600"
@@ -47,8 +47,8 @@ def test_roundtrip_servidor(tmp_path: Path):
 
 def test_permissao_atualiza_em_vez_de_duplicar(tmp_path: Path):
     s = JsonStore(tmp_path)
-    s.save_permissao(Permissao(grupo_admin="sa", grupo_servidor="prod", nivel=NivelPermissao.SHELL))
-    s.save_permissao(Permissao(grupo_admin="sa", grupo_servidor="prod", nivel=NivelPermissao.SUDO))
+    s.save_permissao(Permissao(grupo_user="sa", grupo_servidor="prod", nivel=NivelPermissao.SHELL))
+    s.save_permissao(Permissao(grupo_user="sa", grupo_servidor="prod", nivel=NivelPermissao.SUDO))
     perms = s.list_permissoes()
     assert len(perms) == 1
     assert perms[0].nivel == NivelPermissao.SUDO
@@ -56,7 +56,7 @@ def test_permissao_atualiza_em_vez_de_duplicar(tmp_path: Path):
 
 def test_delete_grupo(tmp_path: Path):
     s = JsonStore(tmp_path)
-    s.save_grupo_admin(GrupoAdmin(nome="sa", membros=["x"]))
-    assert s.get_grupo_admin("sa") is not None
-    s.delete_grupo_admin("sa")
-    assert s.get_grupo_admin("sa") is None
+    s.save_grupo_user(GrupoUser(nome="sa", membros=["x"]))
+    assert s.get_grupo_user("sa") is not None
+    s.delete_grupo_user("sa")
+    assert s.get_grupo_user("sa") is None

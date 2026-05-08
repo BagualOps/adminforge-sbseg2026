@@ -6,7 +6,7 @@ from enum import Enum
 from uuid import UUID, uuid4
 
 
-class StatusAdmin(str, Enum):
+class StatusUser(str, Enum):
     ATIVO = "ativo"
     INATIVO = "inativo"
     BLOQUEADO = "bloqueado"
@@ -37,17 +37,17 @@ class TipoAcao(str, Enum):
 
 
 @dataclass
-class Admin:
+class User:
     username: str
     nome: str
     email: str
-    status: StatusAdmin = StatusAdmin.ATIVO
+    status: StatusUser = StatusUser.ATIVO
     id: UUID = field(default_factory=uuid4)
 
 
 @dataclass
 class CredencialSSH:
-    admin_username: str
+    username: str
     chave_publica: str
     fingerprint: str
     status: StatusCredencial = StatusCredencial.ATIVA
@@ -55,11 +55,11 @@ class CredencialSSH:
 
     @property
     def referencia(self) -> str:
-        return f"{self.admin_username}:{self.fingerprint}"
+        return f"{self.username}:{self.fingerprint}"
 
 
 @dataclass
-class GrupoAdmin:
+class GrupoUser:
     nome: str
     membros: list[str] = field(default_factory=list)
     id: UUID = field(default_factory=uuid4)
@@ -84,7 +84,7 @@ class GrupoServidor:
 
 @dataclass
 class Permissao:
-    grupo_admin: str
+    grupo_user: str
     grupo_servidor: str
     nivel: NivelPermissao
     id: UUID = field(default_factory=uuid4)

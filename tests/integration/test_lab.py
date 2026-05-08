@@ -141,14 +141,14 @@ def _fazer_nucleo(state_dir: Path, chave_priv: Path) -> Nucleo:
 def test_fluxo_completo_em_containers(lab, tmp_path):
     nucleo = _fazer_nucleo(tmp_path / "state", lab["chave_priv"])
 
-    assert nucleo.cadastrar_admin("alice", "Alice", "m@e.com").status == StatusOperacao.SUCESSO
-    assert nucleo.cadastrar_admin("bob", "Bob", "bob@e.com").status == StatusOperacao.SUCESSO
+    assert nucleo.cadastrar_user("alice", "Alice", "m@e.com").status == StatusOperacao.SUCESSO
+    assert nucleo.cadastrar_user("bob", "Bob", "bob@e.com").status == StatusOperacao.SUCESSO
     assert nucleo.cadastrar_chave("alice", CHAVE_ALICE).status == StatusOperacao.SUCESSO
     assert nucleo.cadastrar_chave("bob", CHAVE_BOB).status == StatusOperacao.SUCESSO
 
-    nucleo.criar_grupo_admin("sysadmins")
-    nucleo.adicionar_membro_grupo_admin("sysadmins", "alice")
-    nucleo.adicionar_membro_grupo_admin("sysadmins", "bob")
+    nucleo.criar_grupo_user("sysadmins")
+    nucleo.adicionar_membro_grupo_user("sysadmins", "alice")
+    nucleo.adicionar_membro_grupo_user("sysadmins", "bob")
 
     for hostname, porta in PORTAS.items():
         hk = _capturar_host_key(porta)
@@ -189,7 +189,7 @@ def test_fluxo_completo_em_containers(lab, tmp_path):
 
     assert nucleo.preview() == []
 
-    nucleo.desabilitar_admin("bob")
+    nucleo.desabilitar_user("bob")
     pendentes = nucleo.preview()
     assert len(pendentes) == 3
     assert all(s.acao == TipoAcao.REMOVER_CHAVE and s.username == "bob" for s in pendentes)

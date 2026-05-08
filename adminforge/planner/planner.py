@@ -5,8 +5,8 @@ from dataclasses import dataclass
 
 from adminforge.domain import (
     NivelPermissao,
-    StatusAdmin,
     StatusCredencial,
+    StatusUser,
     Subacao,
     TipoAcao,
 )
@@ -43,25 +43,25 @@ class Planner:
         self.store = store
 
     def estado_desejado(self) -> dict[str, dict[str, ChaveInstalada]]:
-        admins = {a.username: a for a in self.store.list_admins() if a.status == StatusAdmin.ATIVO}
-        creds_por_admin = {
+        users = {u.username: u for u in self.store.list_users() if u.status == StatusUser.ATIVO}
+        creds_por_user = {
             u: [c for c in self.store.list_credenciais(u) if c.status == StatusCredencial.ATIVA]
-            for u in admins
+            for u in users
         }
-        grupos_admin = {g.nome: g for g in self.store.list_grupos_admin()}
+        grupos_user = {g.nome: g for g in self.store.list_grupos_user()}
         grupos_servidor = {g.nome: g for g in self.store.list_grupos_servidor()}
         servidores_validos = {s.hostname for s in self.store.list_servidores()}
 
         desejado: dict[str, dict[str, ChaveInstalada]] = defaultdict(dict)
         for perm in self.store.list_permissoes():
-            ga = grupos_admin.get(perm.grupo_admin)
+            gu = grupos_user.get(perm.grupo_user)
             gs = grupos_servidor.get(perm.grupo_servidor)
-            if not ga or not gs:
+            if not gu or not gs:
                 continue
-            for username in ga.membros:
-                if username not in admins:
+            for username in gu.membros:
+                if username not in users:
                     continue
-                for cred in creds_por_admin.get(username, []):
+                for cred in creds_por_user.get(username, []):
                     ref = cred.referencia
                     for hostname in gs.membros:
                         if hostname not in servidores_validos:

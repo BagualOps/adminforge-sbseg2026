@@ -29,15 +29,15 @@ def run_cli(argv: list[str]) -> tuple[int, str]:
 
 
 def test_cli_fluxo_basico(env):
-    rc, out = run_cli(["admin", "add", "alice", "--nome", "Alice", "--email", "m@e.com"])
+    rc, out = run_cli(["user", "add", "alice", "--nome", "Alice", "--email", "m@e.com"])
     assert rc == 0, out
 
-    rc, out = run_cli(["key", "add", "alice", "--string", CHAVE_ALICE])
+    rc, out = run_cli(["user", "key", "add", "alice", "--string", CHAVE_ALICE])
     assert rc == 0, out
 
-    rc, _ = run_cli(["group", "create", "sysadmins"])
+    rc, _ = run_cli(["user-group", "create", "sysadmins"])
     assert rc == 0
-    rc, _ = run_cli(["group", "add-member", "sysadmins", "alice"])
+    rc, _ = run_cli(["user-group", "add-member", "sysadmins", "alice"])
     assert rc == 0
 
     rc, _ = run_cli(["server", "add", "web-01", "--ip", "10.0.0.10", "--host-key", HOST_KEY_FAKE])
