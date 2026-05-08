@@ -240,11 +240,12 @@ def test_fluxo_completo_em_containers(lab, tmp_path):
     refs_declaradas = {
         (item["ref"] if isinstance(item, dict) else item) for item in web01.chaves_instaladas
     }
-    real = ak.parse_blocos(SSHDeployer(
+    conteudo, ok = SSHDeployer(
         chave_privada_path=lab["chave_priv"],
         known_hosts_path=tmp_path / "kh-verify",
-    ).ler_authorized_keys(web01, "alice"))
-    refs_reais = set(real.keys())
+    ).ler_authorized_keys(web01, "alice")
+    assert ok, "ler_authorized_keys deveria retornar ok=True (sudo NOPASSWD configurado no lab)"
+    refs_reais = set(ak.parse_blocos(conteudo).keys())
     assert refs_declaradas == refs_reais, (
         f"drift: declarado={refs_declaradas} real={refs_reais}"
     )

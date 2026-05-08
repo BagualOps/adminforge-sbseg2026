@@ -392,9 +392,12 @@ def _imprimir_diff(nucleo: Nucleo, subacoes: list) -> None:
         ui.secho(f"  {hostname}:{username}", bold=True)
         # ler_authorized_keys pode falhar (ssh, host_key etc); nao deve abortar o diff dos demais.
         try:
-            atual = nucleo.deployer.ler_authorized_keys(servidor, username)
+            atual, ok = nucleo.deployer.ler_authorized_keys(servidor, username)
         except Exception as e:
             ui.fail(f"    ssh: {e}")
+            continue
+        if not ok:
+            ui.fail(f"    ssh: could not read authorized_keys (sudo blocked?)")
             continue
         novo = atual
         for s in lote:
@@ -446,9 +449,13 @@ def cmd_apply_verify(args: argparse.Namespace) -> int:
         real: dict[str, str] = {}
         for u in usernames:
             try:
-                conteudo = nucleo.deployer.ler_authorized_keys(servidor, u)
+                conteudo, ok = nucleo.deployer.ler_authorized_keys(servidor, u)
             except Exception as e:
                 ui.fail(f"  ssh failed reading {u}: {e}")
+                ssh_falhou = True
+                break
+            if not ok:
+                ui.fail(f"  ssh: could not read authorized_keys for {u} (sudo blocked?)")
                 ssh_falhou = True
                 break
             for ref in ak.parse_blocos(conteudo):

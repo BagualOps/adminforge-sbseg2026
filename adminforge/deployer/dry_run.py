@@ -29,5 +29,5 @@ class DryRunDeployer(IDeployer):
             "dry_run": True,
         }
 
-    def ler_authorized_keys(self, servidor: Servidor, username: str) -> str:
-        return ""
+    def ler_authorized_keys(self, servidor: Servidor, username: str) -> tuple[str, bool]:
+        return "", True

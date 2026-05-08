@@ -21,6 +21,35 @@ def _maior(a: NivelPermissao, b: NivelPermissao) -> NivelPermissao:
     return a if _PRIORIDADE[a] >= _PRIORIDADE[b] else b
 
 
+def _merge_profile(
+    existente: "ChaveInstalada | None",
+    perm_nivel: NivelPermissao,
+    perm_profile: str | None,
+    nivel_final: NivelPermissao,
+) -> str | None:
+    """Calcula o profile efetivo ao mesclar uma nova permissao na ChaveInstalada existente.
+
+    Regras (validadas por testes parametrizados):
+      - nivel_final != SUDO              -> None (profile nao se aplica a SHELL)
+      - existente is None                -> profile do entrante
+      - existente era SHELL              -> profile do entrante (entrante eh SUDO)
+      - entrante eh SHELL                -> mantem profile do existente SUDO
+      - ambos SUDO, algum sem profile    -> None (full sudo prevalece, menor restricao)
+      - ambos SUDO com profile           -> mantem o profile do existente (estavel)
+    """
+    if nivel_final != NivelPermissao.SUDO:
+        return None
+    if existente is None:
+        return perm_profile
+    if existente.nivel != NivelPermissao.SUDO:
+        return perm_profile
+    if perm_nivel != NivelPermissao.SUDO:
+        return existente.profile
+    if existente.profile is None or perm_profile is None:
+        return None
+    return existente.profile
+
+
 @dataclass(frozen=True)
 class ChaveInstalada:
     ref: str
@@ -74,27 +103,7 @@ class Planner:
                             continue
                         existente = desejado[hostname].get(ref)
                         nivel = perm.nivel if existente is None else _maior(existente.nivel, perm.nivel)
-                        # Profile so faz sentido com nivel SUDO. Regras:
-                        #   - shell -> shell:                profile=None
-                        #   - shell -> sudo (entrante novo): profile=novo (existente era shell, profile irrelevante)
-                        #   - sudo  -> shell (entrante):     mantem profile do sudo existente
-                        #   - sudo  -> sudo: full (None) prevalece sobre profile especifico
-                        if nivel != NivelPermissao.SUDO:
-                            profile = None
-                        elif existente is None:
-                            profile = perm.profile
-                        elif existente.nivel != NivelPermissao.SUDO:
-                            # existente era SHELL; profile vem do entrante SUDO
-                            profile = perm.profile
-                        elif perm.nivel != NivelPermissao.SUDO:
-                            # entrante eh SHELL; mantem profile do existente SUDO
-                            profile = existente.profile
-                        elif existente.profile is None or perm.profile is None:
-                            # ambos sudo, um eh full -> full prevalece
-                            profile = None
-                        else:
-                            # ambos sudo com profile especifico -> mantem existente (estavel)
-                            profile = existente.profile
+                        profile = _merge_profile(existente, perm.nivel, perm.profile, nivel)
                         desejado[hostname][ref] = ChaveInstalada(
                             ref=ref, username=username, nivel=nivel, profile=profile
                         )

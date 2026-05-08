@@ -134,6 +134,48 @@ def test_sudo_profile_rejeita_newline_no_comando(nucleo: Nucleo):
     assert op.status == StatusOperacao.FALHA
 
 
+def test_apply_falha_se_leitura_authorized_keys_falhou(state_dir, monkeypatch):
+    """Regressao: se ler_authorized_keys reporta ok=False (sudo bloqueado, etc), o apply
+    NAO pode sobrescrever o arquivo com base em string vazia (apagaria blocos AdminForge
+    pre-existentes). Falha controlada da subacao."""
+    from adminforge.auditor.jsonl_auditor import JsonlAuditor
+    from adminforge.deployer.dry_run import DryRunDeployer
+    from adminforge.store.json_store import JsonStore
+
+    class DeployerSemLeitura(DryRunDeployer):
+        def ler_authorized_keys(self, servidor, username):
+            return "", False  # simula sudo bloqueado
+
+        def aplicar(self, servidor, subacoes):
+            # roda a logica real do adicionar_chave/remover_chave em vez de simular
+            from adminforge.deployer.ssh_deployer import SSHDeployer
+            for s in subacoes:
+                try:
+                    atual, ok = self.ler_authorized_keys(servidor, s.username)
+                    if not ok:
+                        raise RuntimeError("failed to read authorized_keys")
+                    s.status = "sucesso"
+                except Exception as e:
+                    s.status = "falha"
+                    s.erro = str(e)
+            return subacoes
+
+    nucleo = Nucleo(JsonStore(state_dir), JsonlAuditor(state_dir / "history.jsonl"),
+                    DeployerSemLeitura(), "op")
+    nucleo.cadastrar_user("alice", "Alice", "a@e.com")
+    nucleo.cadastrar_chave("alice", CHAVE_ALICE)
+    nucleo.criar_grupo_user("sa")
+    nucleo.adicionar_membro_grupo_user("sa", "alice")
+    nucleo.cadastrar_servidor("web-01", "10.0.0.10", 22, HOST_KEY_FAKE)
+    nucleo.criar_grupo_servidor("prod")
+    nucleo.adicionar_membro_grupo_servidor("prod", "web-01")
+    nucleo.conceder("sa", "prod", NivelPermissao.SHELL)
+
+    op = nucleo.aplicar()
+    assert op.status == StatusOperacao.FALHA
+    assert any("failed to read" in (s.erro or "") for s in op.subacoes)
+
+
 def test_sudo_profile_rejeita_se_em_uso(nucleo: Nucleo):
     nucleo.criar_sudo_profile("p1", ["/bin/true"])
     nucleo.criar_grupo_user("g")

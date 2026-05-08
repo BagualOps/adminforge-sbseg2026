@@ -2,8 +2,42 @@ import pytest
 
 from adminforge.core.nucleo import Nucleo
 from adminforge.domain import NivelPermissao, TipoAcao
+from adminforge.planner.planner import ChaveInstalada, _merge_profile
 
 from .conftest import CHAVE_ALICE, CHAVE_BOB, HOST_KEY_FAKE
+
+
+SHELL = NivelPermissao.SHELL
+SUDO = NivelPermissao.SUDO
+
+
+def _ch(nivel: NivelPermissao, profile: str | None) -> ChaveInstalada:
+    return ChaveInstalada(ref="x:fp", username="x", nivel=nivel, profile=profile)
+
+
+@pytest.mark.parametrize("existente,perm_nivel,perm_profile,nivel_final,esperado", [
+    # apenas shell — profile nao se aplica
+    (None,             SHELL, None, SHELL, None),
+    (_ch(SHELL, None), SHELL, None, SHELL, None),
+    # primeira vez (existente=None) com SUDO
+    (None,             SUDO,  None, SUDO,  None),
+    (None,             SUDO,  "p1", SUDO,  "p1"),
+    # SHELL preexistente + entrante SUDO -> profile do entrante (regressao da PR)
+    (_ch(SHELL, None), SUDO,  "p2", SUDO,  "p2"),
+    (_ch(SHELL, None), SUDO,  None, SUDO,  None),
+    # SUDO existente + entrante SHELL -> mantem profile existente (max nivel = SUDO)
+    (_ch(SUDO, "p1"),  SHELL, None, SUDO,  "p1"),
+    (_ch(SUDO, None),  SHELL, None, SUDO,  None),
+    # ambos SUDO, full prevalece (qualquer um sem profile -> None)
+    (_ch(SUDO, "p1"),  SUDO,  None, SUDO,  None),
+    (_ch(SUDO, None),  SUDO,  "p2", SUDO,  None),
+    (_ch(SUDO, None),  SUDO,  None, SUDO,  None),
+    # ambos SUDO com profile -> mantem existente (estavel, ordem de processamento nao quebra)
+    (_ch(SUDO, "p1"),  SUDO,  "p2", SUDO,  "p1"),
+    (_ch(SUDO, "p1"),  SUDO,  "p1", SUDO,  "p1"),
+])
+def test_merge_profile(existente, perm_nivel, perm_profile, nivel_final, esperado):
+    assert _merge_profile(existente, perm_nivel, perm_profile, nivel_final) == esperado
 
 
 def _setup_basico(nucleo: Nucleo) -> None:

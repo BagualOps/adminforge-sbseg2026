@@ -15,9 +15,9 @@ CLI Python para gestão de identidades privilegiadas em frotas de servidores Lin
 
 | Camada | Antes | Agora | Variação |
 |--------|-------|-------|----------|
-| Código nosso (produção) | 2.429 LOC | 3.324 LOC | +895 (+37%) |
+| Código nosso (produção) | 2.429 LOC | 3.363 LOC | +934 (+38%) |
 | Dependências de runtime obrigatórias | ~56.000 LOC (paramiko, click, PyYAML, cryptography, …) | **0** | **-100%** |
-| Total executado (sem extras) | ~58.400 LOC | 3.324 LOC | **-94%** |
+| Total executado (sem extras) | ~58.400 LOC | 3.363 LOC | **-94%** |
 | Extra opcional `completion` | — | +2.200 LOC (`argcomplete`) | opt-in |
 
 Crescimento em relação ao protótipo inicial vem do refactor de UX e endurecimento do `apply`: `dump`, métodos plurais no Núcleo (N membros), autocomplete com completers dinâmicos, `audit server` estendido (grupos/sudoers/drift), `permission` CRUD, `sudo-profile`, `apply --diff` e `apply verify`.

@@ -155,12 +155,22 @@ class SSHDeployer(IDeployer):
         if rc != 0:
             raise RuntimeError(f"failed to create unix user '{username}': {err.strip()}")
 
-    def ler_authorized_keys(self, servidor: Servidor, username: str) -> str:
+    def ler_authorized_keys(self, servidor: Servidor, username: str) -> tuple[str, bool]:
+        # Primeiro valida que sudo funciona com NOPASSWD; sem isso nao da
+        # para distinguir 'arquivo nao existe' (output vazio legitimo) de
+        # 'sudo bloqueou' (output vazio mascarando erro).
+        rc, _, _ = self._executar_ssh(servidor, "sudo -n true 2>/dev/null")
+        if rc != 0:
+            return "", False
         u = shlex.quote(username)
+        # if-then explicito: arquivo ausente => output vazio + rc=0 (legitimo).
         rc, out, _ = self._executar_ssh(
-            servidor, f"sudo cat /home/{u}/.ssh/authorized_keys 2>/dev/null || true"
+            servidor,
+            f"if sudo test -e /home/{u}/.ssh/authorized_keys; then "
+            f"sudo cat /home/{u}/.ssh/authorized_keys; "
+            f"fi",
         )
-        return out
+        return out, rc == 0
 
     def _escrever_authorized_keys(
         self, servidor: Servidor, username: str, conteudo: str
@@ -185,7 +195,12 @@ class SSHDeployer(IDeployer):
         if not sub.chave_publica or not sub.username or not sub.credencial:
             raise ValueError("sub-action missing chave_publica, username or credencial")
         self._garantir_usuario_unix(servidor, sub.username)
-        atual = self.ler_authorized_keys(servidor, sub.username)
+        atual, ok = self.ler_authorized_keys(servidor, sub.username)
+        if not ok:
+            raise RuntimeError(
+                f"failed to read authorized_keys for '{sub.username}'; "
+                f"refusing to overwrite to avoid losing existing AdminForge blocks"
+            )
         novo = ak.substituir_bloco(
             atual, sub.credencial, ak.bloco(sub.credencial, sub.chave_publica)
         )
@@ -248,7 +263,12 @@ class SSHDeployer(IDeployer):
     def _remover_chave(self, servidor: Servidor, sub: Subacao) -> None:
         if not sub.username or not sub.credencial:
             raise ValueError("sub-action missing username or credencial")
-        atual = self.ler_authorized_keys(servidor, sub.username)
+        atual, ok = self.ler_authorized_keys(servidor, sub.username)
+        if not ok:
+            raise RuntimeError(
+                f"failed to read authorized_keys for '{sub.username}'; "
+                f"refusing to overwrite"
+            )
         novo = ak.substituir_bloco(atual, sub.credencial, "")
         self._escrever_authorized_keys(servidor, sub.username, novo)
         self._executar_ssh(servidor, f"sudo rm -f /etc/sudoers.d/adminforge-{sub.username}")
