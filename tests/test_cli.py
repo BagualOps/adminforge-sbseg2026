@@ -82,6 +82,29 @@ def test_cli_add_member_n_de_uma_vez(env):
     assert "alice" in out and "bob" in out
 
 
+def test_cli_add_member_aceita_virgula(env):
+    for u in ("alice", "bob", "carla"):
+        run_cli(["user", "add", "--username", u, "--name", u.title(), "--email", f"{u}@e.com"])
+    run_cli(["user-group", "create", "--name", "sa"])
+    rc, _ = run_cli(["user-group", "add-member", "--group", "sa", "--username", "alice,bob,carla"])
+    assert rc == 0
+    rc, out = run_cli(["user-group", "list"])
+    assert rc == 0
+    assert "alice" in out and "bob" in out and "carla" in out
+
+
+def test_cli_add_member_misto_virgula_e_espaco(env):
+    for u in ("alice", "bob", "carla", "diego"):
+        run_cli(["user", "add", "--username", u, "--name", u.title(), "--email", f"{u}@e.com"])
+    run_cli(["user-group", "create", "--name", "sa"])
+    rc, _ = run_cli(["user-group", "add-member", "--group", "sa", "--username", "alice,bob", "carla,diego"])
+    assert rc == 0
+    rc, out = run_cli(["user-group", "list"])
+    assert rc == 0
+    for u in ("alice", "bob", "carla", "diego"):
+        assert u in out
+
+
 def test_cli_dump_json(env):
     run_cli(["user", "add", "--username", "alice", "--name", "A", "--email", "a@e.com"])
     run_cli(["user", "key", "add", "--username", "alice", "--string", CHAVE_ALICE])

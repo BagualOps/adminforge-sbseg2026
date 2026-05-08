@@ -45,6 +45,14 @@ def _superadmin() -> str:
     return os.environ.get("ADMINFORGE_SUPERADMIN") or os.environ.get("USER") or "desconhecido"
 
 
+def _split_tokens(items: list[str]) -> list[str]:
+    """Aceita 'a b c' (espaco), 'a,b,c' (virgula) ou misto. Remove vazios."""
+    out: list[str] = []
+    for it in items:
+        out.extend(s.strip() for s in it.split(",") if s.strip())
+    return out
+
+
 def _nucleo(args: argparse.Namespace, com_ssh: bool = False) -> Nucleo:
     deployer = None
     if com_ssh:
@@ -148,11 +156,11 @@ def cmd_ug_create(args: argparse.Namespace) -> int:
 
 
 def cmd_ug_add_member(args: argparse.Namespace) -> int:
-    return ui.imprimir_resultado(_nucleo(args).adicionar_membros_grupo_user(args.group, args.username))
+    return ui.imprimir_resultado(_nucleo(args).adicionar_membros_grupo_user(args.group, _split_tokens(args.username)))
 
 
 def cmd_ug_remove_member(args: argparse.Namespace) -> int:
-    return ui.imprimir_resultado(_nucleo(args).remover_membros_grupo_user(args.group, args.username))
+    return ui.imprimir_resultado(_nucleo(args).remover_membros_grupo_user(args.group, _split_tokens(args.username)))
 
 
 def cmd_ug_delete(args: argparse.Namespace) -> int:
@@ -243,11 +251,11 @@ def cmd_sg_create(args: argparse.Namespace) -> int:
 
 
 def cmd_sg_add(args: argparse.Namespace) -> int:
-    return ui.imprimir_resultado(_nucleo(args).adicionar_membros_grupo_servidor(args.group, args.hostname))
+    return ui.imprimir_resultado(_nucleo(args).adicionar_membros_grupo_servidor(args.group, _split_tokens(args.hostname)))
 
 
 def cmd_sg_rm(args: argparse.Namespace) -> int:
-    return ui.imprimir_resultado(_nucleo(args).remover_membros_grupo_servidor(args.group, args.hostname))
+    return ui.imprimir_resultado(_nucleo(args).remover_membros_grupo_servidor(args.group, _split_tokens(args.hostname)))
 
 
 def cmd_sg_delete(args: argparse.Namespace) -> int:
@@ -622,12 +630,12 @@ def _build_parser() -> argparse.ArgumentParser:
 
     a = s_ug.add_parser("add-member")
     a.add_argument("--group", required=True).completer = completers.user_groups
-    a.add_argument("--username", required=True, nargs="+", help="um ou mais usernames").completer = completers.usernames
+    a.add_argument("--username", required=True, nargs="+", help="um ou mais usernames (separados por espaco ou virgula)").completer = completers.usernames
     a.set_defaults(func=cmd_ug_add_member)
 
     a = s_ug.add_parser("remove-member")
     a.add_argument("--group", required=True).completer = completers.user_groups
-    a.add_argument("--username", required=True, nargs="+", help="um ou mais usernames").completer = completers.usernames
+    a.add_argument("--username", required=True, nargs="+", help="um ou mais usernames (separados por espaco ou virgula)").completer = completers.usernames
     a.set_defaults(func=cmd_ug_remove_member)
 
     a = s_ug.add_parser("delete")
