@@ -246,27 +246,123 @@ class SSHDeployer(IDeployer):
         self._escrever_authorized_keys(servidor, sub.username, novo)
         self._executar_ssh(servidor, f"sudo rm -f /etc/sudoers.d/adminforge-{sub.username}")
 
+    _SCRIPT_INSPECAO = (
+        'echo "=== USERS ==="; getent passwd; '
+        'echo "=== GROUPS ==="; getent group; '
+        'echo "=== SERVICES ==="; '
+        '(systemctl list-units --type=service --state=running --no-legend --no-pager 2>/dev/null '
+        '| awk \'{print $1}\') || service --status-all 2>/dev/null || true; '
+        'echo "=== SUDOERS_FILES ==="; '
+        '(sudo -n ls /etc/sudoers.d/ 2>/dev/null || ls /etc/sudoers.d/ 2>/dev/null) || true; '
+        'echo "=== SUDOERS_BODY ==="; '
+        '(sudo -n cat /etc/sudoers /etc/sudoers.d/* 2>/dev/null '
+        '|| cat /etc/sudoers /etc/sudoers.d/* 2>/dev/null) || true'
+    )
+
+    @staticmethod
+    def _classificar_uid(uid: int) -> str:
+        if uid < 100:
+            return "sistema"
+        if uid < 1000:
+            return "servico"
+        return "humano"
+
     def inspecionar(self, servidor: Servidor) -> dict:
         try:
             self._opcoes_ssh(servidor)
         except Exception as e:
-            return {"erro": f"ssh: {e}", "usuarios": [], "servicos": []}
+            return {"erro": f"ssh: {e}"}
 
-        rc, out_users, err = self._executar_ssh(
-            servidor,
-            "getent passwd | awk -F: '"
-            "$3 >= 100 && $1 != \"nobody\" "
-            "{ printf \"%s\\tuid=%s\\tshell=%s\\n\", $1, $3, $7 }'",
-        )
+        rc, out, err = self._executar_ssh(servidor, self._SCRIPT_INSPECAO)
         if rc != 0:
-            return {"erro": f"ssh: {err.strip()}", "usuarios": [], "servicos": []}
+            return {"erro": f"ssh: {err.strip()}"}
 
-        _, out_serv, _ = self._executar_ssh(
-            servidor,
-            "systemctl list-units --type=service --state=running --no-legend --no-pager 2>/dev/null "
-            "| awk '{print $1}' || service --status-all 2>/dev/null",
-        )
+        secoes: dict[str, list[str]] = {
+            "USERS": [], "GROUPS": [], "SERVICES": [],
+            "SUDOERS_FILES": [], "SUDOERS_BODY": [],
+        }
+        atual: str | None = None
+        for linha in out.splitlines():
+            if linha.startswith("=== ") and linha.endswith(" ==="):
+                marca = linha[4:-4]
+                atual = marca if marca in secoes else None
+                continue
+            if atual and linha.strip():
+                secoes[atual].append(linha)
+
+        # parse: getent group dá nome:x:gid:m1,m2,...
+        grupos_por_gid: dict[int, dict] = {}
+        grupos: list[dict] = []
+        for linha in secoes["GROUPS"]:
+            partes = linha.split(":")
+            if len(partes) < 4:
+                continue
+            nome, _, gid_s, membros = partes[0], partes[1], partes[2], partes[3]
+            try:
+                gid = int(gid_s)
+            except ValueError:
+                continue
+            g = {
+                "nome": nome,
+                "gid": gid,
+                "membros": [m for m in membros.split(",") if m],
+            }
+            grupos.append(g)
+            grupos_por_gid[gid] = g
+
+        # parse: getent passwd dá nome:x:uid:gid:gecos:home:shell
+        usuarios: list[dict] = []
+        for linha in secoes["USERS"]:
+            partes = linha.split(":")
+            if len(partes) < 7:
+                continue
+            nome = partes[0]
+            try:
+                uid, gid_primario = int(partes[2]), int(partes[3])
+            except ValueError:
+                continue
+            shell = partes[6]
+            grupos_user = sorted(
+                {g["nome"] for g in grupos if nome in g["membros"]}
+                | ({grupos_por_gid[gid_primario]["nome"]} if gid_primario in grupos_por_gid else set())
+            )
+            usuarios.append({
+                "nome": nome,
+                "uid": uid,
+                "shell": shell,
+                "categoria": self._classificar_uid(uid),
+                "grupos": grupos_user,
+            })
+
+        # parse sudoers: regras nao-comentario, e mapeamento por arquivo (drift)
+        regras_sudo: list[str] = []
+        for linha in secoes["SUDOERS_BODY"]:
+            stripped = linha.strip()
+            if not stripped or stripped.startswith("#") or stripped.startswith("Defaults"):
+                continue
+            regras_sudo.append(stripped)
+
+        arquivos_sudoers = []
+        for nome in secoes["SUDOERS_FILES"]:
+            arquivos_sudoers.append({
+                "nome": nome.strip(),
+                "adminforge": nome.strip().startswith("adminforge-"),
+            })
+
+        # mapeia regras por usuario (heuristico: 1a coluna da regra)
+        sudo_por_user: dict[str, list[str]] = {}
+        for regra in regras_sudo:
+            primeira = regra.split(None, 1)[0] if regra else ""
+            if primeira.startswith("%"):
+                continue  # regra de grupo, ignora aqui
+            sudo_por_user.setdefault(primeira, []).append(regra)
+        for u in usuarios:
+            u["sudo"] = sudo_por_user.get(u["nome"], [])
+
         return {
-            "usuarios": [u for u in out_users.splitlines() if u.strip()],
-            "servicos": [s for s in out_serv.splitlines() if s.strip()],
+            "usuarios": usuarios,
+            "grupos": grupos,
+            "servicos": [s.strip() for s in secoes["SERVICES"] if s.strip()],
+            "sudoers_arquivos": arquivos_sudoers,
+            "sudoers_regras": regras_sudo,
         }

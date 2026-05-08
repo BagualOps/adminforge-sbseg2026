@@ -211,8 +211,22 @@ def test_fluxo_completo_em_containers(lab, tmp_path):
 
     op_audit, relatorio = nucleo.auditar_servidor("web-01")
     assert op_audit.status == StatusOperacao.SUCESSO
-    assert any("adminforge" in u for u in relatorio["usuarios"])
-    assert any("alice" in u for u in relatorio["usuarios"])
+
+    nomes_users = {u["nome"] for u in relatorio["usuarios"]}
+    assert "adminforge" in nomes_users
+    assert "alice" in nomes_users
+    assert "root" in nomes_users  # antes era filtrado por UID>=100
+
+    alice = next(u for u in relatorio["usuarios"] if u["nome"] == "alice")
+    assert alice["categoria"] == "humano"  # UID >= 1000
+    assert alice["sudo"], "alice deveria ter regra sudo (NOPASSWD:ALL)"
+
+    nomes_grupos = {g["nome"] for g in relatorio["grupos"]}
+    assert "root" in nomes_grupos
+    assert "adminforge" in nomes_grupos
+
+    arquivos_af = [a for a in relatorio["sudoers_arquivos"] if a["adminforge"]]
+    assert any(a["nome"] == "adminforge-alice" for a in arquivos_af)
 
     ok, _ = nucleo.auditor.verificar_cadeia()
     assert ok is True

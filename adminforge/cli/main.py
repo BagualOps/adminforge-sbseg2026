@@ -524,25 +524,95 @@ def cmd_audit_server(args: argparse.Namespace) -> int:
     if "erro" in relatorio:
         ui.fail(relatorio["erro"])
         return 2
+
     usuarios = relatorio.get("usuarios", [])
+    grupos = relatorio.get("grupos", [])
     servicos = relatorio.get("servicos", [])
-    ui.heading(f"Usuarios ({len(usuarios)})")
-    for u in usuarios:
-        if args.user and args.user in u:
-            ui.secho(f"  * {u}", ui._YELLOW, bold=True)
+    arquivos_sudoers = relatorio.get("sudoers_arquivos", [])
+    regras_sudo = relatorio.get("sudoers_regras", [])
+
+    if args.humans:
+        usuarios = [u for u in usuarios if u.get("categoria") == "humano"]
+
+    # Usuarios
+    titulo = f"Usuarios ({len(usuarios)})"
+    if args.humans:
+        titulo += " — apenas humanos (UID >= 1000)"
+    ui.heading(titulo)
+    if usuarios:
+        linhas = []
+        for u in usuarios:
+            destacar = bool(args.user and args.user in u["nome"])
+            marca = "*" if destacar else " "
+            grupos_str = ",".join(u.get("grupos", []))[:40]
+            sudo_str = "sim" if u.get("sudo") else "—"
+            linhas.append([marca, u["nome"], str(u["uid"]), u["categoria"], u["shell"], grupos_str, sudo_str])
+        ui.tabela([" ", "USERNAME", "UID", "CATEGORIA", "SHELL", "GRUPOS", "SUDO"], linhas)
+    else:
+        ui.secho("  (nenhum)", dim=True)
+
+    # Grupos
+    if args.group:
+        alvo = [g for g in grupos if args.group in g["nome"]]
+        ui.heading(f"Grupos com '{args.group}' ({len(alvo)})")
+        for g in alvo:
+            membros = ", ".join(g["membros"]) or "-"
+            ui.echo(f"  {g['nome']} (gid={g['gid']}): {membros}")
+    else:
+        ui.heading(f"Grupos ({len(grupos)})")
+        com_membros = [g for g in grupos if g["membros"]]
+        if com_membros:
+            ui.tabela(
+                ["NOME", "GID", "MEMBROS"],
+                [[g["nome"], str(g["gid"]), ", ".join(g["membros"])[:60]] for g in com_membros],
+            )
         else:
-            ui.echo(f"    {u}")
-    ui.heading(f"Servicos ({len(servicos)})")
+            ui.secho("  (nenhum grupo com membros explicitos)", dim=True)
+
+    # Sudoers
+    ui.heading(f"Sudoers — arquivos em /etc/sudoers.d/ ({len(arquivos_sudoers)})")
+    if arquivos_sudoers:
+        for a in arquivos_sudoers:
+            origem = "adminforge" if a["adminforge"] else "manual"
+            cor = ui._GREEN if a["adminforge"] else ui._YELLOW
+            ui.secho(f"  [{origem:10}] {a['nome']}", cor)
+    else:
+        ui.secho("  (nao foi possivel listar — ssh sem sudo no servidor?)", dim=True)
+
+    if regras_sudo:
+        ui.heading(f"Regras sudo ativas ({len(regras_sudo)})")
+        for r in regras_sudo[:20]:
+            ui.echo(f"  {r}")
+        if len(regras_sudo) > 20:
+            ui.secho(f"  ... +{len(regras_sudo) - 20} regras (use --format json para tudo)", dim=True)
+
+    # Servicos
+    ui.heading(f"Servicos em execucao ({len(servicos)})")
     for s in servicos:
         if args.service and args.service in s:
             ui.secho(f"  * {s}", ui._YELLOW, bold=True)
         else:
             ui.echo(f"    {s}")
+
+    # Alertas heuristicos
+    alertas = []
     if args.user:
-        encontrou_user = any(args.user in u for u in usuarios)
-        encontrou_serv = any(args.user in s for s in servicos)
-        if encontrou_user and not encontrou_serv:
-            ui.warn(f"usuario '{args.user}' presente sem servico correspondente — possivel sobra")
+        nomes = {u["nome"] for u in usuarios}
+        if args.user in nomes and not any(args.user in s for s in servicos):
+            alertas.append(f"usuario '{args.user}' existe mas nenhum servico correspondente esta rodando")
+    sudoers_manuais = [a["nome"] for a in arquivos_sudoers if not a["adminforge"]]
+    if sudoers_manuais:
+        alertas.append(
+            f"{len(sudoers_manuais)} arquivo(s) em /etc/sudoers.d/ fora do AdminForge: "
+            + ", ".join(sudoers_manuais[:5])
+            + (" ..." if len(sudoers_manuais) > 5 else "")
+        )
+
+    if alertas:
+        ui.heading("Alertas")
+        for a in alertas:
+            ui.warn(a)
+
     ui.kv("operacao", op.id)
     return 0
 
@@ -762,10 +832,15 @@ def _build_parser() -> argparse.ArgumentParser:
     # audit
     p_audit = sub.add_parser("audit", help="Auditoria operacional (read-only via SSH).")
     s_audit = p_audit.add_subparsers(dest="sub", required=True)
-    a = s_audit.add_parser("server", help="Inspeciona usuarios e servicos do servidor.")
+    a = s_audit.add_parser(
+        "server",
+        help="Inspeciona usuarios, grupos, sudoers e servicos do servidor.",
+    )
     a.add_argument("--hostname", required=True).completer = completers.hostnames
     a.add_argument("--user", help="Destaca ocorrencias do usuario.")
+    a.add_argument("--group", help="Filtra grupos por substring.")
     a.add_argument("--service", help="Destaca ocorrencias do servico.")
+    a.add_argument("--humans", action="store_true", help="Mostra so usuarios humanos (UID >= 1000).")
     a.add_argument("--dry-run", action="store_true")
     a.set_defaults(func=cmd_audit_server)
 

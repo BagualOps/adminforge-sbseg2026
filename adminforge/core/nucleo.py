@@ -450,8 +450,12 @@ class Nucleo:
                 acao=TipoAcao.LEITURA,
                 status="sucesso" if "erro" not in relatorio else "falha",
                 erro=relatorio.get("erro"),
-                mensagem=f"{len(relatorio.get('usuarios', []))} usuarios, "
-                f"{len(relatorio.get('servicos', []))} servicos",
+                mensagem=(
+                    f"{len(relatorio.get('usuarios', []))} usuarios, "
+                    f"{len(relatorio.get('grupos', []))} grupos, "
+                    f"{len(relatorio.get('servicos', []))} servicos, "
+                    f"{len(relatorio.get('sudoers_regras', []))} regras sudo"
+                ),
             )
             op.subacoes.append(sub)
             status = StatusOperacao.SUCESSO if "erro" not in relatorio else StatusOperacao.FALHA
