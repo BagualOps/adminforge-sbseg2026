@@ -17,14 +17,14 @@ from adminforge.exceptions import LockOcupado
 
 EPILOG_GERAL = """\
 EXEMPLOS
-  adminforge user add marina --nome "Marina Silva" --email marina@empresa.com
-  adminforge user key add marina --file ~/.ssh/marina.pub
-  adminforge user-group create sysadmins
-  adminforge user-group add-member sysadmins marina
-  adminforge server add web-01 --ip 10.0.0.10
-  adminforge server-group create producao
-  adminforge server-group add-member producao web-01
-  adminforge grant sysadmins producao --nivel sudo
+  adminforge user add --username marina --name "Marina Silva" --email marina@empresa.com
+  adminforge user key add --username marina --file ~/.ssh/marina.pub
+  adminforge user-group create --name sysadmins
+  adminforge user-group add-member --group sysadmins --username marina
+  adminforge server add --hostname web-01 --ip 10.0.0.10 --auto
+  adminforge server-group create --name producao
+  adminforge server-group add-member --group producao --hostname web-01
+  adminforge grant --user-group sysadmins --server-group producao --level sudo
   adminforge preview
   adminforge apply
 
@@ -64,7 +64,7 @@ def _nucleo(args: argparse.Namespace, com_ssh: bool = False) -> Nucleo:
 # UC-1: user
 # ---------------------------------------------------------------------------
 def cmd_user_add(args: argparse.Namespace) -> int:
-    op = _nucleo(args).cadastrar_user(args.username, args.nome, args.email)
+    op = _nucleo(args).cadastrar_user(args.username, args.name, args.email)
     return ui.imprimir_resultado(op)
 
 
@@ -141,19 +141,19 @@ def cmd_user_key_list(args: argparse.Namespace) -> int:
 # UC-3: user-group
 # ---------------------------------------------------------------------------
 def cmd_ug_create(args: argparse.Namespace) -> int:
-    return ui.imprimir_resultado(_nucleo(args).criar_grupo_user(args.nome))
+    return ui.imprimir_resultado(_nucleo(args).criar_grupo_user(args.name))
 
 
 def cmd_ug_add_member(args: argparse.Namespace) -> int:
-    return ui.imprimir_resultado(_nucleo(args).adicionar_membro_grupo_user(args.grupo, args.username))
+    return ui.imprimir_resultado(_nucleo(args).adicionar_membro_grupo_user(args.group, args.username))
 
 
 def cmd_ug_remove_member(args: argparse.Namespace) -> int:
-    return ui.imprimir_resultado(_nucleo(args).remover_membro_grupo_user(args.grupo, args.username))
+    return ui.imprimir_resultado(_nucleo(args).remover_membro_grupo_user(args.group, args.username))
 
 
 def cmd_ug_delete(args: argparse.Namespace) -> int:
-    return ui.imprimir_resultado(_nucleo(args).excluir_grupo_user(args.nome))
+    return ui.imprimir_resultado(_nucleo(args).excluir_grupo_user(args.name))
 
 
 def cmd_ug_list(args: argparse.Namespace) -> int:
@@ -176,7 +176,7 @@ def cmd_server_add(args: argparse.Namespace) -> int:
             known_hosts_path=_state_dir(args) / "known_hosts",
         )
         try:
-            host_key, fp = deployer.capturar_host_key(args.hostname, args.ip, args.porta)
+            host_key, fp = deployer.capturar_host_key(args.hostname, args.ip, args.port)
         except Exception as e:
             ui.fail(f"falha ao capturar host_key: {e}")
             return 2
@@ -187,7 +187,7 @@ def cmd_server_add(args: argparse.Namespace) -> int:
     if not host_key:
         ui.fail("forneca --host-key ou --auto")
         return 2
-    op = _nucleo(args).cadastrar_servidor(args.hostname, args.ip, args.porta, host_key)
+    op = _nucleo(args).cadastrar_servidor(args.hostname, args.ip, args.port, host_key)
     return ui.imprimir_resultado(op)
 
 
@@ -236,19 +236,19 @@ def cmd_server_remove(args: argparse.Namespace) -> int:
 # UC-5: server-group
 # ---------------------------------------------------------------------------
 def cmd_sg_create(args: argparse.Namespace) -> int:
-    return ui.imprimir_resultado(_nucleo(args).criar_grupo_servidor(args.nome))
+    return ui.imprimir_resultado(_nucleo(args).criar_grupo_servidor(args.name))
 
 
 def cmd_sg_add(args: argparse.Namespace) -> int:
-    return ui.imprimir_resultado(_nucleo(args).adicionar_membro_grupo_servidor(args.grupo, args.hostname))
+    return ui.imprimir_resultado(_nucleo(args).adicionar_membro_grupo_servidor(args.group, args.hostname))
 
 
 def cmd_sg_rm(args: argparse.Namespace) -> int:
-    return ui.imprimir_resultado(_nucleo(args).remover_membro_grupo_servidor(args.grupo, args.hostname))
+    return ui.imprimir_resultado(_nucleo(args).remover_membro_grupo_servidor(args.group, args.hostname))
 
 
 def cmd_sg_delete(args: argparse.Namespace) -> int:
-    return ui.imprimir_resultado(_nucleo(args).excluir_grupo_servidor(args.nome))
+    return ui.imprimir_resultado(_nucleo(args).excluir_grupo_servidor(args.name))
 
 
 def cmd_sg_list(args: argparse.Namespace) -> int:
@@ -263,12 +263,12 @@ def cmd_sg_list(args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 def cmd_grant(args: argparse.Namespace) -> int:
     return ui.imprimir_resultado(
-        _nucleo(args).conceder(args.grupo_user, args.grupo_servidor, NivelPermissao(args.nivel))
+        _nucleo(args).conceder(args.user_group, args.server_group, NivelPermissao(args.level))
     )
 
 
 def cmd_revoke(args: argparse.Namespace) -> int:
-    return ui.imprimir_resultado(_nucleo(args).revogar(args.grupo_user, args.grupo_servidor))
+    return ui.imprimir_resultado(_nucleo(args).revogar(args.user_group, args.server_group))
 
 
 # ---------------------------------------------------------------------------
@@ -341,7 +341,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 def cmd_history_list(args: argparse.Namespace) -> int:
     nucleo = _nucleo(args)
-    ops = nucleo.auditor.listar(args.limite)
+    ops = nucleo.auditor.listar(args.limit)
     linhas = [
         [
             op.id,
@@ -387,7 +387,7 @@ def cmd_history_show(args: argparse.Namespace) -> int:
 
 def cmd_history_failed(args: argparse.Namespace) -> int:
     nucleo = _nucleo(args)
-    ops = nucleo.auditor.listar_falhas(args.limite)
+    ops = nucleo.auditor.listar_falhas(args.limit)
     linhas = [
         [
             op.id,
@@ -463,23 +463,23 @@ def _build_parser() -> argparse.ArgumentParser:
         default=os.environ.get("ADMINFORGE_STATE", "./state"),
         help="Diretorio de estado (default: ./state ou $ADMINFORGE_STATE).",
     )
-    sub = parser.add_subparsers(dest="cmd", required=True, metavar="COMANDO")
+    sub = parser.add_subparsers(dest="cmd", required=True, metavar="COMMAND")
 
     # user
     p_user = sub.add_parser("user", help="Cadastro, ciclo de vida e chaves de usuarios.")
     s_user = p_user.add_subparsers(dest="sub", required=True)
     a = s_user.add_parser("add", help="Cadastra um novo usuario.")
-    a.add_argument("username")
-    a.add_argument("--nome", required=True)
+    a.add_argument("--username", required=True)
+    a.add_argument("--name", required=True)
     a.add_argument("--email", required=True)
     a.set_defaults(func=cmd_user_add)
     a = s_user.add_parser("list", help="Lista usuarios.")
     a.set_defaults(func=cmd_user_list)
     a = s_user.add_parser("show", help="Detalha usuario.")
-    a.add_argument("username")
+    a.add_argument("--username", required=True)
     a.set_defaults(func=cmd_user_show)
     a = s_user.add_parser("disable", help="Desabilita usuario.")
-    a.add_argument("username")
+    a.add_argument("--username", required=True)
     a.add_argument("--yes", action="store_true")
     a.set_defaults(func=cmd_user_disable)
 
@@ -487,15 +487,15 @@ def _build_parser() -> argparse.ArgumentParser:
     p_uk = s_user.add_parser("key", help="Cadastro e revogacao de chaves SSH do usuario.")
     s_uk = p_uk.add_subparsers(dest="key_sub", required=True)
     a = s_uk.add_parser("add", help="Cadastra chave SSH.")
-    a.add_argument("username")
+    a.add_argument("--username", required=True)
     a.add_argument("--file", help="Caminho de um .pub.")
     a.add_argument("--string", help="Cola a chave inteira.")
     a.set_defaults(func=cmd_user_key_add)
     a = s_uk.add_parser("revoke", help="Revoga chave por fingerprint.")
-    a.add_argument("fingerprint")
+    a.add_argument("--fingerprint", required=True)
     a.set_defaults(func=cmd_user_key_revoke)
     a = s_uk.add_parser("list", help="Lista chaves do usuario.")
-    a.add_argument("username")
+    a.add_argument("--username", required=True)
     a.set_defaults(func=cmd_user_key_list)
 
     # user-group
@@ -503,21 +503,21 @@ def _build_parser() -> argparse.ArgumentParser:
     s_ug = p_ug.add_subparsers(dest="sub", required=True)
 
     a = s_ug.add_parser("create")
-    a.add_argument("nome")
+    a.add_argument("--name", required=True)
     a.set_defaults(func=cmd_ug_create)
 
     a = s_ug.add_parser("add-member")
-    a.add_argument("grupo")
-    a.add_argument("username")
+    a.add_argument("--group", required=True)
+    a.add_argument("--username", required=True)
     a.set_defaults(func=cmd_ug_add_member)
 
     a = s_ug.add_parser("remove-member")
-    a.add_argument("grupo")
-    a.add_argument("username")
+    a.add_argument("--group", required=True)
+    a.add_argument("--username", required=True)
     a.set_defaults(func=cmd_ug_remove_member)
 
     a = s_ug.add_parser("delete")
-    a.add_argument("nome")
+    a.add_argument("--name", required=True)
     a.set_defaults(func=cmd_ug_delete)
 
     a = s_ug.add_parser("list")
@@ -527,9 +527,9 @@ def _build_parser() -> argparse.ArgumentParser:
     p_server = sub.add_parser("server", help="Cadastro de servidores.")
     s_server = p_server.add_subparsers(dest="sub", required=True)
     a = s_server.add_parser("add", help="Cadastra servidor (TOFU host_key).")
-    a.add_argument("hostname")
+    a.add_argument("--hostname", required=True)
     a.add_argument("--ip", required=True, help="IPv4 do servidor.")
-    a.add_argument("--porta", type=int, default=22)
+    a.add_argument("--port", type=int, default=22)
     a.add_argument("--host-key", help="ssh-keyscan: 'ssh-ed25519 AAAA...'")
     a.add_argument("--auto", action="store_true", help="Captura host_key via ssh-keyscan.")
     a.set_defaults(func=cmd_server_add)
@@ -538,11 +538,11 @@ def _build_parser() -> argparse.ArgumentParser:
     a.set_defaults(func=cmd_server_list)
 
     a = s_server.add_parser("show")
-    a.add_argument("hostname")
+    a.add_argument("--hostname", required=True)
     a.set_defaults(func=cmd_server_show)
 
     a = s_server.add_parser("remove")
-    a.add_argument("hostname")
+    a.add_argument("--hostname", required=True)
     a.add_argument("--yes", action="store_true")
     a.set_defaults(func=cmd_server_remove)
 
@@ -551,21 +551,21 @@ def _build_parser() -> argparse.ArgumentParser:
     s_sg = p_sg.add_subparsers(dest="sub", required=True)
 
     a = s_sg.add_parser("create")
-    a.add_argument("nome")
+    a.add_argument("--name", required=True)
     a.set_defaults(func=cmd_sg_create)
 
     a = s_sg.add_parser("add-member")
-    a.add_argument("grupo")
-    a.add_argument("hostname")
+    a.add_argument("--group", required=True)
+    a.add_argument("--hostname", required=True)
     a.set_defaults(func=cmd_sg_add)
 
     a = s_sg.add_parser("remove-member")
-    a.add_argument("grupo")
-    a.add_argument("hostname")
+    a.add_argument("--group", required=True)
+    a.add_argument("--hostname", required=True)
     a.set_defaults(func=cmd_sg_rm)
 
     a = s_sg.add_parser("delete")
-    a.add_argument("nome")
+    a.add_argument("--name", required=True)
     a.set_defaults(func=cmd_sg_delete)
 
     a = s_sg.add_parser("list")
@@ -573,14 +573,14 @@ def _build_parser() -> argparse.ArgumentParser:
 
     # grant / revoke
     a = sub.add_parser("grant", help="Concede acesso de grupo de usuarios a grupo de servidores.")
-    a.add_argument("grupo_user")
-    a.add_argument("grupo_servidor")
-    a.add_argument("--nivel", choices=["shell", "sudo"], required=True)
+    a.add_argument("--user-group", dest="user_group", required=True)
+    a.add_argument("--server-group", dest="server_group", required=True)
+    a.add_argument("--level", choices=["shell", "sudo"], required=True)
     a.set_defaults(func=cmd_grant)
 
     a = sub.add_parser("revoke", help="Revoga acesso entre dois grupos.")
-    a.add_argument("grupo_user")
-    a.add_argument("grupo_servidor")
+    a.add_argument("--user-group", dest="user_group", required=True)
+    a.add_argument("--server-group", dest="server_group", required=True)
     a.set_defaults(func=cmd_revoke)
 
     # preview
@@ -598,15 +598,15 @@ def _build_parser() -> argparse.ArgumentParser:
     s_hist = p_hist.add_subparsers(dest="sub", required=True)
 
     a = s_hist.add_parser("list")
-    a.add_argument("-n", "--limite", type=int, default=50)
+    a.add_argument("-n", "--limit", type=int, default=50)
     a.set_defaults(func=cmd_history_list)
 
     a = s_hist.add_parser("show")
-    a.add_argument("op_id")
+    a.add_argument("--id", dest="op_id", required=True)
     a.set_defaults(func=cmd_history_show)
 
     a = s_hist.add_parser("failed")
-    a.add_argument("-n", "--limite", type=int, default=50)
+    a.add_argument("-n", "--limit", type=int, default=50)
     a.set_defaults(func=cmd_history_failed)
 
     a = s_hist.add_parser("verify")
@@ -616,7 +616,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p_audit = sub.add_parser("audit", help="Auditoria operacional (read-only via SSH).")
     s_audit = p_audit.add_subparsers(dest="sub", required=True)
     a = s_audit.add_parser("server", help="Inspeciona usuarios e servicos do servidor.")
-    a.add_argument("hostname")
+    a.add_argument("--hostname", required=True)
     a.add_argument("--user", help="Destaca ocorrencias do usuario.")
     a.add_argument("--service", help="Destaca ocorrencias do servico.")
     a.add_argument("--dry-run", action="store_true")

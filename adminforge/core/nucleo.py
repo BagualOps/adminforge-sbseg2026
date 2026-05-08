@@ -320,7 +320,7 @@ class Nucleo:
             return self._registrar_falha(op, str(e))
 
     def conceder(self, grupo_user: str, grupo_servidor: str, nivel: NivelPermissao) -> Operacao:
-        op = self._nova_op(f"grant {grupo_user} {grupo_servidor} --nivel {nivel.value}")
+        op = self._nova_op(f"grant {grupo_user} {grupo_servidor} --level {nivel.value}")
         try:
             with self.store:
                 if not self.store.get_grupo_user(grupo_user):
