@@ -111,8 +111,9 @@ grupos, hostnames, fingerprints lidos do `state/`).
 
 > **Totalmente opcional.** Sem `argcomplete` instalado, a CLI funciona
 > idêntica — o import vive em `try/except ImportError`. Custo no caminho
-> principal: zero. Adiciona ~80 linhas de código próprio e 1 dependência
-> externa (`argcomplete`), ambas entram só se você instalar o extra.
+> principal: zero. Se você optar por instalar o extra `completion`, entra
+> **~2.200 linhas externas** (`argcomplete`, sem deps transitivas) além
+> das ~80 linhas de código próprio.
 
 Habilitar:
 
