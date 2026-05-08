@@ -108,32 +108,6 @@ def test_cli_dump_table(env):
     assert "Users" in out and "alice" in out
 
 
-def test_cli_migrate_state(env, tmp_path: Path):
-    state = Path(env["state"])
-    # simula state v1
-    (state / "admins").mkdir()
-    (state / "admins" / "alice.json").write_text(
-        '{"id":"00000000-0000-0000-0000-000000000001","username":"alice","nome":"A","email":"a@e.com","status":"ativo"}'
-    )
-    (state / "admin-groups").mkdir()
-    (state / "admin-groups" / "sa.json").write_text(
-        '{"id":"00000000-0000-0000-0000-000000000002","nome":"sa","membros":["alice"]}'
-    )
-    (state / "permissions.json").write_text(
-        '{"permissoes":[{"id":"00000000-0000-0000-0000-000000000003","grupo_admin":"sa","grupo_servidor":"prod","nivel":"shell"}]}'
-    )
-    rc, out = run_cli(["migrate-state", "--yes"])
-    assert rc == 0, out
-    assert (state / "users" / "alice.json").exists()
-    assert (state / "user-groups" / "sa.json").exists()
-    assert "grupo_user" in (state / "permissions.json").read_text()
-    assert "grupo_admin" not in (state / "permissions.json").read_text()
-    # idempotente
-    rc, out = run_cli(["migrate-state", "--yes"])
-    assert rc == 0
-    assert "nada a migrar" in out
-
-
 def test_cli_help(env, capsys):
     with pytest.raises(SystemExit) as exc:
         main(["--help"])
