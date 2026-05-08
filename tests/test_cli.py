@@ -48,7 +48,7 @@ def test_cli_fluxo_basico(env):
     rc, _ = run_cli(["server-group", "add-member", "--group", "prod", "--hostname", "web-01"])
     assert rc == 0
 
-    rc, _ = run_cli(["grant", "--user-group", "sysadmins", "--server-group", "prod", "--level", "shell"])
+    rc, _ = run_cli(["permission", "grant", "--user-group", "sysadmins", "--server-group", "prod", "--level", "shell"])
     assert rc == 0
 
     rc, out = run_cli(["preview"])
@@ -115,7 +115,7 @@ def test_cli_apply_diff_resiliente_a_ssh_quebrado(env, monkeypatch):
     run_cli(["server", "add", "--hostname", "web-02", "--ip", "10.0.0.11", "--host-key", HOST_KEY_FAKE])
     run_cli(["server-group", "create", "--name", "prod"])
     run_cli(["server-group", "add-member", "--group", "prod", "--hostname", "web-01,web-02"])
-    run_cli(["grant", "--user-group", "sa", "--server-group", "prod", "--level", "shell"])
+    run_cli(["permission", "grant", "--user-group", "sa", "--server-group", "prod", "--level", "shell"])
 
     from adminforge.deployer.dry_run import DryRunDeployer
 
@@ -143,7 +143,7 @@ def test_cli_apply_verify_dry_run(env):
     run_cli(["server", "add", "--hostname", "web-01", "--ip", "10.0.0.10", "--host-key", HOST_KEY_FAKE])
     run_cli(["server-group", "create", "--name", "prod"])
     run_cli(["server-group", "add-member", "--group", "prod", "--hostname", "web-01"])
-    run_cli(["grant", "--user-group", "sa", "--server-group", "prod", "--level", "shell"])
+    run_cli(["permission", "grant", "--user-group", "sa", "--server-group", "prod", "--level", "shell"])
     run_cli(["apply", "--yes", "--dry-run"])
 
     rc, out = run_cli(["apply", "verify", "--dry-run"])
@@ -161,7 +161,7 @@ def test_cli_apply_diff(env):
     run_cli(["server", "add", "--hostname", "web-01", "--ip", "10.0.0.10", "--host-key", HOST_KEY_FAKE])
     run_cli(["server-group", "create", "--name", "prod"])
     run_cli(["server-group", "add-member", "--group", "prod", "--hostname", "web-01"])
-    run_cli(["grant", "--user-group", "sa", "--server-group", "prod", "--level", "shell"])
+    run_cli(["permission", "grant", "--user-group", "sa", "--server-group", "prod", "--level", "shell"])
 
     rc, out = run_cli(["apply", "--yes", "--dry-run", "--diff"])
     assert rc == 0
@@ -179,7 +179,7 @@ def test_cli_dump_json(env):
     run_cli(["server", "add", "--hostname", "web-01", "--ip", "10.0.0.10", "--host-key", HOST_KEY_FAKE])
     run_cli(["server-group", "create", "--name", "prod"])
     run_cli(["server-group", "add-member", "--group", "prod", "--hostname", "web-01"])
-    run_cli(["grant", "--user-group", "sa", "--server-group", "prod", "--level", "shell"])
+    run_cli(["permission", "grant", "--user-group", "sa", "--server-group", "prod", "--level", "shell"])
 
     import json as _json
     rc, out = run_cli(["dump", "--format", "json"])
@@ -197,7 +197,7 @@ def test_cli_dump_table(env):
     assert "Users" in out and "alice" in out
 
 
-def test_cli_permission_list_update_delete(env):
+def test_cli_permission_grant_revoke_list(env):
     run_cli(["user-group", "create", "--name", "sa"])
     run_cli(["server-group", "create", "--name", "prod"])
 
@@ -205,20 +205,20 @@ def test_cli_permission_list_update_delete(env):
     assert rc == 0
     assert "(empty)" in out or "USER_GROUP" in out
 
-    rc, _ = run_cli(["permission", "update", "--user-group", "sa", "--server-group", "prod", "--level", "shell"])
+    rc, _ = run_cli(["permission", "grant", "--user-group", "sa", "--server-group", "prod", "--level", "shell"])
     assert rc == 0
 
     rc, out = run_cli(["permission", "list"])
     assert rc == 0
     assert "sa" in out and "prod" in out and "shell" in out
 
-    rc, _ = run_cli(["permission", "update", "--user-group", "sa", "--server-group", "prod", "--level", "sudo"])
+    rc, _ = run_cli(["permission", "grant", "--user-group", "sa", "--server-group", "prod", "--level", "sudo"])
     assert rc == 0
     rc, out = run_cli(["permission", "list"])
     assert rc == 0
     assert "sudo" in out and "shell" not in out.split("sudo")[1]
 
-    rc, _ = run_cli(["permission", "delete", "--user-group", "sa", "--server-group", "prod", "--yes"])
+    rc, _ = run_cli(["permission", "revoke", "--user-group", "sa", "--server-group", "prod", "--yes"])
     assert rc == 0
     rc, out = run_cli(["permission", "list"])
     assert "sa" not in out or "prod" not in out
@@ -264,7 +264,7 @@ def test_cli_status_com_pendencia_e_json(env):
     run_cli(["server", "add", "--hostname", "web-01", "--ip", "10.0.0.10", "--host-key", HOST_KEY_FAKE])
     run_cli(["server-group", "create", "--name", "prod"])
     run_cli(["server-group", "add-member", "--group", "prod", "--hostname", "web-01"])
-    run_cli(["grant", "--user-group", "sa", "--server-group", "prod", "--level", "shell"])
+    run_cli(["permission", "grant", "--user-group", "sa", "--server-group", "prod", "--level", "shell"])
 
     rc, out = run_cli(["status"])
     assert rc == 0
@@ -289,7 +289,7 @@ def test_cli_permission_show_user_servers_acessiveis(env):
     run_cli(["server", "add", "--hostname", "web-02", "--ip", "10.0.0.2", "--host-key", "x"])
     run_cli(["server-group", "create", "--name", "prod"])
     run_cli(["server-group", "add-member", "--group", "prod", "--hostname", "web-01,web-02"])
-    run_cli(["grant", "--user-group", "sa", "--server-group", "prod", "--level", "sudo"])
+    run_cli(["permission", "grant", "--user-group", "sa", "--server-group", "prod", "--level", "sudo"])
 
     rc, out = run_cli(["permission", "show", "--user", "alice"])
     assert rc == 0

@@ -53,7 +53,7 @@ def test_excluir_grupo_com_permissao_associada_falha(nucleo: Nucleo):
     # mensagem deve listar a permissao especifica e sugerir comando exato
     assert "1 associated permission" in erro
     assert "prod (shell)" in erro
-    assert "adminforge revoke --user-group sa --server-group prod" in erro
+    assert "adminforge permission revoke --user-group sa --server-group prod" in erro
 
 
 def test_excluir_server_group_com_permissao_lista_user_groups(nucleo: Nucleo):
@@ -67,8 +67,8 @@ def test_excluir_server_group_com_permissao_lista_user_groups(nucleo: Nucleo):
     erro = next((s.erro for s in op.subacoes if s.erro), "")
     assert "2 associated permission" in erro
     assert "sa (shell)" in erro and "dba (sudo)" in erro
-    assert "adminforge revoke --user-group sa --server-group prod" in erro
-    assert "adminforge revoke --user-group dba --server-group prod" in erro
+    assert "adminforge permission revoke --user-group sa --server-group prod" in erro
+    assert "adminforge permission revoke --user-group dba --server-group prod" in erro
 
 
 def test_grant_atualiza_nivel_sem_duplicar(nucleo: Nucleo):

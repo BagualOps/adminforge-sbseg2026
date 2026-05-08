@@ -45,10 +45,10 @@ def _msg_permissoes_associadas(tipo: str, nome: str, perms: list[Permissao]) -> 
     pares = [(p.grupo_user, p.grupo_servidor, p.nivel.value) for p in perms]
     if tipo == "user-group":
         linhas = [f"  - {gs} ({lvl})" for _gu, gs, lvl in pares]
-        comandos = [f"  adminforge revoke --user-group {nome} --server-group {gs}" for _gu, gs, _ in pares]
+        comandos = [f"  adminforge permission revoke --user-group {nome} --server-group {gs}" for _gu, gs, _ in pares]
     else:
         linhas = [f"  - {gu} ({lvl})" for gu, _gs, lvl in pares]
-        comandos = [f"  adminforge revoke --user-group {gu} --server-group {nome}" for gu, _gs, _ in pares]
+        comandos = [f"  adminforge permission revoke --user-group {gu} --server-group {nome}" for gu, _gs, _ in pares]
     return (
         f"{tipo} '{nome}' has {len(perms)} associated permission(s):\n"
         + "\n".join(linhas)
@@ -364,7 +364,7 @@ class Nucleo:
         nivel: NivelPermissao,
         profile: str | None = None,
     ) -> Operacao:
-        comando = f"grant {grupo_user} {grupo_servidor} --level {nivel.value}"
+        comando = f"permission grant {grupo_user} {grupo_servidor} --level {nivel.value}"
         if profile:
             comando += f" --profile {profile}"
         op = self._nova_op(comando)
@@ -438,7 +438,7 @@ class Nucleo:
             return self._registrar_falha(op, str(e))
 
     def revogar(self, grupo_user: str, grupo_servidor: str) -> Operacao:
-        op = self._nova_op(f"revoke {grupo_user} {grupo_servidor}")
+        op = self._nova_op(f"permission revoke {grupo_user} {grupo_servidor}")
         try:
             with self.store:
                 self.store.delete_permissao(grupo_user, grupo_servidor)

@@ -236,9 +236,9 @@ af user-group add-member --group dba --username ana          # Ana faz os dois p
 ### 5.6 Conceder acesso
 
 ```bash
-af grant --user-group sysadmins --server-group web --level sudo
-af grant --user-group sysadmins --server-group banco --level shell    # leitura/troubleshooting
-af grant --user-group dba --server-group banco --level sudo
+af permission grant --user-group sysadmins --server-group web --level sudo
+af permission grant --user-group sysadmins --server-group banco --level shell    # leitura/troubleshooting
+af permission grant --user-group dba --server-group banco --level sudo
 ```
 
 ### 5.7 Ver e aplicar
@@ -310,7 +310,7 @@ af apply                        # instala chaves de todos do grupo 'sysadmins' n
 ```bash
 af user-group create --name monitoring
 af user-group add-member --group monitoring --username carla   # carla já cadastrada como user
-af grant --user-group monitoring --server-group producao --level shell
+af permission grant --user-group monitoring --server-group producao --level shell
 af apply
 ```
 

@@ -15,12 +15,12 @@ CLI Python para gestão de identidades privilegiadas em frotas de servidores Lin
 
 | Camada | Antes | Agora | Variação |
 |--------|-------|-------|----------|
-| Código nosso (produção) | 2.429 LOC | 3.689 LOC | +1.260 (+52%) |
+| Código nosso (produção) | 2.429 LOC | 3.661 LOC | +1.232 (+51%) |
 | Dependências de runtime obrigatórias | ~56.000 LOC (paramiko, click, PyYAML, cryptography, …) | **0** | **-100%** |
-| Total executado (sem extras) | ~58.400 LOC | 3.689 LOC | **-94%** |
+| Total executado (sem extras) | ~58.400 LOC | 3.661 LOC | **-94%** |
 | Extra opcional `completion` | — | +2.200 LOC (`argcomplete`) | opt-in |
 
-Crescimento em relação ao protótipo inicial vem do refactor de UX e endurecimento do `apply`: `dump`, métodos plurais no Núcleo (N membros), autocomplete com completers dinâmicos, `audit server` estendido (grupos/sudoers/drift), `permission` CRUD, `sudo-profile`, `apply --diff` e `apply verify`.
+Crescimento em relação ao protótipo inicial vem do refactor de UX e endurecimento do `apply`: `dump`, métodos plurais no Núcleo (N membros), autocomplete com completers dinâmicos, `audit server` estendido (grupos/sudoers/drift), menu unificado `permission grant/revoke/list/show`, `sudo-profile`, `apply --diff` e `apply verify`.
 
 Substituições que compõem essa redução:
 
@@ -91,7 +91,7 @@ adminforge server add --hostname web-01 --ip 10.0.0.10 --auto                   
 adminforge server-group create --name producao
 adminforge server-group add-member --group producao --hostname web-01 web-02
 
-adminforge grant --user-group sysadmins --server-group producao --level sudo
+adminforge permission grant --user-group sysadmins --server-group producao --level sudo
 
 # Ver e aplicar
 adminforge preview                                        # read-only
@@ -148,7 +148,7 @@ Receitário completo por caso de uso: [`docs/USAGE.md`](docs/USAGE.md).
 | UC-3  | `adminforge user-group ...`                            | Cria/edita/exclui grupo de usuários (aceita N membros). |
 | UC-4  | `adminforge server add`                                | Registra servidor com TOFU de host key. |
 | UC-5  | `adminforge server-group ...`                          | Cria/edita grupo de servidores (aceita N membros). |
-| UC-6  | `adminforge grant` / `revoke` / `permission ...`       | Liga grupos com nível `shell` ou `sudo`. `permission list/update/delete` é o CRUD explícito. |
+| UC-6  | `adminforge permission grant/revoke/list/show`         | Liga grupos com nível `shell` ou `sudo`. Tudo sob o menu `permission`. |
 | UC-7  | `adminforge preview`                                   | Mostra o delta sem tocar em servidores. |
 | UC-8  | `adminforge apply` (`--diff`, `verify`)                | Propaga o delta via SSH (sequencial). `--diff` mostra antes/depois; `apply verify` confere declarado vs real. |
 | UC-9  | `adminforge history list/show/failed/verify`           | Auditoria do que o Superadmin fez. |

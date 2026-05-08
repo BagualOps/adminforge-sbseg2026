@@ -27,7 +27,7 @@ EXAMPLES
   adminforge server add --hostname web-01 --ip 10.0.0.10 --auto
   adminforge server-group create --name producao
   adminforge server-group add-member --group producao --hostname web-01
-  adminforge grant --user-group sysadmins --server-group producao --level sudo
+  adminforge permission grant --user-group sysadmins --server-group producao --level sudo
   adminforge preview
   adminforge apply
 
@@ -302,23 +302,7 @@ def cmd_sg_list(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
-# UC-6: grant / revoke
-# ---------------------------------------------------------------------------
-def cmd_grant(args: argparse.Namespace) -> int:
-    return ui.imprimir_resultado(
-        _nucleo(args).conceder(
-            args.user_group, args.server_group, NivelPermissao(args.level),
-            profile=getattr(args, "profile", None),
-        )
-    )
-
-
-def cmd_revoke(args: argparse.Namespace) -> int:
-    return ui.imprimir_resultado(_nucleo(args).revogar(args.user_group, args.server_group))
-
-
-# ---------------------------------------------------------------------------
-# permission CRUD (list/update/delete; grant/revoke continue como atalhos)
+# UC-6: permission grant / revoke / list / show
 # ---------------------------------------------------------------------------
 def cmd_permission_show(args: argparse.Namespace) -> int:
     """Query reversa: 'a que servidores X tem acesso?' (--user) ou
@@ -465,7 +449,7 @@ def cmd_permission_list(args: argparse.Namespace) -> int:
     )
 
 
-def cmd_permission_update(args: argparse.Namespace) -> int:
+def cmd_permission_grant(args: argparse.Namespace) -> int:
     return ui.imprimir_resultado(
         _nucleo(args).conceder(
             args.user_group, args.server_group, NivelPermissao(args.level),
@@ -510,7 +494,7 @@ def cmd_sudo_profile_delete(args: argparse.Namespace) -> int:
     return ui.imprimir_resultado(_nucleo(args).excluir_sudo_profile(args.name))
 
 
-def cmd_permission_delete(args: argparse.Namespace) -> int:
+def cmd_permission_revoke(args: argparse.Namespace) -> int:
     if not args.yes and not ui.confirmar(
         f"Revoke '{args.user_group}' -> '{args.server_group}'? (apply removes keys)"
     ):
@@ -1267,32 +1251,33 @@ def _build_parser() -> argparse.ArgumentParser:
     a.add_argument("--format", choices=["table", "json"], default="table")
     a.set_defaults(func=cmd_sg_list)
 
-    # grant / revoke
-    a = sub.add_parser("grant", help="Grant access from a user-group to a server-group.")
-    a.add_argument("--user-group", dest="user_group", required=True).completer = completers.user_groups
-    a.add_argument("--server-group", dest="server_group", required=True).completer = completers.server_groups
-    a.add_argument("--level", choices=["shell", "sudo"], required=True)
-    a.add_argument("--profile", help="Sudo profile name (only with --level sudo); without it, grants NOPASSWD:ALL.").completer = completers.sudo_profiles
-    a.set_defaults(func=cmd_grant)
-
-    a = sub.add_parser("revoke", help="Revoke access between two groups.")
-    a.add_argument("--user-group", dest="user_group", required=True).completer = completers.user_groups
-    a.add_argument("--server-group", dest="server_group", required=True).completer = completers.server_groups
-    a.set_defaults(func=cmd_revoke)
-
-    # permission (CRUD: list/update/delete; grant/revoke remain as shortcuts)
+    # permission — todas as acoes de gerenciamento de permissoes ficam sob este menu
     p_perm = sub.add_parser(
         "permission",
-        help="List, update or delete permissions.",
+        help="Manage permissions: grant / revoke / list / show.",
         epilog=(
             "Examples:\n"
+            "  adminforge permission grant --user-group sa --server-group prod --level sudo\n"
+            "  adminforge permission revoke --user-group sa --server-group prod\n"
             "  adminforge permission list\n"
-            "  adminforge permission update --user-group sa --server-group prod --level sudo\n"
-            "  adminforge permission delete --user-group sa --server-group prod"
+            "  adminforge permission show --user alice"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     s_perm = p_perm.add_subparsers(dest="sub", required=True)
+
+    a = s_perm.add_parser("grant", help="Grant access from a user-group to a server-group.")
+    a.add_argument("--user-group", dest="user_group", required=True).completer = completers.user_groups
+    a.add_argument("--server-group", dest="server_group", required=True).completer = completers.server_groups
+    a.add_argument("--level", choices=["shell", "sudo"], required=True)
+    a.add_argument("--profile", help="Sudo profile name (only with --level sudo); without it, grants NOPASSWD:ALL.").completer = completers.sudo_profiles
+    a.set_defaults(func=cmd_permission_grant)
+
+    a = s_perm.add_parser("revoke", help="Revoke access between two groups.")
+    a.add_argument("--user-group", dest="user_group", required=True).completer = completers.user_groups
+    a.add_argument("--server-group", dest="server_group", required=True).completer = completers.server_groups
+    a.add_argument("--yes", action="store_true", help="Skip confirmation.")
+    a.set_defaults(func=cmd_permission_revoke)
 
     a = s_perm.add_parser("list", help="List all permissions.")
     a.add_argument("--format", choices=["table", "json"], default="table")
@@ -1316,19 +1301,6 @@ def _build_parser() -> argparse.ArgumentParser:
     a.add_argument("--format", choices=["table", "json"], default="table")
     a.set_defaults(func=cmd_permission_show)
 
-    a = s_perm.add_parser("update", help="Create or update a permission (alias of grant).")
-    a.add_argument("--user-group", dest="user_group", required=True).completer = completers.user_groups
-    a.add_argument("--server-group", dest="server_group", required=True).completer = completers.server_groups
-    a.add_argument("--level", choices=["shell", "sudo"], required=True)
-    a.add_argument("--profile", help="Sudo profile name (only with --level sudo).").completer = completers.sudo_profiles
-    a.set_defaults(func=cmd_permission_update)
-
-    a = s_perm.add_parser("delete", help="Delete a permission (alias of revoke).")
-    a.add_argument("--user-group", dest="user_group", required=True).completer = completers.user_groups
-    a.add_argument("--server-group", dest="server_group", required=True).completer = completers.server_groups
-    a.add_argument("--yes", action="store_true", help="Skip confirmation.")
-    a.set_defaults(func=cmd_permission_delete)
-
     # sudo-profile
     p_sp = sub.add_parser(
         "sudo-profile",
@@ -1337,7 +1309,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "Examples:\n"
             "  adminforge sudo-profile create --name read-logs --command /bin/journalctl --command '/bin/cat /var/log/*'\n"
             "  adminforge sudo-profile list\n"
-            "  adminforge grant --user-group monitoring --server-group prod --level sudo --profile read-logs"
+            "  adminforge permission grant --user-group monitoring --server-group prod --level sudo --profile read-logs"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )

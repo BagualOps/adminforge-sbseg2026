@@ -127,21 +127,17 @@ adminforge server-group list
 
 ## UC-6 — Conceder / revogar acesso
 
-```bash
-adminforge grant --user-group sysadmins --server-group producao --level sudo
-adminforge grant --user-group sysadmins --server-group producao --level shell    # rebaixa nivel
-adminforge revoke --user-group sysadmins --server-group producao
-```
-
-Aliases CRUD equivalentes (mesmo comportamento):
+Todas as ações de permissão ficam sob o menu `permission`:
 
 ```bash
+adminforge permission grant --user-group sysadmins --server-group producao --level sudo
+adminforge permission grant --user-group sysadmins --server-group producao --level shell  # rebaixa nivel
+adminforge permission revoke --user-group sysadmins --server-group producao
 adminforge permission list
-adminforge permission update --user-group sysadmins --server-group producao --level sudo
-adminforge permission delete --user-group sysadmins --server-group producao
+adminforge permission show --user alice
 ```
 
-- Mesmo par `(user_group, server_group)` é único: `grant`/`permission update` repetido **atualiza** o nível.
+- Mesmo par `(user_group, server_group)` é único: `permission grant` repetido **atualiza** o nível.
 - `--level sudo` (sem `--profile`) instala `/etc/sudoers.d/adminforge-<username>` com `NOPASSWD:ALL`.
 - `--level sudo --profile <nome>` restringe a regra aos comandos do perfil (ver seção *sudo-profile* abaixo).
 - `--level shell` apenas instala a chave em `~/<username>/.ssh/authorized_keys`.
@@ -156,7 +152,7 @@ adminforge sudo-profile list
 adminforge sudo-profile show --name read-logs
 adminforge sudo-profile delete --name read-logs    # falha se em uso
 
-adminforge grant --user-group monitoring --server-group prod --level sudo --profile read-logs
+adminforge permission grant --user-group monitoring --server-group prod --level sudo --profile read-logs
 ```
 
 Comandos precisam ser caminhos absolutos (`/bin/...`, `/usr/bin/...`) — sudoers exige isso pra evitar ataque de PATH. O Núcleo rejeita o `create` se algum comando não começar com `/`. No servidor, o sudoers fica como uma linha por comando: `monitoring ALL=(ALL) NOPASSWD: /bin/journalctl`. O `visudo -cf` valida sintaxe antes do move.

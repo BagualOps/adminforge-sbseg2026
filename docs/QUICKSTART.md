@@ -148,7 +148,7 @@ adminforge server add --hostname web-01 --ip 10.0.0.10 --auto
 adminforge server-group create --name producao
 adminforge server-group add-member --group producao --hostname web-01
 
-adminforge grant --user-group sysadmins --server-group producao --level sudo
+adminforge permission grant --user-group sysadmins --server-group producao --level sudo
 ```
 
 ## 5. Preview e apply
