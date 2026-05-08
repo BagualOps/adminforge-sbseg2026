@@ -145,11 +145,11 @@ def cmd_ug_create(args: argparse.Namespace) -> int:
 
 
 def cmd_ug_add_member(args: argparse.Namespace) -> int:
-    return ui.imprimir_resultado(_nucleo(args).adicionar_membro_grupo_user(args.group, args.username))
+    return ui.imprimir_resultado(_nucleo(args).adicionar_membros_grupo_user(args.group, args.username))
 
 
 def cmd_ug_remove_member(args: argparse.Namespace) -> int:
-    return ui.imprimir_resultado(_nucleo(args).remover_membro_grupo_user(args.group, args.username))
+    return ui.imprimir_resultado(_nucleo(args).remover_membros_grupo_user(args.group, args.username))
 
 
 def cmd_ug_delete(args: argparse.Namespace) -> int:
@@ -240,11 +240,11 @@ def cmd_sg_create(args: argparse.Namespace) -> int:
 
 
 def cmd_sg_add(args: argparse.Namespace) -> int:
-    return ui.imprimir_resultado(_nucleo(args).adicionar_membro_grupo_servidor(args.group, args.hostname))
+    return ui.imprimir_resultado(_nucleo(args).adicionar_membros_grupo_servidor(args.group, args.hostname))
 
 
 def cmd_sg_rm(args: argparse.Namespace) -> int:
-    return ui.imprimir_resultado(_nucleo(args).remover_membro_grupo_servidor(args.group, args.hostname))
+    return ui.imprimir_resultado(_nucleo(args).remover_membros_grupo_servidor(args.group, args.hostname))
 
 
 def cmd_sg_delete(args: argparse.Namespace) -> int:
@@ -508,12 +508,12 @@ def _build_parser() -> argparse.ArgumentParser:
 
     a = s_ug.add_parser("add-member")
     a.add_argument("--group", required=True)
-    a.add_argument("--username", required=True)
+    a.add_argument("--username", required=True, nargs="+", help="um ou mais usernames")
     a.set_defaults(func=cmd_ug_add_member)
 
     a = s_ug.add_parser("remove-member")
     a.add_argument("--group", required=True)
-    a.add_argument("--username", required=True)
+    a.add_argument("--username", required=True, nargs="+", help="um ou mais usernames")
     a.set_defaults(func=cmd_ug_remove_member)
 
     a = s_ug.add_parser("delete")
@@ -556,12 +556,12 @@ def _build_parser() -> argparse.ArgumentParser:
 
     a = s_sg.add_parser("add-member")
     a.add_argument("--group", required=True)
-    a.add_argument("--hostname", required=True)
+    a.add_argument("--hostname", required=True, nargs="+", help="um ou mais hostnames")
     a.set_defaults(func=cmd_sg_add)
 
     a = s_sg.add_parser("remove-member")
     a.add_argument("--group", required=True)
-    a.add_argument("--hostname", required=True)
+    a.add_argument("--hostname", required=True, nargs="+", help="um ou mais hostnames")
     a.set_defaults(func=cmd_sg_rm)
 
     a = s_sg.add_parser("delete")

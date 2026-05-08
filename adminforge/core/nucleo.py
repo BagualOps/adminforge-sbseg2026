@@ -166,32 +166,43 @@ class Nucleo:
             return self._registrar_falha(op, str(e))
 
     def adicionar_membro_grupo_user(self, grupo: str, username: str) -> Operacao:
-        op = self._nova_op(f"user-group add-member {grupo} {username}")
+        return self.adicionar_membros_grupo_user(grupo, [username])
+
+    def adicionar_membros_grupo_user(self, grupo: str, usernames: list[str]) -> Operacao:
+        op = self._nova_op(f"user-group add-member {grupo} {' '.join(usernames)}")
         try:
             with self.store:
                 g = self.store.get_grupo_user(grupo)
                 if not g:
                     raise NaoExiste(f"grupo '{grupo}' nao existe")
-                if not self.store.get_user(username):
-                    raise NaoExiste(f"user '{username}' nao existe")
-                if username in g.membros:
+                inexistentes = [u for u in usernames if not self.store.get_user(u)]
+                if inexistentes:
+                    raise NaoExiste(f"users inexistentes: {', '.join(inexistentes)}")
+                membros = set(g.membros)
+                membros.update(usernames)
+                if membros == set(g.membros):
                     return self._registrar(op, StatusOperacao.SUCESSO)
-                g.membros = sorted({*g.membros, username})
+                g.membros = sorted(membros)
                 self.store.save_grupo_user(g)
                 return self._registrar(op, StatusOperacao.SUCESSO)
         except Exception as e:
             return self._registrar_falha(op, str(e))
 
     def remover_membro_grupo_user(self, grupo: str, username: str) -> Operacao:
-        op = self._nova_op(f"user-group remove-member {grupo} {username}")
+        return self.remover_membros_grupo_user(grupo, [username])
+
+    def remover_membros_grupo_user(self, grupo: str, usernames: list[str]) -> Operacao:
+        op = self._nova_op(f"user-group remove-member {grupo} {' '.join(usernames)}")
         try:
             with self.store:
                 g = self.store.get_grupo_user(grupo)
                 if not g:
                     raise NaoExiste(f"grupo '{grupo}' nao existe")
-                if username not in g.membros:
+                alvo = set(usernames)
+                novos = [m for m in g.membros if m not in alvo]
+                if novos == g.membros:
                     return self._registrar(op, StatusOperacao.SUCESSO)
-                g.membros = [m for m in g.membros if m != username]
+                g.membros = novos
                 self.store.save_grupo_user(g)
                 return self._registrar(op, StatusOperacao.SUCESSO)
         except Exception as e:
@@ -273,32 +284,43 @@ class Nucleo:
             return self._registrar_falha(op, str(e))
 
     def adicionar_membro_grupo_servidor(self, grupo: str, hostname: str) -> Operacao:
-        op = self._nova_op(f"server-group add-member {grupo} {hostname}")
+        return self.adicionar_membros_grupo_servidor(grupo, [hostname])
+
+    def adicionar_membros_grupo_servidor(self, grupo: str, hostnames: list[str]) -> Operacao:
+        op = self._nova_op(f"server-group add-member {grupo} {' '.join(hostnames)}")
         try:
             with self.store:
                 g = self.store.get_grupo_servidor(grupo)
                 if not g:
                     raise NaoExiste(f"grupo '{grupo}' nao existe")
-                if not self.store.get_servidor(hostname):
-                    raise NaoExiste(f"servidor '{hostname}' nao existe")
-                if hostname in g.membros:
+                inexistentes = [h for h in hostnames if not self.store.get_servidor(h)]
+                if inexistentes:
+                    raise NaoExiste(f"servidores inexistentes: {', '.join(inexistentes)}")
+                membros = set(g.membros)
+                membros.update(hostnames)
+                if membros == set(g.membros):
                     return self._registrar(op, StatusOperacao.SUCESSO)
-                g.membros = sorted({*g.membros, hostname})
+                g.membros = sorted(membros)
                 self.store.save_grupo_servidor(g)
                 return self._registrar(op, StatusOperacao.SUCESSO)
         except Exception as e:
             return self._registrar_falha(op, str(e))
 
     def remover_membro_grupo_servidor(self, grupo: str, hostname: str) -> Operacao:
-        op = self._nova_op(f"server-group remove-member {grupo} {hostname}")
+        return self.remover_membros_grupo_servidor(grupo, [hostname])
+
+    def remover_membros_grupo_servidor(self, grupo: str, hostnames: list[str]) -> Operacao:
+        op = self._nova_op(f"server-group remove-member {grupo} {' '.join(hostnames)}")
         try:
             with self.store:
                 g = self.store.get_grupo_servidor(grupo)
                 if not g:
                     raise NaoExiste(f"grupo '{grupo}' nao existe")
-                if hostname not in g.membros:
+                alvo = set(hostnames)
+                novos = [m for m in g.membros if m not in alvo]
+                if novos == g.membros:
                     return self._registrar(op, StatusOperacao.SUCESSO)
-                g.membros = [m for m in g.membros if m != hostname]
+                g.membros = novos
                 self.store.save_grupo_servidor(g)
                 return self._registrar(op, StatusOperacao.SUCESSO)
         except Exception as e:

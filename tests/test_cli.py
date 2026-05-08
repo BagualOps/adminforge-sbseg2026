@@ -68,6 +68,20 @@ def test_cli_fluxo_basico(env):
     assert "integra" in out.lower() or "OK" in out
 
 
+def test_cli_add_member_n_de_uma_vez(env):
+    rc, _ = run_cli(["user", "add", "--username", "alice", "--name", "A", "--email", "a@e.com"])
+    assert rc == 0
+    rc, _ = run_cli(["user", "add", "--username", "bob", "--name", "B", "--email", "b@e.com"])
+    assert rc == 0
+    rc, _ = run_cli(["user-group", "create", "--name", "sa"])
+    assert rc == 0
+    rc, _ = run_cli(["user-group", "add-member", "--group", "sa", "--username", "alice", "bob"])
+    assert rc == 0
+    rc, out = run_cli(["user-group", "list"])
+    assert rc == 0
+    assert "alice" in out and "bob" in out
+
+
 def test_cli_help(env, capsys):
     with pytest.raises(SystemExit) as exc:
         main(["--help"])

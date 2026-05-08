@@ -88,3 +88,33 @@ def test_excluir_servidor_remove_de_grupos(nucleo: Nucleo):
     nucleo.excluir_servidor("web-01")
     g = nucleo.store.get_grupo_servidor("prod")
     assert "web-01" not in g.membros
+
+
+def test_adicionar_n_membros_de_uma_vez(nucleo: Nucleo):
+    nucleo.cadastrar_user("alice", "Alice", "a@e.com")
+    nucleo.cadastrar_user("bob", "Bob", "b@e.com")
+    nucleo.cadastrar_user("carla", "Carla", "c@e.com")
+    nucleo.criar_grupo_user("sa")
+    op = nucleo.adicionar_membros_grupo_user("sa", ["alice", "bob", "carla"])
+    assert op.status == StatusOperacao.SUCESSO
+    g = nucleo.store.get_grupo_user("sa")
+    assert g.membros == ["alice", "bob", "carla"]
+
+
+def test_n_membros_falha_atomica_se_um_inexiste(nucleo: Nucleo):
+    nucleo.cadastrar_user("alice", "Alice", "a@e.com")
+    nucleo.criar_grupo_user("sa")
+    op = nucleo.adicionar_membros_grupo_user("sa", ["alice", "fantasma"])
+    assert op.status == StatusOperacao.FALHA
+    g = nucleo.store.get_grupo_user("sa")
+    assert g.membros == []
+
+
+def test_remover_n_membros_de_uma_vez(nucleo: Nucleo):
+    for u in ("alice", "bob", "carla"):
+        nucleo.cadastrar_user(u, u.title(), f"{u}@e.com")
+    nucleo.criar_grupo_user("sa")
+    nucleo.adicionar_membros_grupo_user("sa", ["alice", "bob", "carla"])
+    nucleo.remover_membros_grupo_user("sa", ["alice", "carla"])
+    g = nucleo.store.get_grupo_user("sa")
+    assert g.membros == ["bob"]
