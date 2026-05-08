@@ -104,6 +104,28 @@ Pra instalar como comando do sistema (opcional):
 pipx install .            # ou: pip install --user .
 ```
 
+### Autocomplete (bash/zsh)
+
+Habilitar tab-complete para subcomandos e flags:
+
+```bash
+pipx install '.[completion]'                    # ou: pip install '.[completion]'
+activate-global-python-argcomplete              # registra eval em /etc/bash_completion.d
+```
+
+Para ativar só para o usuário atual em bash:
+
+```bash
+eval "$(register-python-argcomplete adminforge)"
+```
+
+Em zsh, adicione ao `.zshrc`:
+
+```bash
+autoload -U bashcompinit && bashcompinit
+eval "$(register-python-argcomplete adminforge)"
+```
+
 Receitário completo por caso de uso: [`docs/USAGE.md`](docs/USAGE.md).
 
 ## Casos de uso (UC-1 a UC-10)

@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+# PYTHON_ARGCOMPLETE_OK
 from __future__ import annotations
 
 import argparse
@@ -724,6 +726,11 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
+    try:
+        import argcomplete
+        argcomplete.autocomplete(parser)
+    except ImportError:
+        pass
     args = parser.parse_args(argv)
     try:
         return args.func(args)
