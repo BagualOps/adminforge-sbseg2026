@@ -41,11 +41,10 @@ Detalhes em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#zero-deps).
 | 5 | Strategy: `SSHDeployer` (real) e `DryRunDeployer` (testes) | ✅ |
 | 6 | Lockfile (`fcntl.flock`) — exclusão mútua entre operadores | ✅ |
 | 7 | Histórico append-only com cadeia SHA256; `verify` aponta divergência | ✅ |
-| 8 | Backup `authorized_keys.bak` antes da edição | M-2 |
-| 9 | Sudoers configurável por comando (não só `NOPASSWD:ALL`) | M-2 |
-| 10 | `apply verify` — confere `chaves_instaladas` declaradas vs reais | M-2 |
-| 11 | Paralelismo + taxa-falha-máxima no Deployer | M-2 |
-| 12 | `apply --diff` mostra antes/depois do `authorized_keys` | M-2 |
+| 8 | Backup `authorized_keys.bak` antes da edição | ✅ |
+| 9 | Sudoers configurável por comando via `sudo-profile` (alternativa a `NOPASSWD:ALL`) | ✅ |
+| 10 | `apply verify` — confere `chaves_instaladas` declaradas vs reais | ✅ |
+| 11 | `apply --diff` mostra antes/depois do `authorized_keys` | ✅ |
 
 ## Princípios
 
