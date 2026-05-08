@@ -15,9 +15,9 @@ CLI Python para gestão de identidades privilegiadas em frotas de servidores Lin
 
 | Camada | Antes | Agora | Variação |
 |--------|-------|-------|----------|
-| Código nosso (produção) | 2.429 LOC | 3.378 LOC | +949 (+39%) |
+| Código nosso (produção) | 2.429 LOC | 3.689 LOC | +1.260 (+52%) |
 | Dependências de runtime obrigatórias | ~56.000 LOC (paramiko, click, PyYAML, cryptography, …) | **0** | **-100%** |
-| Total executado (sem extras) | ~58.400 LOC | 3.378 LOC | **-94%** |
+| Total executado (sem extras) | ~58.400 LOC | 3.689 LOC | **-94%** |
 | Extra opcional `completion` | — | +2.200 LOC (`argcomplete`) | opt-in |
 
 Crescimento em relação ao protótipo inicial vem do refactor de UX e endurecimento do `apply`: `dump`, métodos plurais no Núcleo (N membros), autocomplete com completers dinâmicos, `audit server` estendido (grupos/sudoers/drift), `permission` CRUD, `sudo-profile`, `apply --diff` e `apply verify`.
@@ -153,8 +153,11 @@ Receitário completo por caso de uso: [`docs/USAGE.md`](docs/USAGE.md).
 | UC-8  | `adminforge apply` (`--diff`, `verify`)                | Propaga o delta via SSH (sequencial). `--diff` mostra antes/depois; `apply verify` confere declarado vs real. |
 | UC-9  | `adminforge history list/show/failed/verify`           | Auditoria do que o Superadmin fez. |
 | UC-10 | `adminforge audit server`                              | Inspeção read-only: usuários classificados, grupos, mapa user×grupos, sudoers (com drift), serviços. |
+| —     | `adminforge status`                                    | Overview tipo `git status`: contagens, pendências do próximo `apply`, última operação, integridade do histórico. |
+| —     | `adminforge permission show --user\|--user-group\|--server-group` | Query reversa: a que servidores um usuário chega, ou quem alcança um grupo. |
 | —     | `adminforge dump --format json\|table`                 | Lista o estado declarado completo de uma vez. |
 | —     | `adminforge sudo-profile create/list/show/delete`      | Perfis nomeados de comandos sudo (alternativa a `NOPASSWD:ALL`). |
+| —     | Todos os `list` aceitam `--format json`                | Para scripts/jq. |
 
 ## Segurança
 

@@ -224,6 +224,96 @@ def test_cli_permission_list_update_delete(env):
     assert "sa" not in out or "prod" not in out
 
 
+def test_cli_list_format_json(env):
+    run_cli(["user", "add", "--username", "alice", "--name", "A", "--email", "a@e.com"])
+    run_cli(["user", "add", "--username", "bob", "--name", "B", "--email", "b@e.com"])
+
+    import json as _json
+    rc, out = run_cli(["user", "list", "--format", "json"])
+    assert rc == 0
+    data = _json.loads(out)
+    assert {u["username"] for u in data} == {"alice", "bob"}
+
+    # vazio retorna []
+    rc, out = run_cli(["server-group", "list", "--format", "json"])
+    assert rc == 0
+    assert _json.loads(out) == []
+
+    # history
+    rc, out = run_cli(["history", "list", "--format", "json"])
+    assert rc == 0
+    ops = _json.loads(out)
+    assert len(ops) >= 2
+    assert all("command" in op and "status" in op for op in ops)
+
+
+def test_cli_status_estado_vazio(env):
+    rc, out = run_cli(["status"])
+    assert rc == 0
+    assert "0 users" in out
+    assert "no pending changes" in out
+    assert "no operations yet" in out
+    assert "Empty state" in out  # hint pro proximo passo
+
+
+def test_cli_status_com_pendencia_e_json(env):
+    run_cli(["user", "add", "--username", "alice", "--name", "A", "--email", "a@e.com"])
+    run_cli(["user", "key", "add", "--username", "alice", "--string", CHAVE_ALICE])
+    run_cli(["user-group", "create", "--name", "sa"])
+    run_cli(["user-group", "add-member", "--group", "sa", "--username", "alice"])
+    run_cli(["server", "add", "--hostname", "web-01", "--ip", "10.0.0.10", "--host-key", HOST_KEY_FAKE])
+    run_cli(["server-group", "create", "--name", "prod"])
+    run_cli(["server-group", "add-member", "--group", "prod", "--hostname", "web-01"])
+    run_cli(["grant", "--user-group", "sa", "--server-group", "prod", "--level", "shell"])
+
+    rc, out = run_cli(["status"])
+    assert rc == 0
+    assert "1 users" in out and "1 servers" in out and "1 permissions" in out
+    assert "sub-action" in out  # tem pendencia
+
+    import json as _json
+    rc, out = run_cli(["status", "--format", "json"])
+    assert rc == 0
+    j = _json.loads(out)
+    assert j["counts"]["users"] == 1
+    assert j["pending"]["subactions"] >= 1
+    assert j["history_chain"]["ok"] is True
+
+
+def test_cli_permission_show_user_servers_acessiveis(env):
+    for u in ("alice", "bob"):
+        run_cli(["user", "add", "--username", u, "--name", u.title(), "--email", f"{u}@e.com"])
+    run_cli(["user-group", "create", "--name", "sa"])
+    run_cli(["user-group", "add-member", "--group", "sa", "--username", "alice"])
+    run_cli(["server", "add", "--hostname", "web-01", "--ip", "10.0.0.1", "--host-key", "x"])
+    run_cli(["server", "add", "--hostname", "web-02", "--ip", "10.0.0.2", "--host-key", "x"])
+    run_cli(["server-group", "create", "--name", "prod"])
+    run_cli(["server-group", "add-member", "--group", "prod", "--hostname", "web-01,web-02"])
+    run_cli(["grant", "--user-group", "sa", "--server-group", "prod", "--level", "sudo"])
+
+    rc, out = run_cli(["permission", "show", "--user", "alice"])
+    assert rc == 0
+    assert "web-01" in out and "web-02" in out
+    assert "sudo" in out
+
+    # bob nao esta em grupo nenhum -> sem acesso, mostra hint
+    rc, out = run_cli(["permission", "show", "--user", "bob"])
+    assert rc == 0
+    assert "no servers accessible" in out
+    assert "user-group add-member" in out
+
+    rc, out = run_cli(["permission", "show", "--user", "ghost"])
+    assert rc == 2
+    assert "does not exist" in out
+
+
+def test_cli_permission_show_exige_um_dos_filtros(env):
+    # mutually_exclusive_group(required=True) faz argparse chamar sys.exit(2)
+    with pytest.raises(SystemExit) as exc:
+        run_cli(["permission", "show"])
+    assert exc.value.code == 2
+
+
 def test_cli_help(env, capsys):
     with pytest.raises(SystemExit) as exc:
         main(["--help"])
