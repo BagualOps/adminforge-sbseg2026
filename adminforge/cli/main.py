@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 from pathlib import Path
@@ -414,6 +415,97 @@ def cmd_history_verify(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Dump global
+# ---------------------------------------------------------------------------
+def _coletar_estado(nucleo: Nucleo) -> dict:
+    return {
+        "users": [
+            {
+                "username": u.username,
+                "name": u.nome,
+                "email": u.email,
+                "status": u.status.value,
+                "credentials": [
+                    {"fingerprint": c.fingerprint, "status": c.status.value}
+                    for c in nucleo.store.list_credenciais(u.username)
+                ],
+            }
+            for u in nucleo.store.list_users()
+        ],
+        "user_groups": [
+            {"name": g.nome, "members": list(g.membros)}
+            for g in nucleo.store.list_grupos_user()
+        ],
+        "servers": [
+            {
+                "hostname": s.hostname,
+                "ipv4": s.ipv4,
+                "port": s.porta_ssh,
+                "host_key": s.chave_host,
+                "installed_keys": list(s.chaves_instaladas),
+            }
+            for s in nucleo.store.list_servidores()
+        ],
+        "server_groups": [
+            {"name": g.nome, "members": list(g.membros)}
+            for g in nucleo.store.list_grupos_servidor()
+        ],
+        "permissions": [
+            {
+                "user_group": p.grupo_user,
+                "server_group": p.grupo_servidor,
+                "level": p.nivel.value,
+            }
+            for p in nucleo.store.list_permissoes()
+        ],
+    }
+
+
+def cmd_dump(args: argparse.Namespace) -> int:
+    estado = _coletar_estado(_nucleo(args))
+    if args.format == "json":
+        print(json.dumps(estado, indent=2, ensure_ascii=False))
+        return 0
+
+    ui.heading(f"Users ({len(estado['users'])})")
+    ui.tabela(
+        ["USERNAME", "NOME", "EMAIL", "STATUS", "CHAVES"],
+        [
+            [u["username"], u["name"], u["email"], u["status"], str(len(u["credentials"]))]
+            for u in estado["users"]
+        ],
+    )
+
+    ui.heading(f"User groups ({len(estado['user_groups'])})")
+    ui.tabela(
+        ["NOME", "MEMBROS"],
+        [[g["name"], ", ".join(g["members"]) or "-"] for g in estado["user_groups"]],
+    )
+
+    ui.heading(f"Servers ({len(estado['servers'])})")
+    ui.tabela(
+        ["HOSTNAME", "IPV4", "PORTA", "CHAVES_INSTALADAS"],
+        [
+            [s["hostname"], s["ipv4"], str(s["port"]), str(len(s["installed_keys"]))]
+            for s in estado["servers"]
+        ],
+    )
+
+    ui.heading(f"Server groups ({len(estado['server_groups'])})")
+    ui.tabela(
+        ["NOME", "MEMBROS"],
+        [[g["name"], ", ".join(g["members"]) or "-"] for g in estado["server_groups"]],
+    )
+
+    ui.heading(f"Permissions ({len(estado['permissions'])})")
+    ui.tabela(
+        ["USER_GROUP", "SERVER_GROUP", "LEVEL"],
+        [[p["user_group"], p["server_group"], p["level"]] for p in estado["permissions"]],
+    )
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # UC-10: audit server
 # ---------------------------------------------------------------------------
 def cmd_audit_server(args: argparse.Namespace) -> int:
@@ -582,6 +674,11 @@ def _build_parser() -> argparse.ArgumentParser:
     a.add_argument("--user-group", dest="user_group", required=True)
     a.add_argument("--server-group", dest="server_group", required=True)
     a.set_defaults(func=cmd_revoke)
+
+    # dump
+    a = sub.add_parser("dump", help="Lista o estado declarado completo (users, grupos, servidores, permissoes).")
+    a.add_argument("--format", choices=["table", "json"], default="table")
+    a.set_defaults(func=cmd_dump)
 
     # preview
     a = sub.add_parser("preview", help="Mostra o delta sem aplicar.")
