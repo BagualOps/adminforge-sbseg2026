@@ -216,6 +216,19 @@ class SSHDeployer(IDeployer):
                 f"(would otherwise silently grant full sudo)"
             )
         else:
+            # defense-in-depth: revalida no ponto de gravacao. State editado a mao
+            # poderia conter path relativo ou control char nao detectado pelo Nucleo.
+            for c in comandos:
+                if not c.startswith("/"):
+                    raise RuntimeError(
+                        f"refusing to write sudoers for '{username}': "
+                        f"command must be absolute path: {c!r}"
+                    )
+                if any(ch in c for ch in ("\n", "\r", "\x00")):
+                    raise RuntimeError(
+                        f"refusing to write sudoers for '{username}': "
+                        f"command contains forbidden control character: {c!r}"
+                    )
             corpo = "\n".join(
                 f"{username} ALL=(ALL) NOPASSWD: {c}" for c in comandos
             ) + "\n"

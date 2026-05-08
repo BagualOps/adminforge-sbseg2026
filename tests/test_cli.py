@@ -105,6 +105,35 @@ def test_cli_add_member_misto_virgula_e_espaco(env):
         assert u in out
 
 
+def test_cli_apply_diff_resiliente_a_ssh_quebrado(env, monkeypatch):
+    """Regressao: erro de SSH em um host nao pode abortar o diff dos demais."""
+    run_cli(["user", "add", "--username", "alice", "--name", "A", "--email", "a@e.com"])
+    run_cli(["user", "key", "add", "--username", "alice", "--string", CHAVE_ALICE])
+    run_cli(["user-group", "create", "--name", "sa"])
+    run_cli(["user-group", "add-member", "--group", "sa", "--username", "alice"])
+    run_cli(["server", "add", "--hostname", "web-01", "--ip", "10.0.0.10", "--host-key", HOST_KEY_FAKE])
+    run_cli(["server", "add", "--hostname", "web-02", "--ip", "10.0.0.11", "--host-key", HOST_KEY_FAKE])
+    run_cli(["server-group", "create", "--name", "prod"])
+    run_cli(["server-group", "add-member", "--group", "prod", "--hostname", "web-01,web-02"])
+    run_cli(["grant", "--user-group", "sa", "--server-group", "prod", "--level", "shell"])
+
+    from adminforge.deployer.dry_run import DryRunDeployer
+
+    original = DryRunDeployer.ler_authorized_keys
+
+    def quebra_no_web01(self, servidor, username):
+        if servidor.hostname == "web-01":
+            raise RuntimeError("ssh: connect failed")
+        return original(self, servidor, username)
+
+    monkeypatch.setattr(DryRunDeployer, "ler_authorized_keys", quebra_no_web01)
+
+    rc, out = run_cli(["apply", "--yes", "--dry-run", "--diff"])
+    # mesmo com erro em web-01, web-02 ainda deve aparecer no diff
+    assert "ssh: connect failed" in out
+    assert "web-02:alice" in out
+
+
 def test_cli_apply_verify_dry_run(env):
     # cenario: estado declarado, DryRun.ler_authorized_keys == "" => tudo divergente
     run_cli(["user", "add", "--username", "alice", "--name", "A", "--email", "a@e.com"])

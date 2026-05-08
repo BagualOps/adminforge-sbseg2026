@@ -389,14 +389,19 @@ def _imprimir_diff(nucleo: Nucleo, subacoes: list) -> None:
         servidor = nucleo.store.get_servidor(hostname)
         if servidor is None:
             continue
-        atual = nucleo.deployer.ler_authorized_keys(servidor, username)
+        ui.secho(f"  {hostname}:{username}", bold=True)
+        # ler_authorized_keys pode falhar (ssh, host_key etc); nao deve abortar o diff dos demais.
+        try:
+            atual = nucleo.deployer.ler_authorized_keys(servidor, username)
+        except Exception as e:
+            ui.fail(f"    ssh: {e}")
+            continue
         novo = atual
         for s in lote:
             if s.acao == TipoAcao.ADICIONAR_CHAVE and s.chave_publica and s.credencial:
                 novo = ak.substituir_bloco(novo, s.credencial, ak.bloco(s.credencial, s.chave_publica))
             elif s.acao == TipoAcao.REMOVER_CHAVE and s.credencial:
                 novo = ak.substituir_bloco(novo, s.credencial, "")
-        ui.secho(f"  {hostname}:{username}", bold=True)
         for linha in difflib.unified_diff(
             atual.splitlines(), novo.splitlines(),
             fromfile="current", tofile="planned", lineterm="",
@@ -454,12 +459,18 @@ def cmd_apply_verify(args: argparse.Namespace) -> int:
             continue
 
         for ref, username in sorted(esperado.items()):
-            if ref in real:
-                ui.ok(f"  {username:20} {ref}")
-                total_ok += 1
-            else:
+            real_user = real.get(ref)
+            if real_user is None:
                 ui.fail(f"  {username:20} {ref} — declared but not present on server")
                 total_div += 1
+            elif real_user != username:
+                ui.fail(
+                    f"  {username:20} {ref} — declared under {username!r} but found under {real_user!r}"
+                )
+                total_div += 1
+            else:
+                ui.ok(f"  {username:20} {ref}")
+                total_ok += 1
         for ref, username in sorted(real.items()):
             if ref not in esperado:
                 ui.warn(f"  {username:20} {ref} — block on server but not in state")
