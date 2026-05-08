@@ -253,6 +253,29 @@ No fim, seção **Alerts** sinaliza heurísticas:
 
 ---
 
+## Comandos de visão rápida
+
+```bash
+adminforge status                           # overview tipo git status
+adminforge permission show --user alice     # a que servidores alice acessa
+adminforge permission show --user-group sa  # o que o user-group concede
+adminforge permission show --server-group prod   # quem tem acesso ao server-group
+```
+
+`status` mostra: contagens, pendências do próximo `apply`, última operação registrada e integridade da cadeia SHA-256 do histórico. Útil para sessão diária — como `git status`.
+
+`permission show --user X` resolve grupos × permissões e responde **a que servidores X efetivamente chega, com qual nível e por qual grupo**.
+
+Todos os `list` e `show` aceitam `--format json` para integração com `jq`/scripts:
+
+```bash
+adminforge user list --format json | jq '.[].username'
+adminforge permission show --user alice --format json
+adminforge status --format json
+```
+
+---
+
 ## Globals e variáveis de ambiente
 
 | Variável                  | Padrão                        | Para que serve |
