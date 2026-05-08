@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 from adminforge import __version__
-from adminforge.cli import ui
+from adminforge.cli import completers, ui
 from adminforge.core.nucleo import Nucleo
 from adminforge.domain import (
     NivelPermissao,
@@ -580,10 +580,10 @@ def _build_parser() -> argparse.ArgumentParser:
     a = s_user.add_parser("list", help="Lista usuarios.")
     a.set_defaults(func=cmd_user_list)
     a = s_user.add_parser("show", help="Detalha usuario.")
-    a.add_argument("--username", required=True)
+    a.add_argument("--username", required=True).completer = completers.usernames
     a.set_defaults(func=cmd_user_show)
     a = s_user.add_parser("disable", help="Desabilita usuario.")
-    a.add_argument("--username", required=True)
+    a.add_argument("--username", required=True).completer = completers.usernames
     a.add_argument("--yes", action="store_true")
     a.set_defaults(func=cmd_user_disable)
 
@@ -591,15 +591,15 @@ def _build_parser() -> argparse.ArgumentParser:
     p_uk = s_user.add_parser("key", help="Cadastro e revogacao de chaves SSH do usuario.")
     s_uk = p_uk.add_subparsers(dest="key_sub", required=True)
     a = s_uk.add_parser("add", help="Cadastra chave SSH.")
-    a.add_argument("--username", required=True)
+    a.add_argument("--username", required=True).completer = completers.usernames
     a.add_argument("--file", help="Caminho de um .pub.")
     a.add_argument("--string", help="Cola a chave inteira.")
     a.set_defaults(func=cmd_user_key_add)
     a = s_uk.add_parser("revoke", help="Revoga chave por fingerprint.")
-    a.add_argument("--fingerprint", required=True)
+    a.add_argument("--fingerprint", required=True).completer = completers.fingerprints
     a.set_defaults(func=cmd_user_key_revoke)
     a = s_uk.add_parser("list", help="Lista chaves do usuario.")
-    a.add_argument("--username", required=True)
+    a.add_argument("--username", required=True).completer = completers.usernames
     a.set_defaults(func=cmd_user_key_list)
 
     # user-group
@@ -621,17 +621,17 @@ def _build_parser() -> argparse.ArgumentParser:
     a.set_defaults(func=cmd_ug_create)
 
     a = s_ug.add_parser("add-member")
-    a.add_argument("--group", required=True)
-    a.add_argument("--username", required=True, nargs="+", help="um ou mais usernames")
+    a.add_argument("--group", required=True).completer = completers.user_groups
+    a.add_argument("--username", required=True, nargs="+", help="um ou mais usernames").completer = completers.usernames
     a.set_defaults(func=cmd_ug_add_member)
 
     a = s_ug.add_parser("remove-member")
-    a.add_argument("--group", required=True)
-    a.add_argument("--username", required=True, nargs="+", help="um ou mais usernames")
+    a.add_argument("--group", required=True).completer = completers.user_groups
+    a.add_argument("--username", required=True, nargs="+", help="um ou mais usernames").completer = completers.usernames
     a.set_defaults(func=cmd_ug_remove_member)
 
     a = s_ug.add_parser("delete")
-    a.add_argument("--name", required=True)
+    a.add_argument("--name", required=True).completer = completers.user_groups
     a.set_defaults(func=cmd_ug_delete)
 
     a = s_ug.add_parser("list")
@@ -663,11 +663,11 @@ def _build_parser() -> argparse.ArgumentParser:
     a.set_defaults(func=cmd_server_list)
 
     a = s_server.add_parser("show")
-    a.add_argument("--hostname", required=True)
+    a.add_argument("--hostname", required=True).completer = completers.hostnames
     a.set_defaults(func=cmd_server_show)
 
     a = s_server.add_parser("remove")
-    a.add_argument("--hostname", required=True)
+    a.add_argument("--hostname", required=True).completer = completers.hostnames
     a.add_argument("--yes", action="store_true")
     a.set_defaults(func=cmd_server_remove)
 
@@ -689,17 +689,17 @@ def _build_parser() -> argparse.ArgumentParser:
     a.set_defaults(func=cmd_sg_create)
 
     a = s_sg.add_parser("add-member")
-    a.add_argument("--group", required=True)
-    a.add_argument("--hostname", required=True, nargs="+", help="um ou mais hostnames")
+    a.add_argument("--group", required=True).completer = completers.server_groups
+    a.add_argument("--hostname", required=True, nargs="+", help="um ou mais hostnames").completer = completers.hostnames
     a.set_defaults(func=cmd_sg_add)
 
     a = s_sg.add_parser("remove-member")
-    a.add_argument("--group", required=True)
-    a.add_argument("--hostname", required=True, nargs="+", help="um ou mais hostnames")
+    a.add_argument("--group", required=True).completer = completers.server_groups
+    a.add_argument("--hostname", required=True, nargs="+", help="um ou mais hostnames").completer = completers.hostnames
     a.set_defaults(func=cmd_sg_rm)
 
     a = s_sg.add_parser("delete")
-    a.add_argument("--name", required=True)
+    a.add_argument("--name", required=True).completer = completers.server_groups
     a.set_defaults(func=cmd_sg_delete)
 
     a = s_sg.add_parser("list")
@@ -707,14 +707,14 @@ def _build_parser() -> argparse.ArgumentParser:
 
     # grant / revoke
     a = sub.add_parser("grant", help="Concede acesso de grupo de usuarios a grupo de servidores.")
-    a.add_argument("--user-group", dest="user_group", required=True)
-    a.add_argument("--server-group", dest="server_group", required=True)
+    a.add_argument("--user-group", dest="user_group", required=True).completer = completers.user_groups
+    a.add_argument("--server-group", dest="server_group", required=True).completer = completers.server_groups
     a.add_argument("--level", choices=["shell", "sudo"], required=True)
     a.set_defaults(func=cmd_grant)
 
     a = sub.add_parser("revoke", help="Revoga acesso entre dois grupos.")
-    a.add_argument("--user-group", dest="user_group", required=True)
-    a.add_argument("--server-group", dest="server_group", required=True)
+    a.add_argument("--user-group", dest="user_group", required=True).completer = completers.user_groups
+    a.add_argument("--server-group", dest="server_group", required=True).completer = completers.server_groups
     a.set_defaults(func=cmd_revoke)
 
     # dump
@@ -755,7 +755,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p_audit = sub.add_parser("audit", help="Auditoria operacional (read-only via SSH).")
     s_audit = p_audit.add_subparsers(dest="sub", required=True)
     a = s_audit.add_parser("server", help="Inspeciona usuarios e servicos do servidor.")
-    a.add_argument("--hostname", required=True)
+    a.add_argument("--hostname", required=True).completer = completers.hostnames
     a.add_argument("--user", help="Destaca ocorrencias do usuario.")
     a.add_argument("--service", help="Destaca ocorrencias do servico.")
     a.add_argument("--dry-run", action="store_true")

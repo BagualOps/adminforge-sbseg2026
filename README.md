@@ -106,7 +106,8 @@ pipx install .            # ou: pip install --user .
 
 ### Autocomplete (bash/zsh)
 
-Habilitar tab-complete para subcomandos e flags:
+Habilitar tab-complete para subcomandos, flags **e valores cadastrados**
+(usernames, grupos, hostnames, fingerprints lidos do `state/`):
 
 ```bash
 pipx install '.[completion]'                    # ou: pip install '.[completion]'
