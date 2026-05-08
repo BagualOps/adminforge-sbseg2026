@@ -7,20 +7,20 @@ CLI Python para gestão de identidades privilegiadas em frotas de servidores Lin
 ## Estado do projeto
 
 - **M-0** Modelagem v1 — [`docs/modelagem-v1.pdf`](docs/modelagem-v1.pdf)
-- **M-1** Protótipo Python — **este repositório** (10/10 UCs implementados, 52 testes passando, integration test em Docker no CI)
-- **M-2** Robustez — retentativa automática, `apply verify`, cifragem seletiva
+- **M-1** Protótipo Python — **este repositório** (10/10 UCs implementados, 59 testes passando, integration test em Docker no CI)
+- **M-2** Robustez — retentativa automática, cifragem seletiva
 - **M-3** Rust + modo *pull* — servidores puxam estado de repositório Git assinado
 
 ### Footprint (zero deps de runtime obrigatórias)
 
 | Camada | Antes | Agora | Variação |
 |--------|-------|-------|----------|
-| Código nosso (produção) | 2.429 LOC | 2.677 LOC | +248 (+10%) |
+| Código nosso (produção) | 2.429 LOC | 3.255 LOC | +826 (+34%) |
 | Dependências de runtime obrigatórias | ~56.000 LOC (paramiko, click, PyYAML, cryptography, …) | **0** | **-100%** |
-| Total executado (sem extras) | ~58.400 LOC | 2.677 LOC | **-95%** |
+| Total executado (sem extras) | ~58.400 LOC | 3.255 LOC | **-94%** |
 | Extra opcional `completion` | — | +2.200 LOC (`argcomplete`) | opt-in |
 
-O crescimento de produção em relação ao protótipo inicial vem do refactor de UX: comando `dump`, métodos plurais no Núcleo (N membros), `migrate-state`, autocomplete com completers dinâmicos e exemplos no help.
+Crescimento em relação ao protótipo inicial vem do refactor de UX e endurecimento do `apply`: `dump`, métodos plurais no Núcleo (N membros), autocomplete com completers dinâmicos, `audit server` estendido (grupos/sudoers/drift), `permission` CRUD, `sudo-profile`, `apply --diff` e `apply verify`.
 
 Substituições que compõem essa redução:
 
@@ -150,10 +150,11 @@ Receitário completo por caso de uso: [`docs/USAGE.md`](docs/USAGE.md).
 | UC-5  | `adminforge server-group ...`                          | Cria/edita grupo de servidores (aceita N membros). |
 | UC-6  | `adminforge grant` / `revoke` / `permission ...`       | Liga grupos com nível `shell` ou `sudo`. `permission list/update/delete` é o CRUD explícito. |
 | UC-7  | `adminforge preview`                                   | Mostra o delta sem tocar em servidores. |
-| UC-8  | `adminforge apply`                                     | Propaga o delta via SSH em paralelo. |
+| UC-8  | `adminforge apply` (`--diff`, `verify`)                | Propaga o delta via SSH (sequencial). `--diff` mostra antes/depois; `apply verify` confere declarado vs real. |
 | UC-9  | `adminforge history list/show/failed/verify`           | Auditoria do que o Superadmin fez. |
 | UC-10 | `adminforge audit server`                              | Inspeção read-only: usuários classificados, grupos, mapa user×grupos, sudoers (com drift), serviços. |
 | —     | `adminforge dump --format json\|table`                 | Lista o estado declarado completo de uma vez. |
+| —     | `adminforge sudo-profile create/list/show/delete`      | Perfis nomeados de comandos sudo (alternativa a `NOPASSWD:ALL`). |
 
 ## Segurança
 
@@ -184,7 +185,7 @@ Mais em [`docs/SECURITY.md`](docs/SECURITY.md).
 pytest -v
 ```
 
-52 testes cobrem o fluxo end-to-end e edge cases (cadeia quebrada, duplicatas, idempotência, falha parcial, no-op, lockfile concorrente, permissão 0600, N membros atômicos com vírgula/espaço, completers, audit estendido, permission CRUD).
+59 testes cobrem o fluxo end-to-end e edge cases (cadeia quebrada, duplicatas, idempotência, falha parcial, no-op, lockfile concorrente, permissão 0600, N membros atômicos com vírgula/espaço, completers, audit estendido, permission CRUD, `apply --diff` / `apply verify`, sudo profiles).
 
 ### Como usar em produção
 

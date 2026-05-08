@@ -378,7 +378,7 @@ af server show --hostname prod-web-01      # declarado
 af audit server --hostname prod-web-01     # real (read-only via SSH)
 ```
 
-`apply verify` (compara declarado × real automaticamente) é roadmap M-2.
+Para conferir automaticamente: `af apply verify` lê os blocos AdminForge reais via SSH e compara com o declarado, reportando MISSING/EXTRA por servidor (rc=2 se houver drift).
 
 ---
 

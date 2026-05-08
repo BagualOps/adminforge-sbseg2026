@@ -16,7 +16,7 @@ pytest -k "fluxo_completo" -v      # filtro
 pytest --cov=adminforge            # cobertura
 ```
 
-A suíte cobre 52 cenários: unitários por componente + fluxo end-to-end + edge cases (N membros com vírgula/espaço, completers, audit estendido, permission CRUD).
+A suíte cobre 59 cenários: unitários por componente + fluxo end-to-end + edge cases (N membros com vírgula/espaço, completers, audit estendido, permission CRUD, `apply --diff` / `apply verify`, sudo profiles).
 
 ## Lint e tipos
 

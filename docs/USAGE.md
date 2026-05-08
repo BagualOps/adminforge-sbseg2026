@@ -142,9 +142,24 @@ adminforge permission delete --user-group sysadmins --server-group producao
 ```
 
 - Mesmo par `(user_group, server_group)` é único: `grant`/`permission update` repetido **atualiza** o nível.
-- `--level sudo` instala `/etc/sudoers.d/adminforge-<username>` com `NOPASSWD:ALL`.
+- `--level sudo` (sem `--profile`) instala `/etc/sudoers.d/adminforge-<username>` com `NOPASSWD:ALL`.
+- `--level sudo --profile <nome>` restringe a regra aos comandos do perfil (ver seção *sudo-profile* abaixo).
 - `--level shell` apenas instala a chave em `~/<username>/.ssh/authorized_keys`.
-- Quando dois grupos concedem níveis diferentes, **sudo prevalece**.
+- Quando dois grupos concedem níveis diferentes, **sudo prevalece**. Quando ambos são sudo e um tem `--profile` e o outro não, **full sudo prevalece**.
+
+### sudo-profile — sudo restrito por comando
+
+```bash
+adminforge sudo-profile create --name read-logs \
+    --command /bin/journalctl --command "/bin/cat /var/log/*"
+adminforge sudo-profile list
+adminforge sudo-profile show --name read-logs
+adminforge sudo-profile delete --name read-logs    # falha se em uso
+
+adminforge grant --user-group monitoring --server-group prod --level sudo --profile read-logs
+```
+
+Comandos precisam ser caminhos absolutos (`/bin/...`, `/usr/bin/...`) — sudoers exige isso pra evitar ataque de PATH. O Núcleo rejeita o `create` se algum comando não começar com `/`. No servidor, o sudoers fica como uma linha por comando: `monitoring ALL=(ALL) NOPASSWD: /bin/journalctl`. O `visudo -cf` valida sintaxe antes do move.
 
 ---
 
@@ -175,7 +190,11 @@ db-03
 adminforge apply              # confirma antes
 adminforge apply --yes        # sem confirmacao
 adminforge apply --dry-run    # simula com DryRunDeployer
+adminforge apply --diff       # mostra unified diff do authorized_keys antes da confirmacao
+adminforge apply verify       # nao aplica nada — confere declarado vs real (rc=2 se houver drift)
 ```
+
+Antes de cada edição em `authorized_keys`, o arquivo atual é copiado para `authorized_keys.bak` (mesmo dono, `0600`). Permite rollback manual em caso de erro.
 
 Saída típica com falha parcial:
 
