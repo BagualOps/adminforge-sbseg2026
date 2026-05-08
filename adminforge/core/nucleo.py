@@ -19,6 +19,7 @@ from adminforge.domain import (
     StatusOperacao,
     StatusUser,
     Subacao,
+    SudoProfile,
     TipoAcao,
     User,
 )
@@ -45,7 +46,7 @@ class Nucleo:
         store: JsonStore,
         auditor: JsonlAuditor,
         deployer: IDeployer | None = None,
-        superadmin: str = "desconhecido",
+        superadmin: str = "unknown",
     ):
         self.store = store
         self.auditor = auditor
@@ -58,7 +59,7 @@ class Nucleo:
         cls,
         state_dir: Path,
         deployer: IDeployer | None = None,
-        superadmin: str = "desconhecido",
+        superadmin: str = "unknown",
     ) -> "Nucleo":
         store = JsonStore(state_dir)
         auditor = JsonlAuditor(state_dir / "history.jsonl")
@@ -89,13 +90,13 @@ class Nucleo:
         try:
             with self.store:
                 if not _RE_USERNAME.match(username):
-                    raise FormatoInvalido(f"username invalido: '{username}'")
+                    raise FormatoInvalido(f"invalid username: '{username}'")
                 if not nome.strip():
-                    raise FormatoInvalido("nome obrigatorio")
+                    raise FormatoInvalido("name is required")
                 if not _RE_EMAIL.match(email):
-                    raise FormatoInvalido(f"email invalido: '{email}'")
+                    raise FormatoInvalido(f"invalid email: '{email}'")
                 if self.store.get_user(username):
-                    raise JaExiste(f"username '{username}' ja existe")
+                    raise JaExiste(f"username '{username}' already exists")
                 self.store.save_user(User(username=username, nome=nome, email=email))
                 return self._registrar(op, StatusOperacao.SUCESSO)
         except Exception as e:
@@ -107,7 +108,7 @@ class Nucleo:
             with self.store:
                 user = self.store.get_user(username)
                 if not user:
-                    raise NaoExiste(f"usuario '{username}' nao existe")
+                    raise NaoExiste(f"user '{username}' does not exist")
                 user.status = StatusUser.INATIVO
                 self.store.save_user(user)
                 for cred in self.store.list_credenciais(username):
@@ -124,12 +125,12 @@ class Nucleo:
             with self.store:
                 user = self.store.get_user(username)
                 if not user:
-                    raise NaoExiste(f"usuario '{username}' nao existe")
+                    raise NaoExiste(f"user '{username}' does not exist")
                 fp = ssh_keys.fingerprint(chave_raw)
                 canonica = ssh_keys.chave_canonica(chave_raw)
                 for c in self.store.list_credenciais(username):
                     if c.fingerprint == fp:
-                        raise JaExiste(f"chave ja cadastrada para '{username}' ({fp})")
+                        raise JaExiste(f"key already registered for '{username}' ({fp})")
                 self.store.save_credencial(
                     CredencialSSH(
                         username=username, chave_publica=canonica, fingerprint=fp
@@ -145,7 +146,7 @@ class Nucleo:
             with self.store:
                 cred = self.store.get_credencial_por_fingerprint(fingerprint)
                 if not cred:
-                    raise NaoExiste(f"fingerprint '{fingerprint}' nao existe")
+                    raise NaoExiste(f"fingerprint '{fingerprint}' does not exist")
                 cred.status = StatusCredencial.REVOGADA
                 self.store.save_credencial(cred)
                 return self._registrar(op, StatusOperacao.SUCESSO)
@@ -157,9 +158,9 @@ class Nucleo:
         try:
             with self.store:
                 if not _RE_NOME_GRUPO.match(nome):
-                    raise FormatoInvalido(f"nome de grupo invalido: '{nome}'")
+                    raise FormatoInvalido(f"invalid group name: '{nome}'")
                 if self.store.get_grupo_user(nome):
-                    raise JaExiste(f"user-group '{nome}' ja existe")
+                    raise JaExiste(f"user-group '{nome}' already exists")
                 self.store.save_grupo_user(GrupoUser(nome=nome))
                 return self._registrar(op, StatusOperacao.SUCESSO)
         except Exception as e:
@@ -174,10 +175,10 @@ class Nucleo:
             with self.store:
                 g = self.store.get_grupo_user(grupo)
                 if not g:
-                    raise NaoExiste(f"grupo '{grupo}' nao existe")
+                    raise NaoExiste(f"group '{grupo}' does not exist")
                 inexistentes = [u for u in usernames if not self.store.get_user(u)]
                 if inexistentes:
-                    raise NaoExiste(f"usuarios inexistentes: {', '.join(inexistentes)}")
+                    raise NaoExiste(f"unknown users: {', '.join(inexistentes)}")
                 membros = set(g.membros)
                 membros.update(usernames)
                 if membros == set(g.membros):
@@ -197,7 +198,7 @@ class Nucleo:
             with self.store:
                 g = self.store.get_grupo_user(grupo)
                 if not g:
-                    raise NaoExiste(f"grupo '{grupo}' nao existe")
+                    raise NaoExiste(f"group '{grupo}' does not exist")
                 alvo = set(usernames)
                 novos = [m for m in g.membros if m not in alvo]
                 if novos == g.membros:
@@ -213,10 +214,10 @@ class Nucleo:
         try:
             with self.store:
                 if not self.store.get_grupo_user(nome):
-                    raise NaoExiste(f"grupo '{nome}' nao existe")
+                    raise NaoExiste(f"group '{nome}' does not exist")
                 if any(p.grupo_user == nome for p in self.store.list_permissoes()):
                     raise EstadoInvalido(
-                        f"grupo '{nome}' tem permissoes associadas; revogue antes"
+                        f"group '{nome}' has associated permissions; revoke them first"
                     )
                 self.store.delete_grupo_user(nome)
                 return self._registrar(op, StatusOperacao.SUCESSO)
@@ -234,15 +235,15 @@ class Nucleo:
         try:
             with self.store:
                 if not _RE_HOSTNAME.match(hostname):
-                    raise FormatoInvalido(f"hostname invalido: '{hostname}'")
+                    raise FormatoInvalido(f"invalid hostname: '{hostname}'")
                 if not _RE_IPV4.match(ipv4):
-                    raise FormatoInvalido(f"ipv4 invalido: '{ipv4}'")
+                    raise FormatoInvalido(f"invalid ipv4: '{ipv4}'")
                 if not (1 <= porta <= 65535):
-                    raise FormatoInvalido(f"porta invalida: {porta}")
+                    raise FormatoInvalido(f"invalid port: {porta}")
                 if not host_key.strip():
-                    raise FormatoInvalido("host_key obrigatoria")
+                    raise FormatoInvalido("host_key is required")
                 if self.store.get_servidor(hostname):
-                    raise JaExiste(f"servidor '{hostname}' ja existe")
+                    raise JaExiste(f"server '{hostname}' already exists")
                 self.store.save_servidor(
                     Servidor(
                         hostname=hostname,
@@ -260,7 +261,7 @@ class Nucleo:
         try:
             with self.store:
                 if not self.store.get_servidor(hostname):
-                    raise NaoExiste(f"servidor '{hostname}' nao existe")
+                    raise NaoExiste(f"server '{hostname}' does not exist")
                 for g in self.store.list_grupos_servidor():
                     if hostname in g.membros:
                         g.membros = [m for m in g.membros if m != hostname]
@@ -275,9 +276,9 @@ class Nucleo:
         try:
             with self.store:
                 if not _RE_NOME_GRUPO.match(nome):
-                    raise FormatoInvalido(f"nome de grupo invalido: '{nome}'")
+                    raise FormatoInvalido(f"invalid group name: '{nome}'")
                 if self.store.get_grupo_servidor(nome):
-                    raise JaExiste(f"server-group '{nome}' ja existe")
+                    raise JaExiste(f"server-group '{nome}' already exists")
                 self.store.save_grupo_servidor(GrupoServidor(nome=nome))
                 return self._registrar(op, StatusOperacao.SUCESSO)
         except Exception as e:
@@ -292,10 +293,10 @@ class Nucleo:
             with self.store:
                 g = self.store.get_grupo_servidor(grupo)
                 if not g:
-                    raise NaoExiste(f"grupo '{grupo}' nao existe")
+                    raise NaoExiste(f"group '{grupo}' does not exist")
                 inexistentes = [h for h in hostnames if not self.store.get_servidor(h)]
                 if inexistentes:
-                    raise NaoExiste(f"servidores inexistentes: {', '.join(inexistentes)}")
+                    raise NaoExiste(f"unknown servers: {', '.join(inexistentes)}")
                 membros = set(g.membros)
                 membros.update(hostnames)
                 if membros == set(g.membros):
@@ -315,7 +316,7 @@ class Nucleo:
             with self.store:
                 g = self.store.get_grupo_servidor(grupo)
                 if not g:
-                    raise NaoExiste(f"grupo '{grupo}' nao existe")
+                    raise NaoExiste(f"group '{grupo}' does not exist")
                 alvo = set(hostnames)
                 novos = [m for m in g.membros if m not in alvo]
                 if novos == g.membros:
@@ -331,31 +332,92 @@ class Nucleo:
         try:
             with self.store:
                 if not self.store.get_grupo_servidor(nome):
-                    raise NaoExiste(f"grupo '{nome}' nao existe")
+                    raise NaoExiste(f"group '{nome}' does not exist")
                 if any(p.grupo_servidor == nome for p in self.store.list_permissoes()):
                     raise EstadoInvalido(
-                        f"grupo '{nome}' tem permissoes associadas; revogue antes"
+                        f"group '{nome}' has associated permissions; revoke them first"
                     )
                 self.store.delete_grupo_servidor(nome)
                 return self._registrar(op, StatusOperacao.SUCESSO)
         except Exception as e:
             return self._registrar_falha(op, str(e))
 
-    def conceder(self, grupo_user: str, grupo_servidor: str, nivel: NivelPermissao) -> Operacao:
-        op = self._nova_op(f"grant {grupo_user} {grupo_servidor} --level {nivel.value}")
+    def conceder(
+        self,
+        grupo_user: str,
+        grupo_servidor: str,
+        nivel: NivelPermissao,
+        profile: str | None = None,
+    ) -> Operacao:
+        comando = f"grant {grupo_user} {grupo_servidor} --level {nivel.value}"
+        if profile:
+            comando += f" --profile {profile}"
+        op = self._nova_op(comando)
         try:
             with self.store:
                 if not self.store.get_grupo_user(grupo_user):
-                    raise NaoExiste(f"user-group '{grupo_user}' nao existe")
+                    raise NaoExiste(f"user-group '{grupo_user}' does not exist")
                 if not self.store.get_grupo_servidor(grupo_servidor):
-                    raise NaoExiste(f"server-group '{grupo_servidor}' nao existe")
+                    raise NaoExiste(f"server-group '{grupo_servidor}' does not exist")
+                if profile is not None:
+                    if nivel != NivelPermissao.SUDO:
+                        raise FormatoInvalido("--profile only applies when --level is sudo")
+                    if not self.store.get_sudo_profile(profile):
+                        raise NaoExiste(f"sudo-profile '{profile}' does not exist")
                 self.store.save_permissao(
                     Permissao(
                         grupo_user=grupo_user,
                         grupo_servidor=grupo_servidor,
                         nivel=nivel,
+                        profile=profile,
                     )
                 )
+                return self._registrar(op, StatusOperacao.SUCESSO)
+        except Exception as e:
+            return self._registrar_falha(op, str(e))
+
+    def criar_sudo_profile(self, nome: str, comandos: list[str]) -> Operacao:
+        op = self._nova_op(f"sudo-profile create {nome}")
+        try:
+            with self.store:
+                if not _RE_NOME_GRUPO.match(nome):
+                    raise FormatoInvalido(f"invalid sudo-profile name: '{nome}'")
+                if not comandos:
+                    raise FormatoInvalido("at least one --command is required")
+                for c in comandos:
+                    if not c.startswith("/"):
+                        raise FormatoInvalido(
+                            f"command must be absolute path: '{c}' (sudoers requires absolute paths)"
+                        )
+                    # Bloqueia injection de novas regras no sudoers via newline/CR.
+                    # 'visudo -c' valida sintaxe mas nao distingue 1 regra com \n vs 2 regras
+                    # legitimas; basta uma das linhas ser valida pra passar.
+                    if any(ch in c for ch in ("\n", "\r", "\x00")):
+                        raise FormatoInvalido(
+                            f"command contains forbidden control character: {c!r}"
+                        )
+                if self.store.get_sudo_profile(nome):
+                    raise JaExiste(f"sudo-profile '{nome}' already exists")
+                self.store.save_sudo_profile(SudoProfile(nome=nome, comandos=list(comandos)))
+                return self._registrar(op, StatusOperacao.SUCESSO)
+        except Exception as e:
+            return self._registrar_falha(op, str(e))
+
+    def excluir_sudo_profile(self, nome: str) -> Operacao:
+        op = self._nova_op(f"sudo-profile delete {nome}")
+        try:
+            with self.store:
+                if not self.store.get_sudo_profile(nome):
+                    raise NaoExiste(f"sudo-profile '{nome}' does not exist")
+                em_uso = [
+                    p for p in self.store.list_permissoes() if p.profile == nome
+                ]
+                if em_uso:
+                    raise EstadoInvalido(
+                        f"sudo-profile '{nome}' is in use by {len(em_uso)} permission(s); "
+                        f"update or revoke them first"
+                    )
+                self.store.delete_sudo_profile(nome)
                 return self._registrar(op, StatusOperacao.SUCESSO)
         except Exception as e:
             return self._registrar_falha(op, str(e))
@@ -367,7 +429,7 @@ class Nucleo:
                 self.store.delete_permissao(grupo_user, grupo_servidor)
                 return self._registrar(op, StatusOperacao.SUCESSO)
         except FileNotFoundError:
-            return self._registrar_falha(op, "permissao nao existe")
+            return self._registrar_falha(op, "permission does not exist")
         except Exception as e:
             return self._registrar_falha(op, str(e))
 
@@ -393,7 +455,7 @@ class Nucleo:
                     if servidor is None:
                         for s in lote:
                             s.status = "falha"
-                            s.erro = f"servidor '{hostname}' nao existe"
+                            s.erro = f"server '{hostname}' does not exist"
                         op.subacoes.extend(lote)
                         continue
 
@@ -420,6 +482,7 @@ class Nucleo:
                                 ref=s.credencial,
                                 username=s.username or "",
                                 nivel=s.nivel or NivelPermissao.SHELL,
+                                profile=s.profile,
                             )
                         elif s.acao == TipoAcao.REMOVER_CHAVE:
                             instaladas.pop(s.credencial, None)
@@ -450,8 +513,12 @@ class Nucleo:
                 acao=TipoAcao.LEITURA,
                 status="sucesso" if "erro" not in relatorio else "falha",
                 erro=relatorio.get("erro"),
-                mensagem=f"{len(relatorio.get('usuarios', []))} usuarios, "
-                f"{len(relatorio.get('servicos', []))} servicos",
+                mensagem=(
+                    f"{len(relatorio.get('usuarios', []))} users, "
+                    f"{len(relatorio.get('grupos', []))} groups, "
+                    f"{len(relatorio.get('servicos', []))} services, "
+                    f"{len(relatorio.get('sudoers_regras', []))} sudo rules"
+                ),
             )
             op.subacoes.append(sub)
             status = StatusOperacao.SUCESSO if "erro" not in relatorio else StatusOperacao.FALHA

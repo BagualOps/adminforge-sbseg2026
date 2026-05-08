@@ -150,7 +150,7 @@ Cada entrada de `history.jsonl` é um JSON com:
 | JSON em vez de banco | Escala pequena cabe em texto; versionável em Git. | Sem indexação; busca = leitura linear. Aceitável para dezenas de usuários. |
 | Fluxo síncrono | Sem latência crítica; um Superadmin opera por vez. | `apply` em 600 servidores depende de SSH paralelo no Deployer. |
 | Sem cache | Ler JSON é barato. | Cada leitura abre arquivos. |
-| `chaves_instaladas` no Servidor | Resposta direta a "o que já está deployado". | Reconciliação opcional (`apply verify`) fica para M-2. |
+| `chaves_instaladas` no Servidor | Resposta direta a "o que já está deployado". | `apply verify` confere declarado × real; cifragem dos JSONs fica para M-2. |
 | Lockfile | KISS para exclusão mútua. | Falha rápida se outra instância roda; aceitável. |
 | TOFU para host_key | KISS; conta com confirmação humana no cadastro. | Não detecta MitM no primeiro contato. |
 | `chave_host` armazenada | Detecta MitM em conexões seguintes. | Rotação requer revalidação manual. |

@@ -8,14 +8,13 @@ import shlex
 import subprocess
 from pathlib import Path
 
+from adminforge import authorized_keys as ak
 from adminforge.domain import NivelPermissao, Servidor, Subacao, TipoAcao
 from adminforge.exceptions import HostKeyDivergente
 from adminforge.interfaces.deployer import IDeployer
 
 
 class SSHDeployer(IDeployer):
-    MARCADOR_INICIO = "# BEGIN adminforge: "
-    MARCADOR_FIM = "# END adminforge: "
 
     def __init__(
         self,
@@ -43,7 +42,7 @@ class SSHDeployer(IDeployer):
 
     def _opcoes_ssh(self, servidor: Servidor) -> list[str]:
         if not servidor.chave_host:
-            raise HostKeyDivergente(f"servidor {servidor.hostname} sem host_key registrada")
+            raise HostKeyDivergente(f"server {servidor.hostname} has no registered host_key")
         self._sincronizar_host_key(servidor)
         return [
             "-o", "BatchMode=yes",
@@ -88,7 +87,7 @@ class SSHDeployer(IDeployer):
         cmd = ["ssh-keyscan", "-T", str(self.timeout), "-t", "ed25519,rsa,ecdsa", "-p", str(porta), host]
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=self.timeout * 2)
         if proc.returncode != 0 and not proc.stdout.strip():
-            raise HostKeyDivergente(f"ssh-keyscan falhou: {proc.stderr.strip()}")
+            raise HostKeyDivergente(f"ssh-keyscan failed: {proc.stderr.strip()}")
 
         preferida = None
         for linha in proc.stdout.splitlines():
@@ -106,7 +105,7 @@ class SSHDeployer(IDeployer):
                 preferida = key
 
         if preferida is None:
-            raise HostKeyDivergente(f"nenhuma host_key retornada por ssh-keyscan para {host}")
+            raise HostKeyDivergente(f"no host_key returned by ssh-keyscan for {host}")
 
         partes = preferida.split(None, 2)
         blob_b64 = partes[1]
@@ -127,7 +126,7 @@ class SSHDeployer(IDeployer):
         if rc != 0:
             for s in subacoes:
                 s.status = "falha"
-                s.erro = f"ssh: {err.strip() or 'conexao falhou'}"
+                s.erro = f"ssh: {err.strip() or 'connection failed'}"
             return subacoes
 
         for s in subacoes:
@@ -149,86 +148,109 @@ class SSHDeployer(IDeployer):
             return
         if not self.criar_conta_unix:
             raise RuntimeError(
-                f"usuario '{username}' nao existe e criacao automatica esta desabilitada "
+                f"unix user '{username}' does not exist and auto-create is disabled "
                 f"(ADMINFORGE_CREATE_UNIX_USER=false)"
             )
         rc, _, err = self._executar_ssh(servidor, f"sudo useradd -m -s /bin/bash {u}")
         if rc != 0:
-            raise RuntimeError(f"falha ao criar usuario unix '{username}': {err.strip()}")
+            raise RuntimeError(f"failed to create unix user '{username}': {err.strip()}")
 
-    def _bloco_chave(self, ref: str, chave: str) -> str:
-        return (
-            f"{self.MARCADOR_INICIO}{ref}\n"
-            f"{chave.strip()}\n"
-            f"{self.MARCADOR_FIM}{ref}"
-        )
-
-    def _ler_authorized_keys(self, servidor: Servidor, username: str) -> str:
+    def ler_authorized_keys(self, servidor: Servidor, username: str) -> tuple[str, bool]:
+        # Primeiro valida que sudo funciona com NOPASSWD; sem isso nao da
+        # para distinguir 'arquivo nao existe' (output vazio legitimo) de
+        # 'sudo bloqueou' (output vazio mascarando erro).
+        rc, _, _ = self._executar_ssh(servidor, "sudo -n true 2>/dev/null")
+        if rc != 0:
+            return "", False
         u = shlex.quote(username)
+        # if-then explicito: arquivo ausente => output vazio + rc=0 (legitimo).
         rc, out, _ = self._executar_ssh(
-            servidor, f"sudo cat /home/{u}/.ssh/authorized_keys 2>/dev/null || true"
+            servidor,
+            f"if sudo test -e /home/{u}/.ssh/authorized_keys; then "
+            f"sudo cat /home/{u}/.ssh/authorized_keys; "
+            f"fi",
         )
-        return out
+        return out, rc == 0
 
     def _escrever_authorized_keys(
         self, servidor: Servidor, username: str, conteudo: str
     ) -> None:
         u = shlex.quote(username)
         b64 = base64.b64encode(conteudo.encode("utf-8")).decode("ascii")
+        # backup do arquivo atual em .bak antes de sobrescrever (rollback manual)
         comando = (
             f"sudo install -d -m 700 -o {u} -g {u} /home/{u}/.ssh && "
+            f"if sudo test -f /home/{u}/.ssh/authorized_keys; then "
+            f"sudo install -m 600 -o {u} -g {u} /home/{u}/.ssh/authorized_keys "
+            f"/home/{u}/.ssh/authorized_keys.bak; fi && "
             f"echo {shlex.quote(b64)} | base64 -d | "
             f"sudo install -m 600 -o {u} -g {u} /dev/stdin /home/{u}/.ssh/authorized_keys"
         )
         rc, _, err = self._executar_ssh(servidor, comando)
         if rc != 0:
-            raise RuntimeError(f"falha ao escrever authorized_keys: {err.strip()}")
+            raise RuntimeError(f"failed to write authorized_keys: {err.strip()}")
 
-    def _substituir_bloco(self, conteudo: str, ref: str, bloco_novo: str) -> str:
-        marcador_inicio = f"{self.MARCADOR_INICIO}{ref}"
-        marcador_fim = f"{self.MARCADOR_FIM}{ref}"
-        out: list[str] = []
-        dentro = False
-        for linha in conteudo.splitlines():
-            if linha == marcador_inicio:
-                dentro = True
-                continue
-            if dentro:
-                if linha == marcador_fim:
-                    dentro = False
-                continue
-            out.append(linha)
-        if bloco_novo:
-            out.append(bloco_novo)
-        resultado = "\n".join(out)
-        if resultado and not resultado.endswith("\n"):
-            resultado += "\n"
-        return resultado
 
     def _adicionar_chave(self, servidor: Servidor, sub: Subacao) -> None:
         if not sub.chave_publica or not sub.username or not sub.credencial:
-            raise ValueError("subacao sem chave_publica, username ou credencial")
+            raise ValueError("sub-action missing chave_publica, username or credencial")
         self._garantir_usuario_unix(servidor, sub.username)
-        atual = self._ler_authorized_keys(servidor, sub.username)
-        novo = self._substituir_bloco(
-            atual, sub.credencial, self._bloco_chave(sub.credencial, sub.chave_publica)
+        atual, ok = self.ler_authorized_keys(servidor, sub.username)
+        if not ok:
+            raise RuntimeError(
+                f"failed to read authorized_keys for '{sub.username}'; "
+                f"refusing to overwrite to avoid losing existing AdminForge blocks"
+            )
+        novo = ak.substituir_bloco(
+            atual, sub.credencial, ak.bloco(sub.credencial, sub.chave_publica)
         )
         self._escrever_authorized_keys(servidor, sub.username, novo)
 
         sudoers = f"/etc/sudoers.d/adminforge-{sub.username}"
         if sub.nivel == NivelPermissao.SUDO:
-            self._escrever_sudoers(servidor, sub.username, sudoers)
+            self._escrever_sudoers(servidor, sub.username, sudoers, sub.profile_comandos)
         else:
             self._executar_ssh(servidor, f"sudo rm -f {sudoers}")
 
     def _escrever_sudoers(
-        self, servidor: Servidor, username: str, destino: str
+        self,
+        servidor: Servidor,
+        username: str,
+        destino: str,
+        comandos: list[str] | None,
     ) -> None:
-        linha = f"{username} ALL=(ALL) NOPASSWD:ALL\n"
+        # Diferencia explicitamente None (full sudo) de [] (profile invalido):
+        #   None         -> NOPASSWD:ALL (intencional)
+        #   lista vazia  -> erro (profile resolveu para nada; nao escala silenciosamente)
+        #   lista        -> uma linha por comando absoluto
+        if comandos is None:
+            corpo = f"{username} ALL=(ALL) NOPASSWD:ALL\n"
+        elif len(comandos) == 0:
+            raise RuntimeError(
+                f"refusing to write sudoers for '{username}': empty command list "
+                f"(would otherwise silently grant full sudo)"
+            )
+        else:
+            # defense-in-depth: revalida no ponto de gravacao. State editado a mao
+            # poderia conter path relativo ou control char nao detectado pelo Nucleo.
+            for c in comandos:
+                if not c.startswith("/"):
+                    raise RuntimeError(
+                        f"refusing to write sudoers for '{username}': "
+                        f"command must be absolute path: {c!r}"
+                    )
+                if any(ch in c for ch in ("\n", "\r", "\x00")):
+                    raise RuntimeError(
+                        f"refusing to write sudoers for '{username}': "
+                        f"command contains forbidden control character: {c!r}"
+                    )
+            corpo = "\n".join(
+                f"{username} ALL=(ALL) NOPASSWD: {c}" for c in comandos
+            ) + "\n"
         tmp = f"/tmp/.adminforge-sudoers-{username}.{secrets.token_hex(8)}"
         comando = (
             f"set -e; "
-            f"printf %s {shlex.quote(linha)} | sudo tee {tmp} >/dev/null && "
+            f"printf %s {shlex.quote(corpo)} | sudo tee {tmp} >/dev/null && "
             f"sudo chmod 0440 {tmp} && "
             f"sudo visudo -cf {tmp} >/dev/null && "
             f"sudo mv {tmp} {destino}"
@@ -236,37 +258,144 @@ class SSHDeployer(IDeployer):
         rc, _, err = self._executar_ssh(servidor, comando)
         if rc != 0:
             self._executar_ssh(servidor, f"sudo rm -f {tmp}")
-            raise RuntimeError(f"falha ao escrever sudoers: {err.strip()}")
+            raise RuntimeError(f"failed to write sudoers: {err.strip()}")
 
     def _remover_chave(self, servidor: Servidor, sub: Subacao) -> None:
         if not sub.username or not sub.credencial:
-            raise ValueError("subacao sem username ou credencial")
-        atual = self._ler_authorized_keys(servidor, sub.username)
-        novo = self._substituir_bloco(atual, sub.credencial, "")
+            raise ValueError("sub-action missing username or credencial")
+        atual, ok = self.ler_authorized_keys(servidor, sub.username)
+        if not ok:
+            raise RuntimeError(
+                f"failed to read authorized_keys for '{sub.username}'; "
+                f"refusing to overwrite"
+            )
+        novo = ak.substituir_bloco(atual, sub.credencial, "")
         self._escrever_authorized_keys(servidor, sub.username, novo)
         self._executar_ssh(servidor, f"sudo rm -f /etc/sudoers.d/adminforge-{sub.username}")
+
+    _SCRIPT_INSPECAO = (
+        'echo "=== USERS ==="; getent passwd; '
+        'echo "=== GROUPS ==="; getent group; '
+        'echo "=== SERVICES ==="; '
+        # checa systemctl explicitamente: 'cmd | awk' dava rc=0 do awk mesmo com systemctl ausente,
+        # impedindo o fallback service --status-all.
+        'if command -v systemctl >/dev/null 2>&1; then '
+        'systemctl list-units --type=service --state=running --no-legend --no-pager 2>/dev/null '
+        '| awk \'{print $1}\'; '
+        'elif command -v service >/dev/null 2>&1; then '
+        'service --status-all 2>/dev/null; '
+        'fi; '
+        'echo "=== SUDOERS_FILES ==="; '
+        '(sudo -n ls /etc/sudoers.d/ 2>/dev/null || ls /etc/sudoers.d/ 2>/dev/null) || true; '
+        'echo "=== SUDOERS_BODY ==="; '
+        '(sudo -n cat /etc/sudoers /etc/sudoers.d/* 2>/dev/null '
+        '|| cat /etc/sudoers /etc/sudoers.d/* 2>/dev/null) || true'
+    )
+
+    @staticmethod
+    def _classificar_uid(uid: int) -> str:
+        if uid < 100:
+            return "system"
+        if uid < 1000:
+            return "service"
+        return "human"
 
     def inspecionar(self, servidor: Servidor) -> dict:
         try:
             self._opcoes_ssh(servidor)
         except Exception as e:
-            return {"erro": f"ssh: {e}", "usuarios": [], "servicos": []}
+            return {"erro": f"ssh: {e}"}
 
-        rc, out_users, err = self._executar_ssh(
-            servidor,
-            "getent passwd | awk -F: '"
-            "$3 >= 100 && $1 != \"nobody\" "
-            "{ printf \"%s\\tuid=%s\\tshell=%s\\n\", $1, $3, $7 }'",
-        )
+        rc, out, err = self._executar_ssh(servidor, self._SCRIPT_INSPECAO)
         if rc != 0:
-            return {"erro": f"ssh: {err.strip()}", "usuarios": [], "servicos": []}
+            return {"erro": f"ssh: {err.strip()}"}
 
-        _, out_serv, _ = self._executar_ssh(
-            servidor,
-            "systemctl list-units --type=service --state=running --no-legend --no-pager 2>/dev/null "
-            "| awk '{print $1}' || service --status-all 2>/dev/null",
-        )
+        secoes: dict[str, list[str]] = {
+            "USERS": [], "GROUPS": [], "SERVICES": [],
+            "SUDOERS_FILES": [], "SUDOERS_BODY": [],
+        }
+        atual: str | None = None
+        for linha in out.splitlines():
+            if linha.startswith("=== ") and linha.endswith(" ==="):
+                marca = linha[4:-4]
+                atual = marca if marca in secoes else None
+                continue
+            if atual and linha.strip():
+                secoes[atual].append(linha)
+
+        # parse: getent group dá nome:x:gid:m1,m2,...
+        grupos_por_gid: dict[int, dict] = {}
+        grupos: list[dict] = []
+        for linha in secoes["GROUPS"]:
+            partes = linha.split(":")
+            if len(partes) < 4:
+                continue
+            nome, _, gid_s, membros = partes[0], partes[1], partes[2], partes[3]
+            try:
+                gid = int(gid_s)
+            except ValueError:
+                continue
+            g = {
+                "nome": nome,
+                "gid": gid,
+                "membros": [m for m in membros.split(",") if m],
+            }
+            grupos.append(g)
+            grupos_por_gid[gid] = g
+
+        # parse: getent passwd dá nome:x:uid:gid:gecos:home:shell
+        usuarios: list[dict] = []
+        for linha in secoes["USERS"]:
+            partes = linha.split(":")
+            if len(partes) < 7:
+                continue
+            nome = partes[0]
+            try:
+                uid, gid_primario = int(partes[2]), int(partes[3])
+            except ValueError:
+                continue
+            shell = partes[6]
+            grupos_user = sorted(
+                {g["nome"] for g in grupos if nome in g["membros"]}
+                | ({grupos_por_gid[gid_primario]["nome"]} if gid_primario in grupos_por_gid else set())
+            )
+            usuarios.append({
+                "nome": nome,
+                "uid": uid,
+                "shell": shell,
+                "categoria": self._classificar_uid(uid),
+                "grupos": grupos_user,
+            })
+
+        # parse sudoers: regras nao-comentario, e mapeamento por arquivo (drift)
+        regras_sudo: list[str] = []
+        for linha in secoes["SUDOERS_BODY"]:
+            stripped = linha.strip()
+            if not stripped or stripped.startswith("#") or stripped.startswith("Defaults"):
+                continue
+            regras_sudo.append(stripped)
+
+        arquivos_sudoers = []
+        for nome in secoes["SUDOERS_FILES"]:
+            arquivos_sudoers.append({
+                "nome": nome.strip(),
+                "adminforge": nome.strip().startswith("adminforge-"),
+            })
+
+        # mapeia regras por usuario (heuristico: 1a coluna da regra)
+        sudo_por_user: dict[str, list[str]] = {}
+        for regra in regras_sudo:
+            primeira = regra.split(None, 1)[0] if regra else ""
+            if primeira.startswith("%"):
+                continue  # regra de grupo, ignora aqui
+            sudo_por_user.setdefault(primeira, []).append(regra)
+        for u in usuarios:
+            u["sudo"] = sudo_por_user.get(u["nome"], [])
+
         return {
-            "usuarios": [u for u in out_users.splitlines() if u.strip()],
-            "servicos": [s for s in out_serv.splitlines() if s.strip()],
+            "usuarios": usuarios,
+            "grupos": grupos,
+            "servicos": [s.strip() for s in secoes["SERVICES"] if s.strip()],
+            "sudoers_arquivos": arquivos_sudoers,
+            "sudoers_regras": regras_sudo,
         }

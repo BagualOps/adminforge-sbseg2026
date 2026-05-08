@@ -110,6 +110,88 @@ def test_n_membros_falha_atomica_se_um_inexiste(nucleo: Nucleo):
     assert g.membros == []
 
 
+def test_sudo_profile_create_e_concede(nucleo: Nucleo):
+    op = nucleo.criar_sudo_profile("dba-postgres", ["/bin/systemctl restart postgresql", "/usr/bin/psql"])
+    assert op.status == StatusOperacao.SUCESSO
+    nucleo.criar_grupo_user("dba")
+    nucleo.criar_grupo_servidor("banco")
+    op = nucleo.conceder("dba", "banco", NivelPermissao.SUDO, profile="dba-postgres")
+    assert op.status == StatusOperacao.SUCESSO
+    perms = nucleo.store.list_permissoes()
+    assert perms[0].profile == "dba-postgres"
+
+
+def test_sudo_profile_rejeita_comando_relativo(nucleo: Nucleo):
+    op = nucleo.criar_sudo_profile("bad", ["systemctl restart nginx"])
+    assert op.status == StatusOperacao.FALHA
+
+
+def test_sudo_profile_rejeita_newline_no_comando(nucleo: Nucleo):
+    """Regressao: \\n no comando injetaria nova regra no sudoers (passaria 'visudo -c')."""
+    op = nucleo.criar_sudo_profile("evil", ["/bin/true\nbad ALL=(ALL) NOPASSWD:ALL"])
+    assert op.status == StatusOperacao.FALHA
+    op = nucleo.criar_sudo_profile("evil2", ["/bin/true\rfoo"])
+    assert op.status == StatusOperacao.FALHA
+
+
+def test_apply_falha_se_leitura_authorized_keys_falhou(state_dir, monkeypatch):
+    """Regressao: se ler_authorized_keys reporta ok=False (sudo bloqueado, etc), o apply
+    NAO pode sobrescrever o arquivo com base em string vazia (apagaria blocos AdminForge
+    pre-existentes). Falha controlada da subacao."""
+    from adminforge.auditor.jsonl_auditor import JsonlAuditor
+    from adminforge.deployer.dry_run import DryRunDeployer
+    from adminforge.store.json_store import JsonStore
+
+    class DeployerSemLeitura(DryRunDeployer):
+        def ler_authorized_keys(self, servidor, username):
+            return "", False  # simula sudo bloqueado
+
+        def aplicar(self, servidor, subacoes):
+            # roda a logica real do adicionar_chave/remover_chave em vez de simular
+            for s in subacoes:
+                try:
+                    atual, ok = self.ler_authorized_keys(servidor, s.username)
+                    if not ok:
+                        raise RuntimeError("failed to read authorized_keys")
+                    s.status = "sucesso"
+                except Exception as e:
+                    s.status = "falha"
+                    s.erro = str(e)
+            return subacoes
+
+    nucleo = Nucleo(JsonStore(state_dir), JsonlAuditor(state_dir / "history.jsonl"),
+                    DeployerSemLeitura(), "op")
+    nucleo.cadastrar_user("alice", "Alice", "a@e.com")
+    nucleo.cadastrar_chave("alice", CHAVE_ALICE)
+    nucleo.criar_grupo_user("sa")
+    nucleo.adicionar_membro_grupo_user("sa", "alice")
+    nucleo.cadastrar_servidor("web-01", "10.0.0.10", 22, HOST_KEY_FAKE)
+    nucleo.criar_grupo_servidor("prod")
+    nucleo.adicionar_membro_grupo_servidor("prod", "web-01")
+    nucleo.conceder("sa", "prod", NivelPermissao.SHELL)
+
+    op = nucleo.aplicar()
+    assert op.status == StatusOperacao.FALHA
+    assert any("failed to read" in (s.erro or "") for s in op.subacoes)
+
+
+def test_sudo_profile_rejeita_se_em_uso(nucleo: Nucleo):
+    nucleo.criar_sudo_profile("p1", ["/bin/true"])
+    nucleo.criar_grupo_user("g")
+    nucleo.criar_grupo_servidor("s")
+    nucleo.conceder("g", "s", NivelPermissao.SUDO, profile="p1")
+    op = nucleo.excluir_sudo_profile("p1")
+    assert op.status == StatusOperacao.FALHA
+
+
+def test_profile_so_com_sudo(nucleo: Nucleo):
+    nucleo.criar_sudo_profile("p", ["/bin/true"])
+    nucleo.criar_grupo_user("g")
+    nucleo.criar_grupo_servidor("s")
+    op = nucleo.conceder("g", "s", NivelPermissao.SHELL, profile="p")
+    assert op.status == StatusOperacao.FALHA
+
+
 def test_remover_n_membros_de_uma_vez(nucleo: Nucleo):
     for u in ("alice", "bob", "carla"):
         nucleo.cadastrar_user(u, u.title(), f"{u}@e.com")

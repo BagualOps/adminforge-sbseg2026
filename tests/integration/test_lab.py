@@ -176,6 +176,8 @@ def test_fluxo_completo_em_containers(lab, tmp_path):
     assert "END adminforge: alice:" in out
     assert "alice@laptop" in out
 
+    # após o 1º apply criando o authorized_keys do zero, ainda não há .bak (não havia arquivo antes)
+    # agora desabilita bob e dispara um 2º edit para criar o .bak
     rc, out = _exec_container("adminforge-web-01", "sudo", "cat", "/etc/sudoers.d/adminforge-alice")
     assert rc == 0
     assert "alice ALL=(ALL) NOPASSWD:ALL" in out
@@ -202,6 +204,10 @@ def test_fluxo_completo_em_containers(lab, tmp_path):
     assert "bob:" not in out
     assert "BEGIN adminforge: bob:" not in out
 
+    # bob teve um arquivo escrito no 1o apply e re-escrito no 2o (remove); o .bak agora existe
+    rc, _ = _exec_container("adminforge-web-01", "sudo", "test", "-f", "/home/bob/.ssh/authorized_keys.bak")
+    assert rc == 0, "expected authorized_keys.bak after second edit"
+
     rc, _ = _exec_container("adminforge-web-01", "ls", "/etc/sudoers.d/adminforge-bob")
     assert rc != 0
 
@@ -211,8 +217,55 @@ def test_fluxo_completo_em_containers(lab, tmp_path):
 
     op_audit, relatorio = nucleo.auditar_servidor("web-01")
     assert op_audit.status == StatusOperacao.SUCESSO
-    assert any("adminforge" in u for u in relatorio["usuarios"])
-    assert any("alice" in u for u in relatorio["usuarios"])
+
+    nomes_users = {u["nome"] for u in relatorio["usuarios"]}
+    assert "adminforge" in nomes_users
+    assert "alice" in nomes_users
+    assert "root" in nomes_users  # antes era filtrado por UID>=100
+
+    alice = next(u for u in relatorio["usuarios"] if u["nome"] == "alice")
+    assert alice["categoria"] == "human"  # UID >= 1000
+    assert alice["sudo"], "alice deveria ter regra sudo (NOPASSWD:ALL)"
+
+    nomes_grupos = {g["nome"] for g in relatorio["grupos"]}
+    assert "root" in nomes_grupos
+    assert "adminforge" in nomes_grupos
+
+    arquivos_af = [a for a in relatorio["sudoers_arquivos"] if a["adminforge"]]
+    assert any(a["nome"] == "adminforge-alice" for a in arquivos_af)
+
+    # verify: declarado vs real deve bater (so alice agora, bob foi removido)
+    from adminforge import authorized_keys as ak
+    web01 = nucleo.store.get_servidor("web-01")
+    refs_declaradas = {
+        (item["ref"] if isinstance(item, dict) else item) for item in web01.chaves_instaladas
+    }
+    conteudo, ok = SSHDeployer(
+        chave_privada_path=lab["chave_priv"],
+        known_hosts_path=tmp_path / "kh-verify",
+    ).ler_authorized_keys(web01, "alice")
+    assert ok, "ler_authorized_keys deveria retornar ok=True (sudo NOPASSWD configurado no lab)"
+    refs_reais = set(ak.parse_blocos(conteudo).keys())
+    assert refs_declaradas == refs_reais, (
+        f"drift: declarado={refs_declaradas} real={refs_reais}"
+    )
+
+    # Sudo profile: troca grant de full -> profile, re-aplica, valida sudoers
+    nucleo.criar_sudo_profile("read-logs", ["/bin/journalctl", "/bin/cat"])
+    # remove permissao atual e cria nova com profile
+    nucleo.revogar("sysadmins", "producao")
+    nucleo.aplicar()  # remove regras antigas
+    nucleo.conceder("sysadmins", "producao", NivelPermissao.SUDO, profile="read-logs")
+    op_profile = nucleo.aplicar()
+    assert op_profile.status == StatusOperacao.SUCESSO
+
+    rc, out = _exec_container("adminforge-web-01", "sudo", "cat", "/etc/sudoers.d/adminforge-alice")
+    assert rc == 0
+    assert "NOPASSWD: /bin/journalctl" in out
+    assert "NOPASSWD: /bin/cat" in out
+    assert "NOPASSWD:ALL" not in out
+    rc, _ = _exec_container("adminforge-web-01", "sudo", "visudo", "-c")
+    assert rc == 0
 
     ok, _ = nucleo.auditor.verificar_cadeia()
     assert ok is True

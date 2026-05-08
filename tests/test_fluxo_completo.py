@@ -100,5 +100,5 @@ def test_audit_server_dry_run(nucleo: Nucleo):
     nucleo.cadastrar_servidor("web-01", "10.0.0.10", 22, HOST_KEY_FAKE)
     op, relatorio = nucleo.auditar_servidor("web-01")
     assert op.status == StatusOperacao.SUCESSO
-    assert "usuarios" in relatorio
-    assert "servicos" in relatorio
+    for chave in ("usuarios", "grupos", "servicos", "sudoers_arquivos", "sudoers_regras"):
+        assert chave in relatorio

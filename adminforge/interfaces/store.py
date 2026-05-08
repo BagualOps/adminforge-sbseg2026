@@ -6,6 +6,7 @@ from adminforge.domain import (
     GrupoUser,
     Permissao,
     Servidor,
+    SudoProfile,
     User,
 )
 
@@ -73,6 +74,18 @@ class IStore(ABC):
 
     @abstractmethod
     def delete_permissao(self, grupo_user: str, grupo_servidor: str) -> None: ...
+
+    @abstractmethod
+    def get_sudo_profile(self, nome: str) -> SudoProfile | None: ...
+
+    @abstractmethod
+    def list_sudo_profiles(self) -> list[SudoProfile]: ...
+
+    @abstractmethod
+    def save_sudo_profile(self, profile: SudoProfile) -> None: ...
+
+    @abstractmethod
+    def delete_sudo_profile(self, nome: str) -> None: ...
 
     @abstractmethod
     def lock(self) -> None: ...

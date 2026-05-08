@@ -17,17 +17,17 @@ TIPOS_SUPORTADOS = (
 def parse_chave_publica(raw: str) -> tuple[str, str, str]:
     raw = raw.strip()
     if not raw:
-        raise FormatoInvalido("chave vazia")
+        raise FormatoInvalido("empty key")
     partes = raw.split(None, 2)
     if len(partes) < 2:
-        raise FormatoInvalido("chave precisa de tipo e payload base64")
+        raise FormatoInvalido("key requires type and base64 payload")
     tipo, blob, comentario = partes[0], partes[1], partes[2] if len(partes) == 3 else ""
     if tipo not in TIPOS_SUPORTADOS:
-        raise FormatoInvalido(f"tipo de chave nao suportado: {tipo}")
+        raise FormatoInvalido(f"unsupported key type: {tipo}")
     try:
         base64.b64decode(blob, validate=True)
     except Exception as e:
-        raise FormatoInvalido(f"payload base64 invalido: {e}") from e
+        raise FormatoInvalido(f"invalid base64 payload: {e}") from e
     return tipo, blob, comentario
 
 

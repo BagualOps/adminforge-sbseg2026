@@ -20,4 +20,14 @@ class DryRunDeployer(IDeployer):
         return subacoes
 
     def inspecionar(self, servidor: Servidor) -> dict:
-        return {"usuarios": [], "servicos": [], "dry_run": True}
+        return {
+            "usuarios": [],
+            "grupos": [],
+            "servicos": [],
+            "sudoers_arquivos": [],
+            "sudoers_regras": [],
+            "dry_run": True,
+        }
+
+    def ler_authorized_keys(self, servidor: Servidor, username: str) -> tuple[str, bool]:
+        return "", True

@@ -82,6 +82,95 @@ def test_cli_add_member_n_de_uma_vez(env):
     assert "alice" in out and "bob" in out
 
 
+def test_cli_add_member_aceita_virgula(env):
+    for u in ("alice", "bob", "carla"):
+        run_cli(["user", "add", "--username", u, "--name", u.title(), "--email", f"{u}@e.com"])
+    run_cli(["user-group", "create", "--name", "sa"])
+    rc, _ = run_cli(["user-group", "add-member", "--group", "sa", "--username", "alice,bob,carla"])
+    assert rc == 0
+    rc, out = run_cli(["user-group", "list"])
+    assert rc == 0
+    assert "alice" in out and "bob" in out and "carla" in out
+
+
+def test_cli_add_member_misto_virgula_e_espaco(env):
+    for u in ("alice", "bob", "carla", "diego"):
+        run_cli(["user", "add", "--username", u, "--name", u.title(), "--email", f"{u}@e.com"])
+    run_cli(["user-group", "create", "--name", "sa"])
+    rc, _ = run_cli(["user-group", "add-member", "--group", "sa", "--username", "alice,bob", "carla,diego"])
+    assert rc == 0
+    rc, out = run_cli(["user-group", "list"])
+    assert rc == 0
+    for u in ("alice", "bob", "carla", "diego"):
+        assert u in out
+
+
+def test_cli_apply_diff_resiliente_a_ssh_quebrado(env, monkeypatch):
+    """Regressao: erro de SSH em um host nao pode abortar o diff dos demais."""
+    run_cli(["user", "add", "--username", "alice", "--name", "A", "--email", "a@e.com"])
+    run_cli(["user", "key", "add", "--username", "alice", "--string", CHAVE_ALICE])
+    run_cli(["user-group", "create", "--name", "sa"])
+    run_cli(["user-group", "add-member", "--group", "sa", "--username", "alice"])
+    run_cli(["server", "add", "--hostname", "web-01", "--ip", "10.0.0.10", "--host-key", HOST_KEY_FAKE])
+    run_cli(["server", "add", "--hostname", "web-02", "--ip", "10.0.0.11", "--host-key", HOST_KEY_FAKE])
+    run_cli(["server-group", "create", "--name", "prod"])
+    run_cli(["server-group", "add-member", "--group", "prod", "--hostname", "web-01,web-02"])
+    run_cli(["grant", "--user-group", "sa", "--server-group", "prod", "--level", "shell"])
+
+    from adminforge.deployer.dry_run import DryRunDeployer
+
+    original = DryRunDeployer.ler_authorized_keys
+
+    def quebra_no_web01(self, servidor, username):
+        if servidor.hostname == "web-01":
+            raise RuntimeError("ssh: connect failed")
+        return original(self, servidor, username)
+
+    monkeypatch.setattr(DryRunDeployer, "ler_authorized_keys", quebra_no_web01)
+
+    rc, out = run_cli(["apply", "--yes", "--dry-run", "--diff"])
+    # mesmo com erro em web-01, web-02 ainda deve aparecer no diff
+    assert "ssh: connect failed" in out
+    assert "web-02:alice" in out
+
+
+def test_cli_apply_verify_dry_run(env):
+    # cenario: estado declarado, DryRun.ler_authorized_keys == "" => tudo divergente
+    run_cli(["user", "add", "--username", "alice", "--name", "A", "--email", "a@e.com"])
+    run_cli(["user", "key", "add", "--username", "alice", "--string", CHAVE_ALICE])
+    run_cli(["user-group", "create", "--name", "sa"])
+    run_cli(["user-group", "add-member", "--group", "sa", "--username", "alice"])
+    run_cli(["server", "add", "--hostname", "web-01", "--ip", "10.0.0.10", "--host-key", HOST_KEY_FAKE])
+    run_cli(["server-group", "create", "--name", "prod"])
+    run_cli(["server-group", "add-member", "--group", "prod", "--hostname", "web-01"])
+    run_cli(["grant", "--user-group", "sa", "--server-group", "prod", "--level", "shell"])
+    run_cli(["apply", "--yes", "--dry-run"])
+
+    rc, out = run_cli(["apply", "verify", "--dry-run"])
+    # DryRun retorna "" → blocos nao existem real → divergencia → rc=2
+    assert rc == 2
+    assert "divergences" in out
+    assert "declared but not present" in out
+
+
+def test_cli_apply_diff(env):
+    run_cli(["user", "add", "--username", "alice", "--name", "A", "--email", "a@e.com"])
+    run_cli(["user", "key", "add", "--username", "alice", "--string", CHAVE_ALICE])
+    run_cli(["user-group", "create", "--name", "sa"])
+    run_cli(["user-group", "add-member", "--group", "sa", "--username", "alice"])
+    run_cli(["server", "add", "--hostname", "web-01", "--ip", "10.0.0.10", "--host-key", HOST_KEY_FAKE])
+    run_cli(["server-group", "create", "--name", "prod"])
+    run_cli(["server-group", "add-member", "--group", "prod", "--hostname", "web-01"])
+    run_cli(["grant", "--user-group", "sa", "--server-group", "prod", "--level", "shell"])
+
+    rc, out = run_cli(["apply", "--yes", "--dry-run", "--diff"])
+    assert rc == 0
+    assert "Diff" in out
+    assert "web-01:alice" in out
+    # com DryRun.ler_authorized_keys=='', tudo eh nova adicao
+    assert "+# BEGIN adminforge: alice:" in out
+
+
 def test_cli_dump_json(env):
     run_cli(["user", "add", "--username", "alice", "--name", "A", "--email", "a@e.com"])
     run_cli(["user", "key", "add", "--username", "alice", "--string", CHAVE_ALICE])
@@ -108,10 +197,37 @@ def test_cli_dump_table(env):
     assert "Users" in out and "alice" in out
 
 
+def test_cli_permission_list_update_delete(env):
+    run_cli(["user-group", "create", "--name", "sa"])
+    run_cli(["server-group", "create", "--name", "prod"])
+
+    rc, out = run_cli(["permission", "list"])
+    assert rc == 0
+    assert "(empty)" in out or "USER_GROUP" in out
+
+    rc, _ = run_cli(["permission", "update", "--user-group", "sa", "--server-group", "prod", "--level", "shell"])
+    assert rc == 0
+
+    rc, out = run_cli(["permission", "list"])
+    assert rc == 0
+    assert "sa" in out and "prod" in out and "shell" in out
+
+    rc, _ = run_cli(["permission", "update", "--user-group", "sa", "--server-group", "prod", "--level", "sudo"])
+    assert rc == 0
+    rc, out = run_cli(["permission", "list"])
+    assert rc == 0
+    assert "sudo" in out and "shell" not in out.split("sudo")[1]
+
+    rc, _ = run_cli(["permission", "delete", "--user-group", "sa", "--server-group", "prod", "--yes"])
+    assert rc == 0
+    rc, out = run_cli(["permission", "list"])
+    assert "sa" not in out or "prod" not in out
+
+
 def test_cli_help(env, capsys):
     with pytest.raises(SystemExit) as exc:
         main(["--help"])
     assert exc.value.code == 0
     captured = capsys.readouterr()
     assert "AdminForge" in captured.out
-    assert "EXEMPLOS" in captured.out
+    assert "EXAMPLES" in captured.out

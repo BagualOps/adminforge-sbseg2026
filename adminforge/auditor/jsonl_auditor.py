@@ -137,16 +137,16 @@ class JsonlAuditor(IAuditor):
                 hash_armazenado = d.pop("hash", None)
                 if d.get("hash_anterior") != anterior:
                     raise CadeiaQuebrada(
-                        f"hash_anterior divergente em {d.get('id')}"
+                        f"prev_hash mismatch at {d.get('id')}"
                     )
                 recalculado = self._calcular_hash(d)
                 if recalculado != hash_armazenado:
-                    raise CadeiaQuebrada(f"hash divergente em {d.get('id')}")
+                    raise CadeiaQuebrada(f"hash mismatch at {d.get('id')}")
                 anterior = hash_armazenado
         return True, anterior
 
     def buscar_obrigatorio(self, id: str) -> Operacao:
         op = self.buscar(id)
         if op is None:
-            raise NaoExiste(f"operação '{id}' não existe")
+            raise NaoExiste(f"operation '{id}' does not exist")
         return op
