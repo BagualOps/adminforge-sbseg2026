@@ -7,7 +7,7 @@ CLI Python para gestão de identidades privilegiadas em frotas de servidores Lin
 ## Estado do projeto
 
 - **M-0** Modelagem v1 — [`docs/modelagem-v1.pdf`](docs/modelagem-v1.pdf)
-- **M-1** Protótipo Python — **este repositório** (10/10 UCs implementados, 49 testes passando, integration test em Docker no CI)
+- **M-1** Protótipo Python — **este repositório** (10/10 UCs implementados, 52 testes passando, integration test em Docker no CI)
 - **M-2** Robustez — retentativa automática, `apply verify`, cifragem seletiva
 - **M-3** Rust + modo *pull* — servidores puxam estado de repositório Git assinado
 
@@ -37,7 +37,7 @@ Detalhes em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#zero-deps).
 | 1 | Markers `# BEGIN/END adminforge: <ref>` em `authorized_keys` — não briga com edição manual | ✅ |
 | 2 | `visudo -cf` antes de mover sudoers — sintaxe ruim não quebra `sudo` da máquina | ✅ |
 | 3 | `ADMINFORGE_CREATE_UNIX_USER=false` desabilita `useradd` automático | ✅ |
-| 4 | Threshold UID >= 100 no `audit server` — captura service accounts (postgres, tomcat, etc.) | ✅ |
+| 4 | `audit server` lista todos os UIDs (categorizando sistema/serviço/humano) + grupos + sudoers + drift | ✅ |
 | 5 | Strategy: `SSHDeployer` (real) e `DryRunDeployer` (testes) | ✅ |
 | 6 | Lockfile (`fcntl.flock`) — exclusão mútua entre operadores | ✅ |
 | 7 | Histórico append-only com cadeia SHA256; `verify` aponta divergência | ✅ |
@@ -56,7 +56,7 @@ Detalhes em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#zero-deps).
 | **Só CLI na v1** | Sem GUI; o Superadmin opera no terminal. |
 | **Tudo registrado** | Cada comando vira entrada no histórico, com cadeia de hashes. |
 | **Só aplica o que mudou** | Servidor com 5 chaves + usuário novo no grupo → só a 6ª chave é propagada. |
-| **Inspeciona o real sob demanda** | `audit server` lê usuários/serviços via SSH, sem alterar nada. |
+| **Inspeciona o real sob demanda** | `audit server` lê usuários, grupos, sudoers e serviços via SSH, sem alterar nada. |
 
 ## Arquitetura — visão de 30 segundos
 
@@ -149,11 +149,11 @@ Receitário completo por caso de uso: [`docs/USAGE.md`](docs/USAGE.md).
 | UC-3  | `adminforge user-group ...`                            | Cria/edita/exclui grupo de usuários (aceita N membros). |
 | UC-4  | `adminforge server add`                                | Registra servidor com TOFU de host key. |
 | UC-5  | `adminforge server-group ...`                          | Cria/edita grupo de servidores (aceita N membros). |
-| UC-6  | `adminforge grant` / `revoke`                          | Liga grupos com nível `shell` ou `sudo`. |
+| UC-6  | `adminforge grant` / `revoke` / `permission ...`       | Liga grupos com nível `shell` ou `sudo`. `permission list/update/delete` é o CRUD explícito. |
 | UC-7  | `adminforge preview`                                   | Mostra o delta sem tocar em servidores. |
 | UC-8  | `adminforge apply`                                     | Propaga o delta via SSH em paralelo. |
 | UC-9  | `adminforge history list/show/failed/verify`           | Auditoria do que o Superadmin fez. |
-| UC-10 | `adminforge audit server`                              | Inspeção operacional read-only do servidor. |
+| UC-10 | `adminforge audit server`                              | Inspeção read-only: usuários classificados, grupos, mapa user×grupos, sudoers (com drift), serviços. |
 | —     | `adminforge dump --format json\|table`                 | Lista o estado declarado completo de uma vez. |
 
 ## Segurança
@@ -185,7 +185,7 @@ Mais em [`docs/SECURITY.md`](docs/SECURITY.md).
 pytest -v
 ```
 
-49 testes cobrem o fluxo end-to-end e edge cases (cadeia quebrada, duplicatas, idempotência, falha parcial, no-op, lockfile concorrente, permissão 0600, N membros atômicos, completers, migrate-state).
+52 testes cobrem o fluxo end-to-end e edge cases (cadeia quebrada, duplicatas, idempotência, falha parcial, no-op, lockfile concorrente, permissão 0600, N membros atômicos com vírgula/espaço, completers, audit estendido, permission CRUD).
 
 ### Como usar em produção
 
