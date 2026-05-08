@@ -19,6 +19,7 @@ from adminforge.domain import (
     StatusOperacao,
     StatusUser,
     Subacao,
+    SudoProfile,
     TipoAcao,
     User,
 )
@@ -341,21 +342,75 @@ class Nucleo:
         except Exception as e:
             return self._registrar_falha(op, str(e))
 
-    def conceder(self, grupo_user: str, grupo_servidor: str, nivel: NivelPermissao) -> Operacao:
-        op = self._nova_op(f"grant {grupo_user} {grupo_servidor} --level {nivel.value}")
+    def conceder(
+        self,
+        grupo_user: str,
+        grupo_servidor: str,
+        nivel: NivelPermissao,
+        profile: str | None = None,
+    ) -> Operacao:
+        comando = f"grant {grupo_user} {grupo_servidor} --level {nivel.value}"
+        if profile:
+            comando += f" --profile {profile}"
+        op = self._nova_op(comando)
         try:
             with self.store:
                 if not self.store.get_grupo_user(grupo_user):
                     raise NaoExiste(f"user-group '{grupo_user}' does not exist")
                 if not self.store.get_grupo_servidor(grupo_servidor):
                     raise NaoExiste(f"server-group '{grupo_servidor}' does not exist")
+                if profile is not None:
+                    if nivel != NivelPermissao.SUDO:
+                        raise FormatoInvalido("--profile only applies when --level is sudo")
+                    if not self.store.get_sudo_profile(profile):
+                        raise NaoExiste(f"sudo-profile '{profile}' does not exist")
                 self.store.save_permissao(
                     Permissao(
                         grupo_user=grupo_user,
                         grupo_servidor=grupo_servidor,
                         nivel=nivel,
+                        profile=profile,
                     )
                 )
+                return self._registrar(op, StatusOperacao.SUCESSO)
+        except Exception as e:
+            return self._registrar_falha(op, str(e))
+
+    def criar_sudo_profile(self, nome: str, comandos: list[str]) -> Operacao:
+        op = self._nova_op(f"sudo-profile create {nome}")
+        try:
+            with self.store:
+                if not _RE_NOME_GRUPO.match(nome):
+                    raise FormatoInvalido(f"invalid sudo-profile name: '{nome}'")
+                if not comandos:
+                    raise FormatoInvalido("at least one --command is required")
+                for c in comandos:
+                    if not c.startswith("/"):
+                        raise FormatoInvalido(
+                            f"command must be absolute path: '{c}' (sudoers requires absolute paths)"
+                        )
+                if self.store.get_sudo_profile(nome):
+                    raise JaExiste(f"sudo-profile '{nome}' already exists")
+                self.store.save_sudo_profile(SudoProfile(nome=nome, comandos=list(comandos)))
+                return self._registrar(op, StatusOperacao.SUCESSO)
+        except Exception as e:
+            return self._registrar_falha(op, str(e))
+
+    def excluir_sudo_profile(self, nome: str) -> Operacao:
+        op = self._nova_op(f"sudo-profile delete {nome}")
+        try:
+            with self.store:
+                if not self.store.get_sudo_profile(nome):
+                    raise NaoExiste(f"sudo-profile '{nome}' does not exist")
+                em_uso = [
+                    p for p in self.store.list_permissoes() if p.profile == nome
+                ]
+                if em_uso:
+                    raise EstadoInvalido(
+                        f"sudo-profile '{nome}' is in use by {len(em_uso)} permission(s); "
+                        f"update or revoke them first"
+                    )
+                self.store.delete_sudo_profile(nome)
                 return self._registrar(op, StatusOperacao.SUCESSO)
         except Exception as e:
             return self._registrar_falha(op, str(e))
@@ -420,6 +475,7 @@ class Nucleo:
                                 ref=s.credencial,
                                 username=s.username or "",
                                 nivel=s.nivel or NivelPermissao.SHELL,
+                                profile=s.profile,
                             )
                         elif s.acao == TipoAcao.REMOVER_CHAVE:
                             instaladas.pop(s.credencial, None)

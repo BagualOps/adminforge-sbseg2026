@@ -249,5 +249,22 @@ def test_fluxo_completo_em_containers(lab, tmp_path):
         f"drift: declarado={refs_declaradas} real={refs_reais}"
     )
 
+    # Sudo profile: troca grant de full -> profile, re-aplica, valida sudoers
+    nucleo.criar_sudo_profile("read-logs", ["/bin/journalctl", "/bin/cat"])
+    # remove permissao atual e cria nova com profile
+    nucleo.revogar("sysadmins", "producao")
+    nucleo.aplicar()  # remove regras antigas
+    nucleo.conceder("sysadmins", "producao", NivelPermissao.SUDO, profile="read-logs")
+    op_profile = nucleo.aplicar()
+    assert op_profile.status == StatusOperacao.SUCESSO
+
+    rc, out = _exec_container("adminforge-web-01", "sudo", "cat", "/etc/sudoers.d/adminforge-alice")
+    assert rc == 0
+    assert "NOPASSWD: /bin/journalctl" in out
+    assert "NOPASSWD: /bin/cat" in out
+    assert "NOPASSWD:ALL" not in out
+    rc, _ = _exec_container("adminforge-web-01", "sudo", "visudo", "-c")
+    assert rc == 0
+
     ok, _ = nucleo.auditor.verificar_cadeia()
     assert ok is True

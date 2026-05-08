@@ -193,18 +193,28 @@ class SSHDeployer(IDeployer):
 
         sudoers = f"/etc/sudoers.d/adminforge-{sub.username}"
         if sub.nivel == NivelPermissao.SUDO:
-            self._escrever_sudoers(servidor, sub.username, sudoers)
+            self._escrever_sudoers(servidor, sub.username, sudoers, sub.profile_comandos)
         else:
             self._executar_ssh(servidor, f"sudo rm -f {sudoers}")
 
     def _escrever_sudoers(
-        self, servidor: Servidor, username: str, destino: str
+        self,
+        servidor: Servidor,
+        username: str,
+        destino: str,
+        comandos: list[str] | None,
     ) -> None:
-        linha = f"{username} ALL=(ALL) NOPASSWD:ALL\n"
+        if comandos:
+            # cada comando recebe sua propria linha; garante absolutos (validacao no Nucleo)
+            corpo = "\n".join(
+                f"{username} ALL=(ALL) NOPASSWD: {c}" for c in comandos
+            ) + "\n"
+        else:
+            corpo = f"{username} ALL=(ALL) NOPASSWD:ALL\n"
         tmp = f"/tmp/.adminforge-sudoers-{username}.{secrets.token_hex(8)}"
         comando = (
             f"set -e; "
-            f"printf %s {shlex.quote(linha)} | sudo tee {tmp} >/dev/null && "
+            f"printf %s {shlex.quote(corpo)} | sudo tee {tmp} >/dev/null && "
             f"sudo chmod 0440 {tmp} && "
             f"sudo visudo -cf {tmp} >/dev/null && "
             f"sudo mv {tmp} {destino}"

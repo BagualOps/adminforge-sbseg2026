@@ -34,6 +34,10 @@ def server_groups(prefix="", parsed_args=None, **_):
     return _stems(_state_dir(parsed_args) / "server-groups", prefix)
 
 
+def sudo_profiles(prefix="", parsed_args=None, **_):
+    return _stems(_state_dir(parsed_args) / "sudo-profiles", prefix)
+
+
 def fingerprints(prefix="", parsed_args=None, **_):
     out: list[str] = []
     users_dir = _state_dir(parsed_args) / "users"

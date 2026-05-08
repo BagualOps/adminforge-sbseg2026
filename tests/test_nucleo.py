@@ -110,6 +110,39 @@ def test_n_membros_falha_atomica_se_um_inexiste(nucleo: Nucleo):
     assert g.membros == []
 
 
+def test_sudo_profile_create_e_concede(nucleo: Nucleo):
+    op = nucleo.criar_sudo_profile("dba-postgres", ["/bin/systemctl restart postgresql", "/usr/bin/psql"])
+    assert op.status == StatusOperacao.SUCESSO
+    nucleo.criar_grupo_user("dba")
+    nucleo.criar_grupo_servidor("banco")
+    op = nucleo.conceder("dba", "banco", NivelPermissao.SUDO, profile="dba-postgres")
+    assert op.status == StatusOperacao.SUCESSO
+    perms = nucleo.store.list_permissoes()
+    assert perms[0].profile == "dba-postgres"
+
+
+def test_sudo_profile_rejeita_comando_relativo(nucleo: Nucleo):
+    op = nucleo.criar_sudo_profile("bad", ["systemctl restart nginx"])
+    assert op.status == StatusOperacao.FALHA
+
+
+def test_sudo_profile_rejeita_se_em_uso(nucleo: Nucleo):
+    nucleo.criar_sudo_profile("p1", ["/bin/true"])
+    nucleo.criar_grupo_user("g")
+    nucleo.criar_grupo_servidor("s")
+    nucleo.conceder("g", "s", NivelPermissao.SUDO, profile="p1")
+    op = nucleo.excluir_sudo_profile("p1")
+    assert op.status == StatusOperacao.FALHA
+
+
+def test_profile_so_com_sudo(nucleo: Nucleo):
+    nucleo.criar_sudo_profile("p", ["/bin/true"])
+    nucleo.criar_grupo_user("g")
+    nucleo.criar_grupo_servidor("s")
+    op = nucleo.conceder("g", "s", NivelPermissao.SHELL, profile="p")
+    assert op.status == StatusOperacao.FALHA
+
+
 def test_remover_n_membros_de_uma_vez(nucleo: Nucleo):
     for u in ("alice", "bob", "carla"):
         nucleo.cadastrar_user(u, u.title(), f"{u}@e.com")

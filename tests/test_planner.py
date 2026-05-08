@@ -45,6 +45,31 @@ def test_user_inativo_sai_do_estado_desejado(nucleo: Nucleo):
     assert all(s.username == "bob" for s in subacoes)
 
 
+def test_profile_propagado_para_subacao(nucleo: Nucleo):
+    _setup_basico(nucleo)
+    nucleo.criar_sudo_profile("read-logs", ["/bin/journalctl"])
+    nucleo.conceder("sysadmins", "producao", NivelPermissao.SUDO, profile="read-logs")
+    subs = [s for s in nucleo.preview() if s.acao == TipoAcao.ADICIONAR_CHAVE]
+    assert subs
+    for s in subs:
+        assert s.profile == "read-logs"
+        assert s.profile_comandos == ["/bin/journalctl"]
+
+
+def test_full_sudo_prevalece_sobre_profile(nucleo: Nucleo):
+    _setup_basico(nucleo)
+    nucleo.criar_sudo_profile("limited", ["/bin/journalctl"])
+    nucleo.criar_grupo_user("ops")
+    nucleo.adicionar_membro_grupo_user("ops", "alice")
+    nucleo.conceder("sysadmins", "producao", NivelPermissao.SUDO, profile="limited")
+    nucleo.conceder("ops", "producao", NivelPermissao.SUDO)  # full sudo
+    alice = [s for s in nucleo.preview() if s.username == "alice"]
+    assert alice
+    for s in alice:
+        assert s.profile is None
+        assert s.profile_comandos is None
+
+
 def test_sudo_prevalece_sobre_shell(nucleo: Nucleo):
     _setup_basico(nucleo)
     nucleo.criar_grupo_user("dba")

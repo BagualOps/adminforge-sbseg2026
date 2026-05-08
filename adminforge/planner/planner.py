@@ -25,6 +25,7 @@ class ChaveInstalada:
     ref: str
     username: str
     nivel: NivelPermissao
+    profile: str | None = None
 
     @classmethod
     def de_dict(cls, d: dict) -> "ChaveInstalada":
@@ -32,10 +33,14 @@ class ChaveInstalada:
             ref=d["ref"],
             username=d.get("username") or d["ref"].split(":", 1)[0],
             nivel=NivelPermissao(d.get("nivel", "shell")),
+            profile=d.get("profile"),
         )
 
     def para_dict(self) -> dict:
-        return {"ref": self.ref, "username": self.username, "nivel": self.nivel.value}
+        out = {"ref": self.ref, "username": self.username, "nivel": self.nivel.value}
+        if self.profile is not None:
+            out["profile"] = self.profile
+        return out
 
 
 class Planner:
@@ -68,14 +73,36 @@ class Planner:
                             continue
                         existente = desejado[hostname].get(ref)
                         nivel = perm.nivel if existente is None else _maior(existente.nivel, perm.nivel)
+                        # profile: full sudo (None) prevalece sobre profile especifico (menor restricao);
+                        # entre dois perms ambos com profile, mantem o existente (estavel)
+                        if nivel == NivelPermissao.SUDO:
+                            if existente is None:
+                                profile = perm.profile
+                            elif existente.profile is None or perm.profile is None:
+                                profile = None  # full sudo prevalece
+                            else:
+                                profile = existente.profile
+                        else:
+                            profile = None
                         desejado[hostname][ref] = ChaveInstalada(
-                            ref=ref, username=username, nivel=nivel
+                            ref=ref, username=username, nivel=nivel, profile=profile
                         )
         return desejado
 
     def calcular_delta(self) -> list[Subacao]:
         desejado = self.estado_desejado()
         subacoes: list[Subacao] = []
+
+        # cache de profiles para evitar reler a cada subaction
+        profiles_cache: dict[str, list[str]] = {}
+
+        def _comandos(profile: str | None) -> list[str] | None:
+            if profile is None:
+                return None
+            if profile not in profiles_cache:
+                p = self.store.get_sudo_profile(profile)
+                profiles_cache[profile] = list(p.comandos) if p else []
+            return profiles_cache[profile]
 
         for servidor in self.store.list_servidores():
             atual = {}
@@ -96,7 +123,12 @@ class Planner:
                 cred = self.store.get_credencial_por_fingerprint(esperado.ref.split(":", 1)[1])
                 chave_publica = cred.chave_publica if cred else ""
                 instalado = atual.get(ref)
-                if instalado is None or instalado.nivel != esperado.nivel:
+                divergente = (
+                    instalado is None
+                    or instalado.nivel != esperado.nivel
+                    or instalado.profile != esperado.profile
+                )
+                if divergente:
                     subacoes.append(
                         Subacao(
                             servidor=servidor.hostname,
@@ -105,6 +137,8 @@ class Planner:
                             chave_publica=chave_publica,
                             username=esperado.username,
                             nivel=esperado.nivel,
+                            profile=esperado.profile,
+                            profile_comandos=_comandos(esperado.profile),
                         )
                     )
 

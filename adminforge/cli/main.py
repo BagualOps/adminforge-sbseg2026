@@ -274,7 +274,10 @@ def cmd_sg_list(args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 def cmd_grant(args: argparse.Namespace) -> int:
     return ui.imprimir_resultado(
-        _nucleo(args).conceder(args.user_group, args.server_group, NivelPermissao(args.level))
+        _nucleo(args).conceder(
+            args.user_group, args.server_group, NivelPermissao(args.level),
+            profile=getattr(args, "profile", None),
+        )
     )
 
 
@@ -288,15 +291,51 @@ def cmd_revoke(args: argparse.Namespace) -> int:
 def cmd_permission_list(args: argparse.Namespace) -> int:
     nucleo = _nucleo(args)
     perms = nucleo.store.list_permissoes()
-    linhas = [[p.grupo_user, p.grupo_servidor, p.nivel.value] for p in perms]
-    ui.tabela(["USER_GROUP", "SERVER_GROUP", "LEVEL"], linhas)
+    linhas = [
+        [p.grupo_user, p.grupo_servidor, p.nivel.value, p.profile or "—"] for p in perms
+    ]
+    ui.tabela(["USER_GROUP", "SERVER_GROUP", "LEVEL", "PROFILE"], linhas)
     return 0
 
 
 def cmd_permission_update(args: argparse.Namespace) -> int:
     return ui.imprimir_resultado(
-        _nucleo(args).conceder(args.user_group, args.server_group, NivelPermissao(args.level))
+        _nucleo(args).conceder(
+            args.user_group, args.server_group, NivelPermissao(args.level),
+            profile=getattr(args, "profile", None),
+        )
     )
+
+
+# ---------------------------------------------------------------------------
+# sudo-profile
+# ---------------------------------------------------------------------------
+def cmd_sudo_profile_create(args: argparse.Namespace) -> int:
+    return ui.imprimir_resultado(_nucleo(args).criar_sudo_profile(args.name, args.command))
+
+
+def cmd_sudo_profile_list(args: argparse.Namespace) -> int:
+    nucleo = _nucleo(args)
+    profiles = nucleo.store.list_sudo_profiles()
+    linhas = [[p.nome, str(len(p.comandos)), ", ".join(p.comandos)[:80]] for p in profiles]
+    ui.tabela(["NAME", "#CMDS", "COMMANDS"], linhas)
+    return 0
+
+
+def cmd_sudo_profile_show(args: argparse.Namespace) -> int:
+    nucleo = _nucleo(args)
+    p = nucleo.store.get_sudo_profile(args.name)
+    if not p:
+        ui.fail(f"sudo-profile '{args.name}' does not exist")
+        return 2
+    ui.heading(f"sudo-profile {p.nome}")
+    for c in p.comandos:
+        ui.echo(f"  {c}")
+    return 0
+
+
+def cmd_sudo_profile_delete(args: argparse.Namespace) -> int:
+    return ui.imprimir_resultado(_nucleo(args).excluir_sudo_profile(args.name))
 
 
 def cmd_permission_delete(args: argparse.Namespace) -> int:
@@ -597,8 +636,13 @@ def _coletar_estado(nucleo: Nucleo) -> dict:
                 "user_group": p.grupo_user,
                 "server_group": p.grupo_servidor,
                 "level": p.nivel.value,
+                "profile": p.profile,
             }
             for p in nucleo.store.list_permissoes()
+        ],
+        "sudo_profiles": [
+            {"name": p.nome, "commands": list(p.comandos)}
+            for p in nucleo.store.list_sudo_profiles()
         ],
     }
 
@@ -641,8 +685,17 @@ def cmd_dump(args: argparse.Namespace) -> int:
 
     ui.heading(f"Permissions ({len(estado['permissions'])})")
     ui.tabela(
-        ["USER_GROUP", "SERVER_GROUP", "LEVEL"],
-        [[p["user_group"], p["server_group"], p["level"]] for p in estado["permissions"]],
+        ["USER_GROUP", "SERVER_GROUP", "LEVEL", "PROFILE"],
+        [
+            [p["user_group"], p["server_group"], p["level"], p.get("profile") or "—"]
+            for p in estado["permissions"]
+        ],
+    )
+
+    ui.heading(f"Sudo profiles ({len(estado['sudo_profiles'])})")
+    ui.tabela(
+        ["NAME", "#CMDS", "COMMANDS"],
+        [[p["name"], str(len(p["commands"])), ", ".join(p["commands"])[:60]] for p in estado["sudo_profiles"]],
     )
     return 0
 
@@ -920,6 +973,7 @@ def _build_parser() -> argparse.ArgumentParser:
     a.add_argument("--user-group", dest="user_group", required=True).completer = completers.user_groups
     a.add_argument("--server-group", dest="server_group", required=True).completer = completers.server_groups
     a.add_argument("--level", choices=["shell", "sudo"], required=True)
+    a.add_argument("--profile", help="Sudo profile name (only with --level sudo); without it, grants NOPASSWD:ALL.").completer = completers.sudo_profiles
     a.set_defaults(func=cmd_grant)
 
     a = sub.add_parser("revoke", help="Revoke access between two groups.")
@@ -948,6 +1002,7 @@ def _build_parser() -> argparse.ArgumentParser:
     a.add_argument("--user-group", dest="user_group", required=True).completer = completers.user_groups
     a.add_argument("--server-group", dest="server_group", required=True).completer = completers.server_groups
     a.add_argument("--level", choices=["shell", "sudo"], required=True)
+    a.add_argument("--profile", help="Sudo profile name (only with --level sudo).").completer = completers.sudo_profiles
     a.set_defaults(func=cmd_permission_update)
 
     a = s_perm.add_parser("delete", help="Delete a permission (alias of revoke).")
@@ -955,6 +1010,36 @@ def _build_parser() -> argparse.ArgumentParser:
     a.add_argument("--server-group", dest="server_group", required=True).completer = completers.server_groups
     a.add_argument("--yes", action="store_true", help="Skip confirmation.")
     a.set_defaults(func=cmd_permission_delete)
+
+    # sudo-profile
+    p_sp = sub.add_parser(
+        "sudo-profile",
+        help="Manage named sudo profiles (allowed commands per role).",
+        epilog=(
+            "Examples:\n"
+            "  adminforge sudo-profile create --name read-logs --command /bin/journalctl --command '/bin/cat /var/log/*'\n"
+            "  adminforge sudo-profile list\n"
+            "  adminforge grant --user-group monitoring --server-group prod --level sudo --profile read-logs"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    s_sp = p_sp.add_subparsers(dest="sub", required=True)
+
+    a = s_sp.add_parser("create", help="Create a sudo profile with one or more absolute commands.")
+    a.add_argument("--name", required=True)
+    a.add_argument("--command", required=True, action="append", help="Absolute path to allow (repeat).")
+    a.set_defaults(func=cmd_sudo_profile_create)
+
+    a = s_sp.add_parser("list", help="List sudo profiles.")
+    a.set_defaults(func=cmd_sudo_profile_list)
+
+    a = s_sp.add_parser("show", help="Show commands of a sudo profile.")
+    a.add_argument("--name", required=True).completer = completers.sudo_profiles
+    a.set_defaults(func=cmd_sudo_profile_show)
+
+    a = s_sp.add_parser("delete", help="Delete a sudo profile (must be unused).")
+    a.add_argument("--name", required=True).completer = completers.sudo_profiles
+    a.set_defaults(func=cmd_sudo_profile_delete)
 
     # dump
     a = sub.add_parser("dump", help="List the full declared state (users, groups, servers, permissions).")

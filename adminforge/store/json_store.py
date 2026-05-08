@@ -15,6 +15,7 @@ from adminforge.domain import (
     Servidor,
     StatusCredencial,
     StatusUser,
+    SudoProfile,
     User,
 )
 from adminforge.exceptions import LockOcupado
@@ -31,6 +32,7 @@ class JsonStore(IStore):
         self.dir_user_groups = self.root / "user-groups"
         self.dir_servers = self.root / "servers"
         self.dir_server_groups = self.root / "server-groups"
+        self.dir_sudo_profiles = self.root / "sudo-profiles"
         self.file_permissions = self.root / "permissions.json"
         self.file_lock = self.root / ".lock"
         self._lock_fd: int | None = None
@@ -43,6 +45,7 @@ class JsonStore(IStore):
             self.dir_user_groups,
             self.dir_servers,
             self.dir_server_groups,
+            self.dir_sudo_profiles,
         ):
             d.mkdir(parents=True, exist_ok=True)
             try:
@@ -259,6 +262,7 @@ class JsonStore(IStore):
                     grupo_user=p["grupo_user"],
                     grupo_servidor=p["grupo_servidor"],
                     nivel=NivelPermissao(p["nivel"]),
+                    profile=p.get("profile"),
                 )
             )
         return out
@@ -273,6 +277,7 @@ class JsonStore(IStore):
                 and p["grupo_servidor"] == permissao.grupo_servidor
             ):
                 p["nivel"] = permissao.nivel.value
+                p["profile"] = permissao.profile
                 atualizou = True
                 break
         if not atualizou:
@@ -282,6 +287,7 @@ class JsonStore(IStore):
                     "grupo_user": permissao.grupo_user,
                     "grupo_servidor": permissao.grupo_servidor,
                     "nivel": permissao.nivel.value,
+                    "profile": permissao.profile,
                 }
             )
         write_atomic(self.file_permissions, self._dump(data))
@@ -297,3 +303,28 @@ class JsonStore(IStore):
         if len(data["permissoes"]) == antes:
             raise FileNotFoundError("permission does not exist")
         write_atomic(self.file_permissions, self._dump(data))
+
+    def get_sudo_profile(self, nome: str) -> SudoProfile | None:
+        data = self._load(self.dir_sudo_profiles / f"{nome}.json")
+        if not data:
+            return None
+        return SudoProfile(
+            id=UUID(data["id"]),
+            nome=data["nome"],
+            comandos=list(data.get("comandos", [])),
+        )
+
+    def list_sudo_profiles(self) -> list[SudoProfile]:
+        out = []
+        for arquivo in sorted(self.dir_sudo_profiles.glob("*.json")):
+            p = self.get_sudo_profile(arquivo.stem)
+            if p is not None:
+                out.append(p)
+        return out
+
+    def save_sudo_profile(self, profile: SudoProfile) -> None:
+        data = {"id": str(profile.id), "nome": profile.nome, "comandos": list(profile.comandos)}
+        write_atomic(self.dir_sudo_profiles / f"{profile.nome}.json", self._dump(data))
+
+    def delete_sudo_profile(self, nome: str) -> None:
+        (self.dir_sudo_profiles / f"{nome}.json").unlink(missing_ok=True)

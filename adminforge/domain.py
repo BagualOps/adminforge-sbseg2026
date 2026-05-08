@@ -83,10 +83,18 @@ class GrupoServidor:
 
 
 @dataclass
+class SudoProfile:
+    nome: str
+    comandos: list[str] = field(default_factory=list)
+    id: UUID = field(default_factory=uuid4)
+
+
+@dataclass
 class Permissao:
     grupo_user: str
     grupo_servidor: str
     nivel: NivelPermissao
+    profile: str | None = None
     id: UUID = field(default_factory=uuid4)
 
 
@@ -98,6 +106,8 @@ class Subacao:
     chave_publica: str | None = None
     username: str | None = None
     nivel: NivelPermissao | None = None
+    profile: str | None = None
+    profile_comandos: list[str] | None = None
     status: str = "pendente"
     erro: str | None = None
     mensagem: str | None = None
