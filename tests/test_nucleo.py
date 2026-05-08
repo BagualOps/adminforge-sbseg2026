@@ -126,6 +126,14 @@ def test_sudo_profile_rejeita_comando_relativo(nucleo: Nucleo):
     assert op.status == StatusOperacao.FALHA
 
 
+def test_sudo_profile_rejeita_newline_no_comando(nucleo: Nucleo):
+    """Regressao: \\n no comando injetaria nova regra no sudoers (passaria 'visudo -c')."""
+    op = nucleo.criar_sudo_profile("evil", ["/bin/true\nbad ALL=(ALL) NOPASSWD:ALL"])
+    assert op.status == StatusOperacao.FALHA
+    op = nucleo.criar_sudo_profile("evil2", ["/bin/true\rfoo"])
+    assert op.status == StatusOperacao.FALHA
+
+
 def test_sudo_profile_rejeita_se_em_uso(nucleo: Nucleo):
     nucleo.criar_sudo_profile("p1", ["/bin/true"])
     nucleo.criar_grupo_user("g")

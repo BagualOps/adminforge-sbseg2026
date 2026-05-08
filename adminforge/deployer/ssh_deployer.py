@@ -244,8 +244,14 @@ class SSHDeployer(IDeployer):
         'echo "=== USERS ==="; getent passwd; '
         'echo "=== GROUPS ==="; getent group; '
         'echo "=== SERVICES ==="; '
-        '(systemctl list-units --type=service --state=running --no-legend --no-pager 2>/dev/null '
-        '| awk \'{print $1}\') || service --status-all 2>/dev/null || true; '
+        # checa systemctl explicitamente: 'cmd | awk' dava rc=0 do awk mesmo com systemctl ausente,
+        # impedindo o fallback service --status-all.
+        'if command -v systemctl >/dev/null 2>&1; then '
+        'systemctl list-units --type=service --state=running --no-legend --no-pager 2>/dev/null '
+        '| awk \'{print $1}\'; '
+        'elif command -v service >/dev/null 2>&1; then '
+        'service --status-all 2>/dev/null; '
+        'fi; '
         'echo "=== SUDOERS_FILES ==="; '
         '(sudo -n ls /etc/sudoers.d/ 2>/dev/null || ls /etc/sudoers.d/ 2>/dev/null) || true; '
         'echo "=== SUDOERS_BODY ==="; '

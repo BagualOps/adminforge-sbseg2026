@@ -389,6 +389,13 @@ class Nucleo:
                         raise FormatoInvalido(
                             f"command must be absolute path: '{c}' (sudoers requires absolute paths)"
                         )
+                    # Bloqueia injection de novas regras no sudoers via newline/CR.
+                    # 'visudo -c' valida sintaxe mas nao distingue 1 regra com \n vs 2 regras
+                    # legitimas; basta uma das linhas ser valida pra passar.
+                    if any(ch in c for ch in ("\n", "\r", "\x00")):
+                        raise FormatoInvalido(
+                            f"command contains forbidden control character: {c!r}"
+                        )
                 if self.store.get_sudo_profile(nome):
                     raise JaExiste(f"sudo-profile '{nome}' already exists")
                 self.store.save_sudo_profile(SudoProfile(nome=nome, comandos=list(comandos)))

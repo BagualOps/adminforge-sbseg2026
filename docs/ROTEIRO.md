@@ -380,6 +380,8 @@ af audit server --hostname prod-web-01     # real (read-only via SSH)
 
 Para conferir automaticamente: `af apply verify` lê os blocos AdminForge reais via SSH e compara com o declarado, reportando MISSING/EXTRA por servidor (rc=2 se houver drift).
 
+> **Escopo do verify.** Lê `authorized_keys` apenas dos usuários que aparecem em `chaves_instaladas` do estado. Blocos AdminForge sob contas locais que **não** estão (mais) declaradas — ex.: usuário removido do estado mas com bloco órfão no servidor — não são detectados pelo `verify`. Para esse caso, use `af audit server --hostname <h>` que olha `/etc/sudoers.d/` e marca arquivos `adminforge-*` sem permissão correspondente como drift.
+
 ---
 
 ## 9. Backup do estado
