@@ -332,6 +332,109 @@ def cmd_preview(args: argparse.Namespace) -> int:
     return 0
 
 
+def _imprimir_diff(nucleo: Nucleo, subacoes: list) -> None:
+    """Mostra unified diff do authorized_keys de cada (servidor, username) afetado."""
+    import difflib
+    from adminforge import authorized_keys as ak
+
+    por_user: dict[tuple[str, str], list] = {}
+    for s in subacoes:
+        if s.acao not in (TipoAcao.ADICIONAR_CHAVE, TipoAcao.REMOVER_CHAVE):
+            continue
+        if not s.username:
+            continue
+        por_user.setdefault((s.servidor, s.username), []).append(s)
+
+    ui.heading("Diff (authorized_keys)")
+    for (hostname, username), lote in sorted(por_user.items()):
+        servidor = nucleo.store.get_servidor(hostname)
+        if servidor is None:
+            continue
+        atual = nucleo.deployer.ler_authorized_keys(servidor, username)
+        novo = atual
+        for s in lote:
+            if s.acao == TipoAcao.ADICIONAR_CHAVE and s.chave_publica and s.credencial:
+                novo = ak.substituir_bloco(novo, s.credencial, ak.bloco(s.credencial, s.chave_publica))
+            elif s.acao == TipoAcao.REMOVER_CHAVE and s.credencial:
+                novo = ak.substituir_bloco(novo, s.credencial, "")
+        ui.secho(f"  {hostname}:{username}", bold=True)
+        for linha in difflib.unified_diff(
+            atual.splitlines(), novo.splitlines(),
+            fromfile="current", tofile="planned", lineterm="",
+        ):
+            if linha.startswith("+") and not linha.startswith("+++"):
+                ui.secho(f"    {linha}", ui._GREEN)
+            elif linha.startswith("-") and not linha.startswith("---"):
+                ui.secho(f"    {linha}", ui._RED)
+            elif linha.startswith("@@"):
+                ui.secho(f"    {linha}", ui._CYAN)
+            else:
+                ui.echo(f"    {linha}")
+
+
+def cmd_apply_verify(args: argparse.Namespace) -> int:
+    """Compara chaves_instaladas declarado vs blocos AdminForge reais via SSH."""
+    from adminforge import authorized_keys as ak
+
+    nucleo = _nucleo(args, com_ssh=not args.dry_run)
+    total_ok = 0
+    total_div = 0
+    erros_ssh: list[str] = []
+
+    for servidor in nucleo.store.list_servidores():
+        # esperado: dict ref -> nome_user
+        esperado: dict[str, str] = {}
+        for item in servidor.chaves_instaladas:
+            if isinstance(item, dict):
+                esperado[item["ref"]] = item.get("username") or item["ref"].split(":", 1)[0]
+            else:
+                esperado[item] = item.split(":", 1)[0]
+
+        # users a consultar (declarados + nada extra; extras seriam descobertos via audit server)
+        usernames = sorted(set(esperado.values()))
+
+        ui.heading(servidor.hostname)
+        if not usernames:
+            ui.secho("  (no installed keys declared)", dim=True)
+            continue
+
+        ssh_falhou = False
+        real: dict[str, str] = {}
+        for u in usernames:
+            try:
+                conteudo = nucleo.deployer.ler_authorized_keys(servidor, u)
+            except Exception as e:
+                ui.fail(f"  ssh failed reading {u}: {e}")
+                ssh_falhou = True
+                break
+            for ref in ak.parse_blocos(conteudo):
+                real[ref] = u
+
+        if ssh_falhou:
+            erros_ssh.append(servidor.hostname)
+            continue
+
+        for ref, username in sorted(esperado.items()):
+            if ref in real:
+                ui.ok(f"  {username:20} {ref}")
+                total_ok += 1
+            else:
+                ui.fail(f"  {username:20} {ref} — declared but not present on server")
+                total_div += 1
+        for ref, username in sorted(real.items()):
+            if ref not in esperado:
+                ui.warn(f"  {username:20} {ref} — block on server but not in state")
+                total_div += 1
+
+    ui.echo()
+    ui.heading("Summary")
+    ui.kv("matches", str(total_ok))
+    ui.kv("divergences", str(total_div))
+    if erros_ssh:
+        ui.kv("ssh errors", ", ".join(erros_ssh))
+    return 0 if total_div == 0 and not erros_ssh else 2
+
+
 def cmd_apply(args: argparse.Namespace) -> int:
     nucleo = _nucleo(args, com_ssh=not args.dry_run)
     subacoes = nucleo.preview()
@@ -347,6 +450,9 @@ def cmd_apply(args: argparse.Namespace) -> int:
                 continue
             sinal = "+" if s.acao == TipoAcao.ADICIONAR_CHAVE else "-"
             ui.echo(f"    {sinal} {s.acao.value:18} {s.credencial}")
+
+    if args.diff:
+        _imprimir_diff(nucleo, subacoes)
 
     if not args.yes and not ui.confirmar("Apply now?"):
         ui.warn("apply cancelled")
@@ -860,10 +966,15 @@ def _build_parser() -> argparse.ArgumentParser:
     a.set_defaults(func=cmd_preview)
 
     # apply
-    a = sub.add_parser("apply", help="Apply the delta to servers via SSH.")
-    a.add_argument("--yes", action="store_true", help="Skip confirmation.")
-    a.add_argument("--dry-run", action="store_true", help="Use the fake Deployer.")
-    a.set_defaults(func=cmd_apply)
+    p_apply = sub.add_parser("apply", help="Apply the delta to servers via SSH.")
+    p_apply.add_argument("--yes", action="store_true", help="Skip confirmation.")
+    p_apply.add_argument("--dry-run", action="store_true", help="Use the fake Deployer.")
+    p_apply.add_argument("--diff", action="store_true", help="Show authorized_keys before/after diff per user.")
+    p_apply.set_defaults(func=cmd_apply)
+    s_apply = p_apply.add_subparsers(dest="apply_sub", required=False)
+    a = s_apply.add_parser("verify", help="Compare declared chaves_instaladas vs real authorized_keys.")
+    a.add_argument("--dry-run", action="store_true")
+    a.set_defaults(func=cmd_apply_verify)
 
     # history
     p_hist = sub.add_parser("history", help="Query operational history.")

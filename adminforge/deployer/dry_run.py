@@ -28,3 +28,6 @@ class DryRunDeployer(IDeployer):
             "sudoers_regras": [],
             "dry_run": True,
         }
+
+    def ler_authorized_keys(self, servidor: Servidor, username: str) -> str:
+        return ""

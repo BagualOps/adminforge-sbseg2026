@@ -105,6 +105,43 @@ def test_cli_add_member_misto_virgula_e_espaco(env):
         assert u in out
 
 
+def test_cli_apply_verify_dry_run(env):
+    # cenario: estado declarado, DryRun.ler_authorized_keys == "" => tudo divergente
+    run_cli(["user", "add", "--username", "alice", "--name", "A", "--email", "a@e.com"])
+    run_cli(["user", "key", "add", "--username", "alice", "--string", CHAVE_ALICE])
+    run_cli(["user-group", "create", "--name", "sa"])
+    run_cli(["user-group", "add-member", "--group", "sa", "--username", "alice"])
+    run_cli(["server", "add", "--hostname", "web-01", "--ip", "10.0.0.10", "--host-key", HOST_KEY_FAKE])
+    run_cli(["server-group", "create", "--name", "prod"])
+    run_cli(["server-group", "add-member", "--group", "prod", "--hostname", "web-01"])
+    run_cli(["grant", "--user-group", "sa", "--server-group", "prod", "--level", "shell"])
+    run_cli(["apply", "--yes", "--dry-run"])
+
+    rc, out = run_cli(["apply", "verify", "--dry-run"])
+    # DryRun retorna "" → blocos nao existem real → divergencia → rc=2
+    assert rc == 2
+    assert "divergences" in out
+    assert "declared but not present" in out
+
+
+def test_cli_apply_diff(env):
+    run_cli(["user", "add", "--username", "alice", "--name", "A", "--email", "a@e.com"])
+    run_cli(["user", "key", "add", "--username", "alice", "--string", CHAVE_ALICE])
+    run_cli(["user-group", "create", "--name", "sa"])
+    run_cli(["user-group", "add-member", "--group", "sa", "--username", "alice"])
+    run_cli(["server", "add", "--hostname", "web-01", "--ip", "10.0.0.10", "--host-key", HOST_KEY_FAKE])
+    run_cli(["server-group", "create", "--name", "prod"])
+    run_cli(["server-group", "add-member", "--group", "prod", "--hostname", "web-01"])
+    run_cli(["grant", "--user-group", "sa", "--server-group", "prod", "--level", "shell"])
+
+    rc, out = run_cli(["apply", "--yes", "--dry-run", "--diff"])
+    assert rc == 0
+    assert "Diff" in out
+    assert "web-01:alice" in out
+    # com DryRun.ler_authorized_keys=='', tudo eh nova adicao
+    assert "+# BEGIN adminforge: alice:" in out
+
+
 def test_cli_dump_json(env):
     run_cli(["user", "add", "--username", "alice", "--name", "A", "--email", "a@e.com"])
     run_cli(["user", "key", "add", "--username", "alice", "--string", CHAVE_ALICE])

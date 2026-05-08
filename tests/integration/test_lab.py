@@ -176,6 +176,8 @@ def test_fluxo_completo_em_containers(lab, tmp_path):
     assert "END adminforge: alice:" in out
     assert "alice@laptop" in out
 
+    # após o 1º apply criando o authorized_keys do zero, ainda não há .bak (não havia arquivo antes)
+    # agora desabilita bob e dispara um 2º edit para criar o .bak
     rc, out = _exec_container("adminforge-web-01", "sudo", "cat", "/etc/sudoers.d/adminforge-alice")
     assert rc == 0
     assert "alice ALL=(ALL) NOPASSWD:ALL" in out
@@ -202,6 +204,10 @@ def test_fluxo_completo_em_containers(lab, tmp_path):
     assert "bob:" not in out
     assert "BEGIN adminforge: bob:" not in out
 
+    # bob teve um arquivo escrito no 1o apply e re-escrito no 2o (remove); o .bak agora existe
+    rc, _ = _exec_container("adminforge-web-01", "sudo", "test", "-f", "/home/bob/.ssh/authorized_keys.bak")
+    assert rc == 0, "expected authorized_keys.bak after second edit"
+
     rc, _ = _exec_container("adminforge-web-01", "ls", "/etc/sudoers.d/adminforge-bob")
     assert rc != 0
 
@@ -227,6 +233,21 @@ def test_fluxo_completo_em_containers(lab, tmp_path):
 
     arquivos_af = [a for a in relatorio["sudoers_arquivos"] if a["adminforge"]]
     assert any(a["nome"] == "adminforge-alice" for a in arquivos_af)
+
+    # verify: declarado vs real deve bater (so alice agora, bob foi removido)
+    from adminforge import authorized_keys as ak
+    web01 = nucleo.store.get_servidor("web-01")
+    refs_declaradas = {
+        (item["ref"] if isinstance(item, dict) else item) for item in web01.chaves_instaladas
+    }
+    real = ak.parse_blocos(SSHDeployer(
+        chave_privada_path=lab["chave_priv"],
+        known_hosts_path=tmp_path / "kh-verify",
+    ).ler_authorized_keys(web01, "alice"))
+    refs_reais = set(real.keys())
+    assert refs_declaradas == refs_reais, (
+        f"drift: declarado={refs_declaradas} real={refs_reais}"
+    )
 
     ok, _ = nucleo.auditor.verificar_cadeia()
     assert ok is True

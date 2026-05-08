@@ -8,14 +8,13 @@ import shlex
 import subprocess
 from pathlib import Path
 
+from adminforge import authorized_keys as ak
 from adminforge.domain import NivelPermissao, Servidor, Subacao, TipoAcao
 from adminforge.exceptions import HostKeyDivergente
 from adminforge.interfaces.deployer import IDeployer
 
 
 class SSHDeployer(IDeployer):
-    MARCADOR_INICIO = "# BEGIN adminforge: "
-    MARCADOR_FIM = "# END adminforge: "
 
     def __init__(
         self,
@@ -156,14 +155,7 @@ class SSHDeployer(IDeployer):
         if rc != 0:
             raise RuntimeError(f"failed to create unix user '{username}': {err.strip()}")
 
-    def _bloco_chave(self, ref: str, chave: str) -> str:
-        return (
-            f"{self.MARCADOR_INICIO}{ref}\n"
-            f"{chave.strip()}\n"
-            f"{self.MARCADOR_FIM}{ref}"
-        )
-
-    def _ler_authorized_keys(self, servidor: Servidor, username: str) -> str:
+    def ler_authorized_keys(self, servidor: Servidor, username: str) -> str:
         u = shlex.quote(username)
         rc, out, _ = self._executar_ssh(
             servidor, f"sudo cat /home/{u}/.ssh/authorized_keys 2>/dev/null || true"
@@ -175,8 +167,12 @@ class SSHDeployer(IDeployer):
     ) -> None:
         u = shlex.quote(username)
         b64 = base64.b64encode(conteudo.encode("utf-8")).decode("ascii")
+        # backup do arquivo atual em .bak antes de sobrescrever (rollback manual)
         comando = (
             f"sudo install -d -m 700 -o {u} -g {u} /home/{u}/.ssh && "
+            f"if sudo test -f /home/{u}/.ssh/authorized_keys; then "
+            f"sudo install -m 600 -o {u} -g {u} /home/{u}/.ssh/authorized_keys "
+            f"/home/{u}/.ssh/authorized_keys.bak; fi && "
             f"echo {shlex.quote(b64)} | base64 -d | "
             f"sudo install -m 600 -o {u} -g {u} /dev/stdin /home/{u}/.ssh/authorized_keys"
         )
@@ -184,34 +180,14 @@ class SSHDeployer(IDeployer):
         if rc != 0:
             raise RuntimeError(f"failed to write authorized_keys: {err.strip()}")
 
-    def _substituir_bloco(self, conteudo: str, ref: str, bloco_novo: str) -> str:
-        marcador_inicio = f"{self.MARCADOR_INICIO}{ref}"
-        marcador_fim = f"{self.MARCADOR_FIM}{ref}"
-        out: list[str] = []
-        dentro = False
-        for linha in conteudo.splitlines():
-            if linha == marcador_inicio:
-                dentro = True
-                continue
-            if dentro:
-                if linha == marcador_fim:
-                    dentro = False
-                continue
-            out.append(linha)
-        if bloco_novo:
-            out.append(bloco_novo)
-        resultado = "\n".join(out)
-        if resultado and not resultado.endswith("\n"):
-            resultado += "\n"
-        return resultado
 
     def _adicionar_chave(self, servidor: Servidor, sub: Subacao) -> None:
         if not sub.chave_publica or not sub.username or not sub.credencial:
             raise ValueError("sub-action missing chave_publica, username or credencial")
         self._garantir_usuario_unix(servidor, sub.username)
-        atual = self._ler_authorized_keys(servidor, sub.username)
-        novo = self._substituir_bloco(
-            atual, sub.credencial, self._bloco_chave(sub.credencial, sub.chave_publica)
+        atual = self.ler_authorized_keys(servidor, sub.username)
+        novo = ak.substituir_bloco(
+            atual, sub.credencial, ak.bloco(sub.credencial, sub.chave_publica)
         )
         self._escrever_authorized_keys(servidor, sub.username, novo)
 
@@ -241,8 +217,8 @@ class SSHDeployer(IDeployer):
     def _remover_chave(self, servidor: Servidor, sub: Subacao) -> None:
         if not sub.username or not sub.credencial:
             raise ValueError("sub-action missing username or credencial")
-        atual = self._ler_authorized_keys(servidor, sub.username)
-        novo = self._substituir_bloco(atual, sub.credencial, "")
+        atual = self.ler_authorized_keys(servidor, sub.username)
+        novo = ak.substituir_bloco(atual, sub.credencial, "")
         self._escrever_authorized_keys(servidor, sub.username, novo)
         self._executar_ssh(servidor, f"sudo rm -f /etc/sudoers.d/adminforge-{sub.username}")
 
