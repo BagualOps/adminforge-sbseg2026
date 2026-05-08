@@ -4,7 +4,7 @@
 
 | Variável | Padrão | Descrição |
 |----------|--------|-----------|
-| `ADMINFORGE_STATE` | `./state` | Diretório com YAMLs e `history.jsonl`. Pode ser absoluto. |
+| `ADMINFORGE_STATE` | `./state` | Diretório com JSONs e `history.jsonl`. Pode ser absoluto. |
 | `ADMINFORGE_SUPERADMIN` | `$USER` | Identifica quem operou (vai pro histórico). |
 | `ADMINFORGE_SSH_KEY` | `~/.ssh/adminforge_id` | Chave privada usada pelo `SSHDeployer`. |
 | `ADMINFORGE_SSH_USER` | `adminforge` | Usuário de serviço nos servidores gerenciados. |
@@ -15,9 +15,9 @@ Sobreposição via flag tem precedência: `--state /var/lib/adminforge/state` ig
 
 ```
 state/
-├── admins/                 # 1 arquivo por admin
+├── users/                  # 1 arquivo por usuário gerenciado
 │   └── <username>.json
-├── admin-groups/
+├── user-groups/
 │   └── <nome>.json
 ├── servers/                # 1 arquivo por servidor (inclui chaves_instaladas)
 │   └── <hostname>.json
@@ -32,7 +32,7 @@ Permissões: diretórios `0700`, arquivos `0600`.
 
 ## Schemas dos arquivos JSON
 
-### `admins/<username>.json`
+### `users/<username>.json`
 
 ```json
 {
@@ -54,7 +54,7 @@ Permissões: diretórios `0700`, arquivos `0600`.
 
 `status`: `ativo | inativo | bloqueado`. `credenciais[].status`: `ativa | revogada`.
 
-### `admin-groups/<nome>.json`
+### `user-groups/<nome>.json`
 
 ```json
 {
@@ -102,7 +102,7 @@ Permissões: diretórios `0700`, arquivos `0600`.
   "permissoes": [
     {
       "id": "...",
-      "grupo_admin": "sysadmins",
+      "grupo_user": "sysadmins",
       "grupo_servidor": "producao",
       "nivel": "sudo"
     }

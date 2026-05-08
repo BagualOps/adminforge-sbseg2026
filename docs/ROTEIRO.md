@@ -130,7 +130,7 @@ Comum em CPDs/labs onde o `sshd_config` tem `AllowUsers <lista-fixa>` e você n�
    # Se pedir senha: precisa configurar NOPASSWD pra seu user (peça pro admin do CPD).
    ```
 
-2. **As contas Unix dos admins gerenciados já existem no servidor** — você não pode criar contas novas (quem mantém isso é o admin do CPD via LDAP/manual). O AdminForge vai instalar chaves e sudoers nelas, **não** criar.
+2. **As contas Unix dos usuários gerenciados já existem no servidor** — você não pode criar contas novas (quem mantém isso é o admin do CPD via LDAP/manual). O AdminForge vai instalar chaves e sudoers nelas, **não** criar.
 
 Configure as variáveis apontando pro seu user e desligando a criação automática de contas. **Ajuste os valores marcados com `# AJUSTE` antes de colar:**
 
@@ -248,7 +248,7 @@ af preview                  # delta agrupado por servidor
 af apply                    # confirma; executa via SSH
 ```
 
-> O primeiro `apply` cria as contas Unix dos admins, instala as chaves em `~/<user>/.ssh/authorized_keys` (envoltas em markers `# BEGIN/END adminforge: <ref>`), e escreve `/etc/sudoers.d/adminforge-<user>` para os de nível `sudo` (validado por `visudo -cf` antes do move).
+> O primeiro `apply` cria as contas Unix dos usuários gerenciados, instala as chaves em `~/<user>/.ssh/authorized_keys` (envoltas em markers `# BEGIN/END adminforge: <ref>`), e escreve `/etc/sudoers.d/adminforge-<user>` para os de nível `sudo` (validado por `visudo -cf` antes do move).
 
 ---
 
@@ -289,7 +289,7 @@ af apply
 
 ```bash
 af user key list --username ana
-af user key revoke --user-group --fingerprint --server-group SHA256:abc...     # marca como revogada
+af user key revoke --fingerprint SHA256:abc...     # marca como revogada
 af apply                        # remove só essa chave de todos os servidores
 
 # Cadastra a chave nova:
@@ -319,7 +319,7 @@ af apply
 ```bash
 af server show --hostname prod-web-01      # chaves declaradas (ref + nivel)
 af audit server --hostname prod-web-01     # leitura via SSH: usuários + serviços ativos
-af audit server --hostname --hostname prod-web-01 --user tomcat
+af audit server --hostname prod-web-01 --user tomcat
 # Avisa se 'tomcat' existe como conta mas não há tomcat.service rodando
 ```
 

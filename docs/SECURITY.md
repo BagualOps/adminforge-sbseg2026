@@ -25,7 +25,7 @@
 
 ```bash
 state/                 # 0700
-├── admins/            # 0700
+├── users/             # 0700
 │   └── alice.json    # 0600
 ├── ...
 └── history.jsonl      # 0600
@@ -105,8 +105,8 @@ Hoje (M-1) o `DryRunDeployer` simula falhas em testes; o `SSHDeployer` aplica su
 | O que é auditado | Onde |
 |------------------|------|
 | Comandos do Superadmin no AdminForge | `state/history.jsonl` |
-| Logins dos admins nos servidores | `sshd` (`/var/log/auth.log`) |
-| Comandos dos admins logados | `auditd` de cada máquina |
+| Logins dos usuários nos servidores | `sshd` (`/var/log/auth.log`) |
+| Comandos dos usuários logados | `auditd` de cada máquina |
 | Inspeções operacionais do AdminForge | `state/history.jsonl` (status `leitura`) |
 
 ## Checklist operacional

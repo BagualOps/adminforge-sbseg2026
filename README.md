@@ -1,23 +1,26 @@
 # AdminForge
 
-CLI Python para gestão de identidades privilegiadas em frotas de servidores Linux. Pensado para um cenário concreto: ~600 máquinas, ~20 admins, equipes que mudam, sem o peso de FreeIPA/LDAP+Kerberos.
+CLI Python para gestão de identidades privilegiadas em frotas de servidores Linux. Pensado para um cenário concreto: ~600 máquinas, ~20 usuários gerenciados, equipes que mudam, sem o peso de FreeIPA/LDAP+Kerberos.
 
-> **Por que existe.** Hoje o acesso é configurado servidor a servidor. Quando alguém entra, instala-se a chave em todas as máquinas que esse admin precisa. Quando alguém sai, fica fácil esquecer um servidor. AdminForge declara o estado desejado em YAML, calcula o delta e propaga só o que mudou — com histórico verificável.
+> **Por que existe.** Hoje o acesso é configurado servidor a servidor. Quando alguém entra, instala-se a chave em todas as máquinas que essa pessoa precisa. Quando alguém sai, fica fácil esquecer um servidor. AdminForge declara o estado desejado em JSON, calcula o delta e propaga só o que mudou — com histórico verificável.
 
 ## Estado do projeto
 
 - **M-0** Modelagem v1 — [`docs/modelagem-v1.pdf`](docs/modelagem-v1.pdf)
-- **M-1** Protótipo Python — **este repositório** (10/10 UCs implementados, 37 testes passando, integration test em Docker no CI)
+- **M-1** Protótipo Python — **este repositório** (10/10 UCs implementados, 49 testes passando, integration test em Docker no CI)
 - **M-2** Robustez — retentativa automática, `apply verify`, cifragem seletiva
 - **M-3** Rust + modo *pull* — servidores puxam estado de repositório Git assinado
 
-### Footprint (zero deps de runtime)
+### Footprint (zero deps de runtime obrigatórias)
 
 | Camada | Antes | Agora | Variação |
 |--------|-------|-------|----------|
-| Código nosso (produção) | 2.429 LOC | 2.358 LOC | -71 (-3%) |
-| Dependências de runtime | ~56.000 LOC (paramiko, click, PyYAML, cryptography, …) | **0** | **-100%** |
-| Total executado | ~58.400 LOC | 2.358 LOC | **-96%** |
+| Código nosso (produção) | 2.429 LOC | 2.677 LOC | +248 (+10%) |
+| Dependências de runtime obrigatórias | ~56.000 LOC (paramiko, click, PyYAML, cryptography, …) | **0** | **-100%** |
+| Total executado (sem extras) | ~58.400 LOC | 2.677 LOC | **-95%** |
+| Extra opcional `completion` | — | +2.200 LOC (`argcomplete`) | opt-in |
+
+O crescimento de produção em relação ao protótipo inicial vem do refactor de UX: comando `dump`, métodos plurais no Núcleo (N membros), `migrate-state`, autocomplete com completers dinâmicos e exemplos no help.
 
 Substituições que compõem essa redução:
 
@@ -52,15 +55,15 @@ Detalhes em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#zero-deps).
 | **Independente em uso** | AdminForge fora do ar não tira ninguém de servidor algum. |
 | **Só CLI na v1** | Sem GUI; o Superadmin opera no terminal. |
 | **Tudo registrado** | Cada comando vira entrada no histórico, com cadeia de hashes. |
-| **Só aplica o que mudou** | Servidor com 5 chaves + admin novo no grupo → só a 6ª chave é propagada. |
+| **Só aplica o que mudou** | Servidor com 5 chaves + usuário novo no grupo → só a 6ª chave é propagada. |
 | **Inspeciona o real sob demanda** | `audit server` lê usuários/serviços via SSH, sem alterar nada. |
 
 ## Arquitetura — visão de 30 segundos
 
 ```
-CLI ──► Núcleo ─┬─► Store    (YAML em ./state/)
+CLI ──► Núcleo ─┬─► Store    (JSON em ./state/)
                 ├─► Planner  (delta = desejado − chaves_instaladas)
-                ├─► Deployer (SSH paramiko, ou DryRun para testes)
+                ├─► Deployer (subprocess(ssh) via OpenSSH, ou DryRun para testes)
                 └─► Auditor  (history.jsonl com cadeia de SHA256)
 ```
 
@@ -155,11 +158,11 @@ Receitário completo por caso de uso: [`docs/USAGE.md`](docs/USAGE.md).
 
 ## Segurança
 
-- YAMLs em diretório `0700`, arquivos `0600`.
+- JSONs em diretório `0700`, arquivos `0600`.
 - Chave SSH dedicada do AdminForge (não a do Superadmin).
 - `StrictHostKeyChecking=no` é proibido — host key armazenada por servidor.
 - Histórico append-only com cadeia SHA256; `verify` aponta primeiro ponto de divergência.
-- O escopo de auditoria é estrito: AdminForge audita o **Superadmin**; logins dos admins nos servidores ficam com `sshd`/`auditd` de cada máquina.
+- O escopo de auditoria é estrito: AdminForge audita o **Superadmin**; logins dos usuários nos servidores ficam com `sshd`/`auditd` de cada máquina.
 
 Mais em [`docs/SECURITY.md`](docs/SECURITY.md).
 
@@ -182,7 +185,7 @@ Mais em [`docs/SECURITY.md`](docs/SECURITY.md).
 pytest -v
 ```
 
-36 testes cobrem o fluxo end-to-end e edge cases (cadeia quebrada, duplicatas, idempotência, falha parcial, no-op, lockfile concorrente, permissão 0600).
+49 testes cobrem o fluxo end-to-end e edge cases (cadeia quebrada, duplicatas, idempotência, falha parcial, no-op, lockfile concorrente, permissão 0600, N membros atômicos, completers, migrate-state).
 
 ### Como usar em produção
 

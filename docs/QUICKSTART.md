@@ -129,7 +129,7 @@ ssh -i $ADMINFORGE_SSH_KEY -o BatchMode=yes $ADMINFORGE_SSH_USER@<servidor> 'who
 
 Esperado: o usuário e `root` na segunda linha. Se a segunda linha pedir senha ou der erro, ajuste o sudoers antes de seguir.
 
-> **Por que o AdminForge não faz esse bootstrap sozinho?** Porque ele precisa da chave **já dentro** do servidor para entrar — é o problema clássico do "ovo e galinha". Bootstrap é o passo único pré-AdminForge; depois disso, a ferramenta cuida de todas as chaves dos admins reais.
+> **Por que o AdminForge não faz esse bootstrap sozinho?** Porque ele precisa da chave **já dentro** do servidor para entrar — é o problema clássico do "ovo e galinha". Bootstrap é o passo único pré-AdminForge; depois disso, a ferramenta cuida de todas as chaves dos usuários reais.
 
 ## 4. Cadastros
 
@@ -181,7 +181,7 @@ Inspeção operacional do servidor (read-only):
 
 ```bash
 adminforge audit server --hostname web-01
-adminforge audit server --hostname --hostname web-01 --user tomcat
+adminforge audit server --hostname web-01 --user tomcat
 ```
 
 ## Próximos passos
