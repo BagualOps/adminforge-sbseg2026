@@ -204,13 +204,21 @@ class SSHDeployer(IDeployer):
         destino: str,
         comandos: list[str] | None,
     ) -> None:
-        if comandos:
-            # cada comando recebe sua propria linha; garante absolutos (validacao no Nucleo)
+        # Diferencia explicitamente None (full sudo) de [] (profile invalido):
+        #   None         -> NOPASSWD:ALL (intencional)
+        #   lista vazia  -> erro (profile resolveu para nada; nao escala silenciosamente)
+        #   lista        -> uma linha por comando absoluto
+        if comandos is None:
+            corpo = f"{username} ALL=(ALL) NOPASSWD:ALL\n"
+        elif len(comandos) == 0:
+            raise RuntimeError(
+                f"refusing to write sudoers for '{username}': empty command list "
+                f"(would otherwise silently grant full sudo)"
+            )
+        else:
             corpo = "\n".join(
                 f"{username} ALL=(ALL) NOPASSWD: {c}" for c in comandos
             ) + "\n"
-        else:
-            corpo = f"{username} ALL=(ALL) NOPASSWD:ALL\n"
         tmp = f"/tmp/.adminforge-sudoers-{username}.{secrets.token_hex(8)}"
         comando = (
             f"set -e; "
@@ -248,10 +256,10 @@ class SSHDeployer(IDeployer):
     @staticmethod
     def _classificar_uid(uid: int) -> str:
         if uid < 100:
-            return "sistema"
+            return "system"
         if uid < 1000:
-            return "servico"
-        return "humano"
+            return "service"
+        return "human"
 
     def inspecionar(self, servidor: Servidor) -> dict:
         try:

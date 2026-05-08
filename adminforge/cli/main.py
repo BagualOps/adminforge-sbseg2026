@@ -42,7 +42,7 @@ def _state_dir(args: argparse.Namespace) -> Path:
 
 
 def _superadmin() -> str:
-    return os.environ.get("ADMINFORGE_SUPERADMIN") or os.environ.get("USER") or "desconhecido"
+    return os.environ.get("ADMINFORGE_SUPERADMIN") or os.environ.get("USER") or "unknown"
 
 
 def _split_tokens(items: list[str]) -> list[str]:
@@ -717,7 +717,7 @@ def cmd_audit_server(args: argparse.Namespace) -> int:
     regras_sudo = relatorio.get("sudoers_regras", [])
 
     if args.humans:
-        usuarios = [u for u in usuarios if u.get("categoria") == "humano"]
+        usuarios = [u for u in usuarios if u.get("categoria") == "human"]
 
     # Users
     titulo = f"Users ({len(usuarios)})"

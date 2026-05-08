@@ -46,7 +46,7 @@ class Nucleo:
         store: JsonStore,
         auditor: JsonlAuditor,
         deployer: IDeployer | None = None,
-        superadmin: str = "desconhecido",
+        superadmin: str = "unknown",
     ):
         self.store = store
         self.auditor = auditor
@@ -59,7 +59,7 @@ class Nucleo:
         cls,
         state_dir: Path,
         deployer: IDeployer | None = None,
-        superadmin: str = "desconhecido",
+        superadmin: str = "unknown",
     ) -> "Nucleo":
         store = JsonStore(state_dir)
         auditor = JsonlAuditor(state_dir / "history.jsonl")
@@ -507,10 +507,10 @@ class Nucleo:
                 status="sucesso" if "erro" not in relatorio else "falha",
                 erro=relatorio.get("erro"),
                 mensagem=(
-                    f"{len(relatorio.get('usuarios', []))} usuarios, "
-                    f"{len(relatorio.get('grupos', []))} grupos, "
-                    f"{len(relatorio.get('servicos', []))} servicos, "
-                    f"{len(relatorio.get('sudoers_regras', []))} regras sudo"
+                    f"{len(relatorio.get('usuarios', []))} users, "
+                    f"{len(relatorio.get('grupos', []))} groups, "
+                    f"{len(relatorio.get('servicos', []))} services, "
+                    f"{len(relatorio.get('sudoers_regras', []))} sudo rules"
                 ),
             )
             op.subacoes.append(sub)

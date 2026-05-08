@@ -224,7 +224,7 @@ def test_fluxo_completo_em_containers(lab, tmp_path):
     assert "root" in nomes_users  # antes era filtrado por UID>=100
 
     alice = next(u for u in relatorio["usuarios"] if u["nome"] == "alice")
-    assert alice["categoria"] == "humano"  # UID >= 1000
+    assert alice["categoria"] == "human"  # UID >= 1000
     assert alice["sudo"], "alice deveria ter regra sudo (NOPASSWD:ALL)"
 
     nomes_grupos = {g["nome"] for g in relatorio["grupos"]}

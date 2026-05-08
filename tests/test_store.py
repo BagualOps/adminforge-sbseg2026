@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from adminforge.domain import GrupoUser, NivelPermissao, Permissao, Servidor, User
+from adminforge.domain import GrupoUser, NivelPermissao, Permissao, Servidor, SudoProfile, User
 from adminforge.exceptions import LockOcupado
 from adminforge.store.json_store import JsonStore
 
@@ -60,3 +60,37 @@ def test_delete_grupo(tmp_path: Path):
     assert s.get_grupo_user("sa") is not None
     s.delete_grupo_user("sa")
     assert s.get_grupo_user("sa") is None
+
+
+def test_sudo_profile_roundtrip(tmp_path: Path):
+    s = JsonStore(tmp_path)
+    profile = SudoProfile(nome="read-logs", comandos=["/bin/journalctl", "/bin/cat /var/log/*"])
+    s.save_sudo_profile(profile)
+
+    lido = s.get_sudo_profile("read-logs")
+    assert lido is not None
+    assert lido.nome == "read-logs"
+    assert lido.comandos == ["/bin/journalctl", "/bin/cat /var/log/*"]
+
+    arquivo = tmp_path / "sudo-profiles" / "read-logs.json"
+    assert arquivo.exists()
+    assert oct(arquivo.stat().st_mode)[-3:] == "600"
+
+
+def test_sudo_profile_list_e_delete(tmp_path: Path):
+    s = JsonStore(tmp_path)
+    s.save_sudo_profile(SudoProfile(nome="a", comandos=["/bin/a"]))
+    s.save_sudo_profile(SudoProfile(nome="b", comandos=["/bin/b"]))
+    nomes = sorted(p.nome for p in s.list_sudo_profiles())
+    assert nomes == ["a", "b"]
+
+    s.delete_sudo_profile("a")
+    assert s.get_sudo_profile("a") is None
+    assert [p.nome for p in s.list_sudo_profiles()] == ["b"]
+
+
+def test_sudo_profile_inexistente_retorna_none(tmp_path: Path):
+    s = JsonStore(tmp_path)
+    assert s.get_sudo_profile("ghost") is None
+    # delete de inexistente nao deve estourar (idempotente)
+    s.delete_sudo_profile("ghost")

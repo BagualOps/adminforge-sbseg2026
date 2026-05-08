@@ -10,6 +10,7 @@ from adminforge.domain import (
     Subacao,
     TipoAcao,
 )
+from adminforge.exceptions import EstadoInvalido
 from adminforge.interfaces.store import IStore
 
 
@@ -73,17 +74,27 @@ class Planner:
                             continue
                         existente = desejado[hostname].get(ref)
                         nivel = perm.nivel if existente is None else _maior(existente.nivel, perm.nivel)
-                        # profile: full sudo (None) prevalece sobre profile especifico (menor restricao);
-                        # entre dois perms ambos com profile, mantem o existente (estavel)
-                        if nivel == NivelPermissao.SUDO:
-                            if existente is None:
-                                profile = perm.profile
-                            elif existente.profile is None or perm.profile is None:
-                                profile = None  # full sudo prevalece
-                            else:
-                                profile = existente.profile
-                        else:
+                        # Profile so faz sentido com nivel SUDO. Regras:
+                        #   - shell -> shell:                profile=None
+                        #   - shell -> sudo (entrante novo): profile=novo (existente era shell, profile irrelevante)
+                        #   - sudo  -> shell (entrante):     mantem profile do sudo existente
+                        #   - sudo  -> sudo: full (None) prevalece sobre profile especifico
+                        if nivel != NivelPermissao.SUDO:
                             profile = None
+                        elif existente is None:
+                            profile = perm.profile
+                        elif existente.nivel != NivelPermissao.SUDO:
+                            # existente era SHELL; profile vem do entrante SUDO
+                            profile = perm.profile
+                        elif perm.nivel != NivelPermissao.SUDO:
+                            # entrante eh SHELL; mantem profile do existente SUDO
+                            profile = existente.profile
+                        elif existente.profile is None or perm.profile is None:
+                            # ambos sudo, um eh full -> full prevalece
+                            profile = None
+                        else:
+                            # ambos sudo com profile especifico -> mantem existente (estavel)
+                            profile = existente.profile
                         desejado[hostname][ref] = ChaveInstalada(
                             ref=ref, username=username, nivel=nivel, profile=profile
                         )
@@ -94,15 +105,28 @@ class Planner:
         subacoes: list[Subacao] = []
 
         # cache de profiles para evitar reler a cada subaction
-        profiles_cache: dict[str, list[str]] = {}
+        profiles_cache: dict[str, list[str] | None] = {}
 
         def _comandos(profile: str | None) -> list[str] | None:
+            """None  = sem profile (NOPASSWD:ALL legítimo).
+            Lista nao-vazia = perfil resolvido.
+            Lanca EstadoInvalido se profile referenciado nao existe ou esta vazio
+            (evita virar full sudo silenciosamente)."""
             if profile is None:
                 return None
             if profile not in profiles_cache:
                 p = self.store.get_sudo_profile(profile)
-                profiles_cache[profile] = list(p.comandos) if p else []
-            return profiles_cache[profile]
+                profiles_cache[profile] = list(p.comandos) if p else None
+            comandos = profiles_cache[profile]
+            if comandos is None:
+                raise EstadoInvalido(
+                    f"sudo-profile '{profile}' referenced but not found in state"
+                )
+            if not comandos:
+                raise EstadoInvalido(
+                    f"sudo-profile '{profile}' has no commands; refusing to apply"
+                )
+            return comandos
 
         for servidor in self.store.list_servidores():
             atual = {}

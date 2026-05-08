@@ -1,3 +1,5 @@
+import pytest
+
 from adminforge.core.nucleo import Nucleo
 from adminforge.domain import NivelPermissao, TipoAcao
 
@@ -54,6 +56,37 @@ def test_profile_propagado_para_subacao(nucleo: Nucleo):
     for s in subs:
         assert s.profile == "read-logs"
         assert s.profile_comandos == ["/bin/journalctl"]
+
+
+def test_shell_existente_nao_engole_profile_de_novo_sudo(nucleo: Nucleo):
+    """Regressao: SHELL pre-existente + SUDO(profile) entrante NAO pode virar full sudo."""
+    _setup_basico(nucleo)
+    nucleo.criar_sudo_profile("limited", ["/bin/journalctl"])
+    nucleo.criar_grupo_user("ops")
+    nucleo.adicionar_membro_grupo_user("ops", "alice")
+    # primeiro: shell para sysadmins (alice esta dentro)
+    nucleo.conceder("sysadmins", "producao", NivelPermissao.SHELL)
+    # depois: sudo restrito para ops
+    nucleo.conceder("ops", "producao", NivelPermissao.SUDO, profile="limited")
+    alice = [s for s in nucleo.preview() if s.username == "alice"]
+    assert alice
+    for s in alice:
+        # nivel final eh sudo, MAS profile do entrante deve ser preservado
+        assert s.nivel == NivelPermissao.SUDO
+        assert s.profile == "limited"
+        assert s.profile_comandos == ["/bin/journalctl"]
+
+
+def test_profile_inexistente_falha_em_vez_de_virar_full_sudo(nucleo: Nucleo):
+    """Regressao: profile referenciado mas ausente do state nao pode virar NOPASSWD:ALL."""
+    from adminforge.exceptions import EstadoInvalido
+    _setup_basico(nucleo)
+    nucleo.criar_sudo_profile("p", ["/bin/journalctl"])
+    nucleo.conceder("sysadmins", "producao", NivelPermissao.SUDO, profile="p")
+    # apaga profile direto no store, simulando state corrompido
+    nucleo.store.delete_sudo_profile("p")
+    with pytest.raises(EstadoInvalido):
+        nucleo.preview()
 
 
 def test_full_sudo_prevalece_sobre_profile(nucleo: Nucleo):

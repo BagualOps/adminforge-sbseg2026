@@ -52,6 +52,17 @@ def test_server_groups_completer(state_dir: Path):
     assert completers.server_groups("", args) == ["producao"]
 
 
+def test_sudo_profiles_completer(state_dir: Path):
+    nucleo = _seed(state_dir)
+    nucleo.criar_sudo_profile("read-logs", ["/bin/journalctl"])
+    nucleo.criar_sudo_profile("restart-web", ["/bin/systemctl restart nginx"])
+    args = Namespace(state=str(state_dir))
+    assert completers.sudo_profiles("", args) == ["read-logs", "restart-web"]
+    assert completers.sudo_profiles("re", args) == ["read-logs", "restart-web"]
+    assert completers.sudo_profiles("read", args) == ["read-logs"]
+    assert completers.sudo_profiles("z", args) == []
+
+
 def test_fingerprints_completer(state_dir: Path):
     _seed(state_dir)
     args = Namespace(state=str(state_dir))

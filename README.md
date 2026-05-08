@@ -7,7 +7,7 @@ CLI Python para gestão de identidades privilegiadas em frotas de servidores Lin
 ## Estado do projeto
 
 - **M-0** Modelagem v1 — [`docs/modelagem-v1.pdf`](docs/modelagem-v1.pdf)
-- **M-1** Protótipo Python — **este repositório** (10/10 UCs implementados, 59 testes passando, integration test em Docker no CI)
+- **M-1** Protótipo Python — **este repositório** (10/10 UCs implementados, suíte unit + integration test em Docker no CI)
 - **M-2** Robustez — retentativa automática, cifragem seletiva
 - **M-3** Rust + modo *pull* — servidores puxam estado de repositório Git assinado
 
@@ -15,9 +15,9 @@ CLI Python para gestão de identidades privilegiadas em frotas de servidores Lin
 
 | Camada | Antes | Agora | Variação |
 |--------|-------|-------|----------|
-| Código nosso (produção) | 2.429 LOC | 3.255 LOC | +826 (+34%) |
+| Código nosso (produção) | 2.429 LOC | 3.287 LOC | +858 (+35%) |
 | Dependências de runtime obrigatórias | ~56.000 LOC (paramiko, click, PyYAML, cryptography, …) | **0** | **-100%** |
-| Total executado (sem extras) | ~58.400 LOC | 3.255 LOC | **-94%** |
+| Total executado (sem extras) | ~58.400 LOC | 3.287 LOC | **-94%** |
 | Extra opcional `completion` | — | +2.200 LOC (`argcomplete`) | opt-in |
 
 Crescimento em relação ao protótipo inicial vem do refactor de UX e endurecimento do `apply`: `dump`, métodos plurais no Núcleo (N membros), autocomplete com completers dinâmicos, `audit server` estendido (grupos/sudoers/drift), `permission` CRUD, `sudo-profile`, `apply --diff` e `apply verify`.
@@ -185,7 +185,7 @@ Mais em [`docs/SECURITY.md`](docs/SECURITY.md).
 pytest -v
 ```
 
-59 testes cobrem o fluxo end-to-end e edge cases (cadeia quebrada, duplicatas, idempotência, falha parcial, no-op, lockfile concorrente, permissão 0600, N membros atômicos com vírgula/espaço, completers, audit estendido, permission CRUD, `apply --diff` / `apply verify`, sudo profiles).
+Cobertura inclui: fluxo end-to-end, cadeia quebrada, duplicatas, idempotência, falha parcial, no-op, lockfile concorrente, permissão 0600, N membros atômicos com vírgula/espaço, completers, audit estendido, permission CRUD, `apply --diff` / `apply verify`, sudo profiles.
 
 ### Como usar em produção
 
