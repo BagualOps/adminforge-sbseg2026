@@ -131,6 +131,33 @@ def test_cli_dump_table(env):
     assert "Users" in out and "alice" in out
 
 
+def test_cli_permission_list_update_delete(env):
+    run_cli(["user-group", "create", "--name", "sa"])
+    run_cli(["server-group", "create", "--name", "prod"])
+
+    rc, out = run_cli(["permission", "list"])
+    assert rc == 0
+    assert "(empty)" in out or "USER_GROUP" in out
+
+    rc, _ = run_cli(["permission", "update", "--user-group", "sa", "--server-group", "prod", "--level", "shell"])
+    assert rc == 0
+
+    rc, out = run_cli(["permission", "list"])
+    assert rc == 0
+    assert "sa" in out and "prod" in out and "shell" in out
+
+    rc, _ = run_cli(["permission", "update", "--user-group", "sa", "--server-group", "prod", "--level", "sudo"])
+    assert rc == 0
+    rc, out = run_cli(["permission", "list"])
+    assert rc == 0
+    assert "sudo" in out and "shell" not in out.split("sudo")[1]
+
+    rc, _ = run_cli(["permission", "delete", "--user-group", "sa", "--server-group", "prod", "--yes"])
+    assert rc == 0
+    rc, out = run_cli(["permission", "list"])
+    assert "sa" not in out or "prod" not in out
+
+
 def test_cli_help(env, capsys):
     with pytest.raises(SystemExit) as exc:
         main(["--help"])

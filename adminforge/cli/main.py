@@ -283,6 +283,32 @@ def cmd_revoke(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
+# permission CRUD (list/update/delete; grant/revoke continue como atalhos)
+# ---------------------------------------------------------------------------
+def cmd_permission_list(args: argparse.Namespace) -> int:
+    nucleo = _nucleo(args)
+    perms = nucleo.store.list_permissoes()
+    linhas = [[p.grupo_user, p.grupo_servidor, p.nivel.value] for p in perms]
+    ui.tabela(["USER_GROUP", "SERVER_GROUP", "LEVEL"], linhas)
+    return 0
+
+
+def cmd_permission_update(args: argparse.Namespace) -> int:
+    return ui.imprimir_resultado(
+        _nucleo(args).conceder(args.user_group, args.server_group, NivelPermissao(args.level))
+    )
+
+
+def cmd_permission_delete(args: argparse.Namespace) -> int:
+    if not args.yes and not ui.confirmar(
+        f"Revoke '{args.user_group}' -> '{args.server_group}'? (apply removes keys)"
+    ):
+        ui.warn("operation cancelled")
+        return 1
+    return ui.imprimir_resultado(_nucleo(args).revogar(args.user_group, args.server_group))
+
+
+# ---------------------------------------------------------------------------
 # UC-7 / UC-8: preview / apply
 # ---------------------------------------------------------------------------
 def cmd_preview(args: argparse.Namespace) -> int:
@@ -794,6 +820,35 @@ def _build_parser() -> argparse.ArgumentParser:
     a.add_argument("--user-group", dest="user_group", required=True).completer = completers.user_groups
     a.add_argument("--server-group", dest="server_group", required=True).completer = completers.server_groups
     a.set_defaults(func=cmd_revoke)
+
+    # permission (CRUD: list/update/delete; grant/revoke remain as shortcuts)
+    p_perm = sub.add_parser(
+        "permission",
+        help="List, update or delete permissions.",
+        epilog=(
+            "Examples:\n"
+            "  adminforge permission list\n"
+            "  adminforge permission update --user-group sa --server-group prod --level sudo\n"
+            "  adminforge permission delete --user-group sa --server-group prod"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    s_perm = p_perm.add_subparsers(dest="sub", required=True)
+
+    a = s_perm.add_parser("list", help="List all permissions.")
+    a.set_defaults(func=cmd_permission_list)
+
+    a = s_perm.add_parser("update", help="Create or update a permission (alias of grant).")
+    a.add_argument("--user-group", dest="user_group", required=True).completer = completers.user_groups
+    a.add_argument("--server-group", dest="server_group", required=True).completer = completers.server_groups
+    a.add_argument("--level", choices=["shell", "sudo"], required=True)
+    a.set_defaults(func=cmd_permission_update)
+
+    a = s_perm.add_parser("delete", help="Delete a permission (alias of revoke).")
+    a.add_argument("--user-group", dest="user_group", required=True).completer = completers.user_groups
+    a.add_argument("--server-group", dest="server_group", required=True).completer = completers.server_groups
+    a.add_argument("--yes", action="store_true", help="Skip confirmation.")
+    a.set_defaults(func=cmd_permission_delete)
 
     # dump
     a = sub.add_parser("dump", help="List the full declared state (users, groups, servers, permissions).")

@@ -98,7 +98,7 @@ def exit_se_falha(op: Operacao) -> None:
 
 def tabela(cabecalho: list[str], linhas: list[list[str]]) -> None:
     if not linhas:
-        secho("(vazio)", dim=True)
+        secho("(empty)", dim=True)
         return
     larguras = [len(c) for c in cabecalho]
     for linha in linhas:
