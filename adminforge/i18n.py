@@ -243,6 +243,7 @@ _CATALOGS: dict[str, dict[str, str]] = {
         "user {u} does not exist": "usuario {u} nao existe",
         "use --file OR --string, not both": "use --file OU --string, nao os dois",
         "provide --file or --string": "informe --file ou --string",
+        "could not read key file {f}: {e}": "nao foi possivel ler o arquivo de chave {f}: {e}",
         "failed to capture host_key: {e}": "falha ao capturar a host_key: {e}",
         "provide --host-key or --auto": "informe --host-key ou --auto",
         "server {h} does not exist": "servidor {h} nao existe",

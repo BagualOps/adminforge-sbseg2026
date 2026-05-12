@@ -97,10 +97,16 @@ def _nucleo(args: argparse.Namespace, com_ssh: bool = False) -> Nucleo:
 def cmd_user_add(args: argparse.Namespace) -> int:
     nucleo = _nucleo(args)
     rc = ui.imprimir_resultado(nucleo.cadastrar_user(args.username, args.name, args.email))
+    if rc != 0:
+        return rc
     chave = getattr(args, "key_string", None)
     if chave is None and getattr(args, "key_file", None):
-        chave = Path(args.key_file).read_text(encoding="utf-8")
-    if rc == 0 and chave:
+        try:
+            chave = Path(args.key_file).read_text(encoding="utf-8")
+        except OSError as e:
+            ui.fail(_("could not read key file {f}: {e}").format(f=repr(args.key_file), e=e))
+            return 2
+    if chave:
         rc = ui.imprimir_resultado(nucleo.cadastrar_chave(args.username, chave))
     return rc
 
@@ -158,7 +164,11 @@ def cmd_user_key_add(args: argparse.Namespace) -> int:
         return 2
     chave = args.string
     if args.file:
-        chave = Path(args.file).read_text(encoding="utf-8")
+        try:
+            chave = Path(args.file).read_text(encoding="utf-8")
+        except OSError as e:
+            ui.fail(_("could not read key file {f}: {e}").format(f=repr(args.file), e=e))
+            return 2
     if not chave:
         ui.fail(_("provide --file or --string"))
         return 2

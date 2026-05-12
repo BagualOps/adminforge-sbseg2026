@@ -19,7 +19,8 @@ def env(tmp_path: Path, monkeypatch):
     state.mkdir()
     monkeypatch.setenv("ADMINFORGE_STATE", str(state))
     monkeypatch.setenv("ADMINFORGE_SUPERADMIN", "operador")
-    monkeypatch.delenv("ADMINFORGE_LANG", raising=False)
+    for v in ("ADMINFORGE_LANG", "LC_ALL", "LC_MESSAGES", "LANG", "LANGUAGE"):
+        monkeypatch.delenv(v, raising=False)
     return {"state": str(state)}
 
 
