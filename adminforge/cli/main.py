@@ -21,8 +21,7 @@ from adminforge.i18n import t as _
 
 EPILOG_GERAL = (
     "EXAMPLES\n"
-    "  adminforge user add --username marina --name \"Marina Silva\" --email marina@empresa.com\n"
-    "  adminforge user key add --username marina --file ~/.ssh/marina.pub\n"
+    "  adminforge user add --username marina --name \"Marina Silva\" --email marina@empresa.com --key-file ~/.ssh/marina.pub\n"
     "  adminforge user-group create --name sysadmins\n"
     "  adminforge user-group add-member --group sysadmins --username marina\n"
     "  adminforge server add --hostname web-01 --ip 10.0.0.10 --auto\n"
@@ -96,8 +95,14 @@ def _nucleo(args: argparse.Namespace, com_ssh: bool = False) -> Nucleo:
 # UC-1: user
 # ---------------------------------------------------------------------------
 def cmd_user_add(args: argparse.Namespace) -> int:
-    op = _nucleo(args).cadastrar_user(args.username, args.name, args.email)
-    return ui.imprimir_resultado(op)
+    nucleo = _nucleo(args)
+    rc = ui.imprimir_resultado(nucleo.cadastrar_user(args.username, args.name, args.email))
+    chave = getattr(args, "key_string", None)
+    if chave is None and getattr(args, "key_file", None):
+        chave = Path(args.key_file).read_text(encoding="utf-8")
+    if rc == 0 and chave:
+        rc = ui.imprimir_resultado(nucleo.cadastrar_chave(args.username, chave))
+    return rc
 
 
 def cmd_user_list(args: argparse.Namespace) -> int:
@@ -1080,7 +1085,9 @@ def _build_parser() -> argparse.ArgumentParser:
             "AdminForge - manages who has privileged access (SSH keys and sudo) on a fleet of "
             "Linux servers.\n\n"
             "You edit the desired state with these commands; 'apply' pushes the changes to the "
-            "servers over SSH. Every command goes into history.jsonl."
+            "servers over SSH. Every command goes into history.jsonl.\n\n"
+            "Every command has its own --help, e.g. 'adminforge user --help', "
+            "'adminforge permission grant --help'."
         ),
         epilog=_(EPILOG_GERAL),
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -1099,17 +1106,20 @@ def _build_parser() -> argparse.ArgumentParser:
         help=_("Register, lifecycle and SSH keys of users."),
         epilog=_(
             "Examples:\n"
-            "  adminforge user add --username marina --name 'Marina' --email marina@empresa.com\n"
-            "  adminforge user key add --username marina --file ~/.ssh/marina.pub\n"
+            "  adminforge user add --username marina --name 'Marina' --email marina@empresa.com --key-file ~/.ssh/marina.pub\n"
+            "  adminforge user key add --username marina --file ~/.ssh/marina.pub   # ou em dois passos\n"
             "  adminforge user disable --username marina"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     s_user = p_user.add_subparsers(dest="sub", required=True)
-    a = s_user.add_parser("add", help=_("Register a new user."))
+    a = s_user.add_parser("add", help=_("Register a new user (optionally with their SSH key)."))
     a.add_argument("--username", required=True)
     a.add_argument("--name", required=True)
     a.add_argument("--email", required=True)
+    g = a.add_mutually_exclusive_group()
+    g.add_argument("--key-file", dest="key_file", help=_("Also register this .pub file as the user's key."))
+    g.add_argument("--key-string", dest="key_string", help=_("Also register this full key string as the user's key."))
     a.set_defaults(func=cmd_user_add)
     a = s_user.add_parser("list", help=_("List users."))
     a.add_argument("--format", choices=["table", "json"], default="table")

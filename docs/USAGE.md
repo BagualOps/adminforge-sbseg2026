@@ -10,11 +10,14 @@ Cada caso de uso da modelagem v1, com gatilho, fluxo e exemplo copiável.
 
 ```bash
 adminforge user add --username <username> --name "Nome Completo" --email pessoa@empresa.com
+adminforge user add --username <username> --name "Nome" --email a@e.com --key-file ~/.ssh/x.pub  # ja com a chave
 ```
 
 - `username` deve casar com `^[a-z_][a-z0-9_-]{0,30}$` (regra Linux).
 - E-mail validado por regex simples.
+- `--key-file` / `--key-string` (opcionais) registram a chave SSH no mesmo comando (atalho do UC-2).
 - Cadastro duplicado falha com mensagem clara.
+- `af` é um atalho de `adminforge` (mesmo comando).
 
 ```bash
 adminforge user list                          # tabela

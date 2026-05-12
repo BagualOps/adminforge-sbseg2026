@@ -64,15 +64,18 @@ _CATALOGS: dict[str, dict[str, str]] = {
         "AdminForge - manages who has privileged access (SSH keys and sudo) on a fleet of "
         "Linux servers.\n\n"
         "You edit the desired state with these commands; 'apply' pushes the changes to the "
-        "servers over SSH. Every command goes into history.jsonl.":
+        "servers over SSH. Every command goes into history.jsonl.\n\n"
+        "Every command has its own --help, e.g. 'adminforge user --help', "
+        "'adminforge permission grant --help'.":
         "AdminForge - gerencia quem tem acesso privilegiado (chaves SSH e sudo) numa frota de "
         "servidores Linux.\n\n"
         "Voce edita o estado desejado com estes comandos; o 'apply' leva as mudancas para os "
-        "servidores via SSH. Todo comando vai para o history.jsonl.",
+        "servidores via SSH. Todo comando vai para o history.jsonl.\n\n"
+        "Cada comando tem seu proprio --help, ex.: 'adminforge user --help', "
+        "'adminforge permission grant --help'.",
 
         "EXAMPLES\n"
-        "  adminforge user add --username marina --name \"Marina Silva\" --email marina@empresa.com\n"
-        "  adminforge user key add --username marina --file ~/.ssh/marina.pub\n"
+        "  adminforge user add --username marina --name \"Marina Silva\" --email marina@empresa.com --key-file ~/.ssh/marina.pub\n"
         "  adminforge user-group create --name sysadmins\n"
         "  adminforge user-group add-member --group sysadmins --username marina\n"
         "  adminforge server add --hostname web-01 --ip 10.0.0.10 --auto\n"
@@ -86,8 +89,7 @@ _CATALOGS: dict[str, dict[str, str]] = {
         "  Detailed model: docs/modelagem-v1.pdf\n"
         "  Use-case cookbook: docs/USAGE.md\n":
         "EXEMPLOS\n"
-        "  adminforge user add --username marina --name \"Marina Silva\" --email marina@empresa.com\n"
-        "  adminforge user key add --username marina --file ~/.ssh/marina.pub\n"
+        "  adminforge user add --username marina --name \"Marina Silva\" --email marina@empresa.com --key-file ~/.ssh/marina.pub\n"
         "  adminforge user-group create --name sysadmins\n"
         "  adminforge user-group add-member --group sysadmins --username marina\n"
         "  adminforge server add --hostname web-01 --ip 10.0.0.10 --auto\n"
@@ -131,12 +133,12 @@ _CATALOGS: dict[str, dict[str, str]] = {
         "  adminforge permission grant --user-group monitoring --server-group prod --level sudo --profile read-logs",
 
         "Examples:\n"
-        "  adminforge user add --username marina --name 'Marina' --email marina@empresa.com\n"
-        "  adminforge user key add --username marina --file ~/.ssh/marina.pub\n"
+        "  adminforge user add --username marina --name 'Marina' --email marina@empresa.com --key-file ~/.ssh/marina.pub\n"
+        "  adminforge user key add --username marina --file ~/.ssh/marina.pub   # ou em dois passos\n"
         "  adminforge user disable --username marina":
         "Exemplos:\n"
-        "  adminforge user add --username marina --name 'Marina' --email marina@empresa.com\n"
-        "  adminforge user key add --username marina --file ~/.ssh/marina.pub\n"
+        "  adminforge user add --username marina --name 'Marina' --email marina@empresa.com --key-file ~/.ssh/marina.pub\n"
+        "  adminforge user key add --username marina --file ~/.ssh/marina.pub   # ou em dois passos\n"
         "  adminforge user disable --username marina",
 
         "Examples:\n"
@@ -171,7 +173,9 @@ _CATALOGS: dict[str, dict[str, str]] = {
             "Diretorio de estado (padrao: ./state ou $ADMINFORGE_STATE).",
         "Register, lifecycle and SSH keys of users.":
             "Cadastro, ciclo de vida e chaves SSH de usuarios.",
-        "Register a new user.": "Cadastra um novo usuario.",
+        "Register a new user (optionally with their SSH key).": "Cadastra um novo usuario (opcionalmente ja com a chave SSH dele).",
+        "Also register this .pub file as the user's key.": "Tambem registra este arquivo .pub como chave do usuario.",
+        "Also register this full key string as the user's key.": "Tambem registra esta chave (string completa) como chave do usuario.",
         "List users.": "Lista usuarios.",
         "Show user details.": "Mostra detalhes do usuario.",
         "Disable user (revokes all keys).": "Desabilita o usuario (revoga todas as chaves).",
