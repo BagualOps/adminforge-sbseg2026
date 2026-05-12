@@ -280,5 +280,7 @@ adminforge status --format json
 | `ADMINFORGE_SUPERADMIN`   | `$USER`                       | Identifica quem está executando (vai pro histórico). |
 | `ADMINFORGE_SSH_KEY`      | `~/.ssh/adminforge_id`        | Chave privada usada pelo Deployer SSH. |
 | `ADMINFORGE_SSH_USER`     | `adminforge`                  | Usuário de serviço nos servidores gerenciados. |
+| `ADMINFORGE_LANG`         | _(auto: `en`)_                | Idioma da CLI: `en` ou `pt`. Sem ele, herda de `LC_*`/`LANG`. Afeta `--help`, mensagens e prompts. |
 
-Todos os comandos aceitam `--help` (`-h`) com exemplos.
+Todos os comandos aceitam `--help` (`-h`) com exemplos. A CLI é bilíngue (inglês/português):
+`ADMINFORGE_LANG=pt adminforge --help`.

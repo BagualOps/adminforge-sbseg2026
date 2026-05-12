@@ -4,6 +4,7 @@ import os
 import sys
 
 from adminforge.domain import Operacao, StatusOperacao
+from adminforge.i18n import t as _
 
 _USE_COLOR = sys.stdout.isatty() and os.environ.get("NO_COLOR") is None
 
@@ -69,7 +70,7 @@ def imprimir_resultado(op: Operacao) -> int:
         ok(f"{op.comando}  ({op.id})")
         return 0
     if op.status == StatusOperacao.SUCESSO_PARCIAL:
-        warn(f"{op.comando}  ({op.id}) — partial")
+        warn(_("{cmd}  ({id}) — partial").format(cmd=op.comando, id=op.id))
         return 1
     erro = next((s.erro for s in op.subacoes if s.erro), op.comando)
     fail(f"{op.comando}  ({op.id})")
@@ -98,7 +99,7 @@ def exit_se_falha(op: Operacao) -> None:
 
 def tabela(cabecalho: list[str], linhas: list[list[str]]) -> None:
     if not linhas:
-        secho("(empty)", dim=True)
+        secho(_("(empty)"), dim=True)
         return
     larguras = [len(c) for c in cabecalho]
     for linha in linhas:
