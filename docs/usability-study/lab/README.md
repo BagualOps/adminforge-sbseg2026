@@ -27,8 +27,9 @@ Requisitos: `git`, `python3` ≥ 3.11, `docker` (com `docker compose` v2), `ssh`
 
 > **Segurança / reprodutibilidade.** `curl ... | bash` executa código remoto. Se preferir, baixe e
 > inspecione antes: `curl -fsSLO <url>/bootstrap.sh && less bootstrap.sh && bash bootstrap.sh`. Para
-> uma rodada do estudo, dá pra fixar numa tag/commit em vez de `main` (URL `.../<tag>/docs/...` +
-> `ADMINFORGE_REPO_REF=<tag>`), pra todo mundo rodar exatamente a mesma versão.
+> uma rodada do estudo, dá pra fixar numa **tag** em vez de `main` (URL `.../<tag>/docs/...` +
+> `ADMINFORGE_REPO_REF=<tag>`), pra todo mundo rodar exatamente a mesma versão. (`ADMINFORGE_REPO_REF`
+> aceita branch ou tag — não SHA de commit, porque o script usa `git clone --branch`.)
 >
 > **Repo privado.** Hoje `BagualOps/adminforge-v1` é privado, então `raw.githubusercontent.com` só
 > responde com autenticação — a one-liner anônima acima só funciona se o repo virar público. Em

@@ -11,7 +11,7 @@
 #
 # Requisitos da máquina: git, python3 (>= 3.11), docker (com 'docker compose' v2).
 # Customizável por env: ADMINFORGE_LAB_DIR (destino — default ./adminforge-v1),
-# ADMINFORGE_REPO_URL, ADMINFORGE_REPO_REF.
+# ADMINFORGE_REPO_URL, ADMINFORGE_REPO_REF (branch ou tag — SHA de commit não funciona com clone --branch).
 set -euo pipefail
 
 REPO_URL="${ADMINFORGE_REPO_URL:-https://github.com/BagualOps/adminforge-v1.git}"
@@ -37,6 +37,7 @@ if [ -d "$DEST/.git" ]; then
     git -C "$DEST" reset -q --hard FETCH_HEAD
 else
     say "clonando $REPO_URL ($REPO_REF) em $DEST"
+    mkdir -p "$(dirname "$DEST")"
     git clone -q --depth 1 --branch "$REPO_REF" "$REPO_URL" "$DEST"
 fi
 
