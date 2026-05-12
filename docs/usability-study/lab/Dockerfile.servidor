@@ -1,0 +1,36 @@
+FROM debian:bookworm-slim
+
+ARG ADMINFORGE_PUBKEY=""
+ARG SEED_LEGACY_SUDOERS="0"
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        openssh-server \
+        sudo \
+        ca-certificates \
+        passwd \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /run/sshd
+
+# usuário de serviço do AdminForge + chave pública + sudo NOPASSWD
+RUN useradd -m -s /bin/bash adminforge \
+    && echo 'adminforge ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/adminforge \
+    && chmod 0440 /etc/sudoers.d/adminforge \
+    && mkdir -p /home/adminforge/.ssh \
+    && chmod 700 /home/adminforge/.ssh \
+    && printf '%s\n' "$ADMINFORGE_PUBKEY" > /home/adminforge/.ssh/authorized_keys \
+    && chmod 600 /home/adminforge/.ssh/authorized_keys \
+    && chown -R adminforge:adminforge /home/adminforge/.ssh
+
+# (opcional) regra de sudo "legada", fora do AdminForge — drift a ser descoberto na Tarefa 8
+RUN if [ "$SEED_LEGACY_SUDOERS" = "1" ]; then \
+        useradd -r -s /usr/sbin/nologin deploy 2>/dev/null || true ; \
+        echo 'deploy ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart nginx' > /etc/sudoers.d/zzz-legacy-deploy ; \
+        chmod 0440 /etc/sudoers.d/zzz-legacy-deploy ; \
+    fi
+
+RUN ssh-keygen -A \
+    && sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config \
+    && sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
+
+EXPOSE 22
+CMD ["/usr/sbin/sshd", "-D", "-e"]

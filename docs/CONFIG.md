@@ -8,8 +8,11 @@
 | `ADMINFORGE_SUPERADMIN` | `$USER` | Identifica quem operou (vai pro histórico). |
 | `ADMINFORGE_SSH_KEY` | `~/.ssh/adminforge_id` | Chave privada usada pelo `SSHDeployer`. |
 | `ADMINFORGE_SSH_USER` | `adminforge` | Usuário de serviço nos servidores gerenciados. |
+| `ADMINFORGE_LANG` | _(auto)_ | Idioma da CLI: `en` (padrão) ou `pt`. Sem ele, herda de `LC_ALL`/`LC_MESSAGES`/`LANG` (qualquer coisa que comece com `pt` vira português); na ausência de tudo, `en`. Afeta `--help`, mensagens e prompts — não os valores de status no estado (esses são a API). |
 
 Sobreposição via flag tem precedência: `--state /var/lib/adminforge/state` ignora `ADMINFORGE_STATE`.
+
+> **Idioma.** A CLI é bilíngue (en/pt-br). O texto-fonte é o inglês; o catálogo pt-br vive em `adminforge/i18n.py`. Uma string sem tradução cai para o inglês — degrada, não quebra. O *boilerplate* do `argparse` (`usage:`, `the following arguments are required:`...) permanece em inglês.
 
 ## Estrutura do diretório `state/`
 

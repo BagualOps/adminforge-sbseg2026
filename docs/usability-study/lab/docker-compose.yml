@@ -1,0 +1,46 @@
+name: adminforge-lab
+
+# Três servidores-alvo da frota do estudo de usabilidade. Cada um é um Debian
+# slim com sshd, o usuário de serviço `adminforge` e a chave pública do
+# AdminForge já instalada (arg ADMINFORGE_PUBKEY, exportado pelo prep.sh).
+# O `adminforge` em si NÃO roda aqui — roda no host (venv criado pelo prep.sh),
+# conectando a 127.0.0.1:{2201,2202,2203}.
+
+services:
+  web-01:
+    build:
+      context: .
+      dockerfile: Dockerfile.servidor
+      args:
+        ADMINFORGE_PUBKEY: "${ADMINFORGE_PUBKEY:?defina ADMINFORGE_PUBKEY — rode ./prep.sh}"
+    container_name: adminforge-lab-web-01
+    hostname: web-01
+    ports: ["127.0.0.1:2201:22"]
+    networks: [lab]
+
+  web-02:
+    build:
+      context: .
+      dockerfile: Dockerfile.servidor
+      args:
+        ADMINFORGE_PUBKEY: "${ADMINFORGE_PUBKEY}"
+        SEED_LEGACY_SUDOERS: "1"   # semeia /etc/sudoers.d/zzz-legacy-deploy (drift p/ a Tarefa 8)
+    container_name: adminforge-lab-web-02
+    hostname: web-02
+    ports: ["127.0.0.1:2202:22"]
+    networks: [lab]
+
+  db-03:
+    build:
+      context: .
+      dockerfile: Dockerfile.servidor
+      args:
+        ADMINFORGE_PUBKEY: "${ADMINFORGE_PUBKEY}"
+    container_name: adminforge-lab-db-03
+    hostname: db-03
+    ports: ["127.0.0.1:2203:22"]
+    networks: [lab]
+
+networks:
+  lab:
+    driver: bridge

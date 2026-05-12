@@ -23,6 +23,7 @@ completion = [
 
 [project.scripts]
 adminforge = "adminforge.cli.main:main"
+af = "adminforge.cli.main:main"
 
 [tool.setuptools.packages.find]
 include = ["adminforge*"]

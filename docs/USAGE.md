@@ -10,11 +10,14 @@ Cada caso de uso da modelagem v1, com gatilho, fluxo e exemplo copiável.
 
 ```bash
 adminforge user add --username <username> --name "Nome Completo" --email pessoa@empresa.com
+adminforge user add --username <username> --name "Nome" --email a@e.com --key-file ~/.ssh/x.pub  # ja com a chave
 ```
 
 - `username` deve casar com `^[a-z_][a-z0-9_-]{0,30}$` (regra Linux).
 - E-mail validado por regex simples.
+- `--key-file` / `--key-string` (opcionais) registram a chave SSH no mesmo comando (atalho do UC-2).
 - Cadastro duplicado falha com mensagem clara.
+- `af` é um atalho de `adminforge` (mesmo comando).
 
 ```bash
 adminforge user list                          # tabela
@@ -280,5 +283,7 @@ adminforge status --format json
 | `ADMINFORGE_SUPERADMIN`   | `$USER`                       | Identifica quem está executando (vai pro histórico). |
 | `ADMINFORGE_SSH_KEY`      | `~/.ssh/adminforge_id`        | Chave privada usada pelo Deployer SSH. |
 | `ADMINFORGE_SSH_USER`     | `adminforge`                  | Usuário de serviço nos servidores gerenciados. |
+| `ADMINFORGE_LANG`         | _(auto: `en`)_                | Idioma da CLI: `en` ou `pt`. Sem ele, herda de `LC_*`/`LANG`. Afeta `--help`, mensagens e prompts. |
 
-Todos os comandos aceitam `--help` (`-h`) com exemplos.
+Todos os comandos aceitam `--help` (`-h`) com exemplos. A CLI é bilíngue (inglês/português):
+`ADMINFORGE_LANG=pt adminforge --help`.

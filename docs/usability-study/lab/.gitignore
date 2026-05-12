@@ -1,0 +1,7 @@
+# gerados pelo prep.sh / reset.sh — não versionar
+venv/
+state/
+keys/
+archive/
+alice.pub
+env.sh
