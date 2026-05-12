@@ -345,7 +345,6 @@ _CATALOGS: dict[str, dict[str, str]] = {
         "Users ({n}) — humans only (UID >= 1000)":
             "Usuarios ({n}) — so humanos (UID >= 1000)",
         "Groups matching {g} ({n})": "Grupos contendo {g} ({n})",
-        "Groups ({n})": "Grupos ({n})",
         "  (no group with explicit members)": "  (nenhum grupo com membros explicitos)",
         "Sudoers — files in /etc/sudoers.d/ ({n})":
             "Sudoers — arquivos em /etc/sudoers.d/ ({n})",
@@ -400,7 +399,6 @@ _CATALOGS: dict[str, dict[str, str]] = {
         "sudo-profile {n} already exists": "o sudo-profile {n} ja existe",
         "sudo-profile {n} is in use by {k} permission(s); update or revoke them first":
             "o sudo-profile {n} esta em uso por {k} permissao(oes); atualize ou revogue antes",
-        "server {h} does not exist": "o servidor {h} nao existe",
         "{kind} {name} has {n} associated permission(s):":
             "{kind} {name} tem {n} permissao(oes) associada(s):",
         "Revoke them first:": "Revogue antes:",
