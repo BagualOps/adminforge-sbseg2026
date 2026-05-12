@@ -23,7 +23,16 @@ curl -fsSL https://raw.githubusercontent.com/BagualOps/adminforge-v1/main/docs/u
 O `bootstrap.sh` clona o repo em `./adminforge-v1` (no diretório onde você rodar a one-liner — tudo a
 nível de usuário, sem instalar nada no sistema) e roda o `prep.sh`. Customizável por env:
 `ADMINFORGE_LAB_DIR` (destino — default `./adminforge-v1`), `ADMINFORGE_REPO_URL`, `ADMINFORGE_REPO_REF`.
-Requisitos: `git`, `python3` ≥ 3.11, `docker` (com `docker compose` v2).
+Requisitos: `git`, `python3` ≥ 3.11, `docker` (com `docker compose` v2), `ssh`/`ssh-keygen` (OpenSSH client).
+
+> **Segurança / reprodutibilidade.** `curl ... | bash` executa código remoto. Se preferir, baixe e
+> inspecione antes: `curl -fsSLO <url>/bootstrap.sh && less bootstrap.sh && bash bootstrap.sh`. Para
+> uma rodada do estudo, dá pra fixar numa tag/commit em vez de `main` (URL `.../<tag>/docs/...` +
+> `ADMINFORGE_REPO_REF=<tag>`), pra todo mundo rodar exatamente a mesma versão.
+>
+> **Repo privado.** Hoje `BagualOps/adminforge-v1` é privado, então `raw.githubusercontent.com` só
+> responde com autenticação — a one-liner anônima acima só funciona se o repo virar público. Em
+> máquina sem credencial do GitHub, copie o repo pra lá (`rsync`/`scp`) e rode `./prep.sh` direto.
 
 ### Com o repo já clonado
 

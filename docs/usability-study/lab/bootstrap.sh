@@ -21,7 +21,7 @@ DEST="${ADMINFORGE_LAB_DIR:-$PWD/adminforge-v1}"
 say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
 die() { printf '\033[31merro:\033[0m %s\n' "$*" >&2; exit 1; }
 
-for c in git python3 docker; do command -v "$c" >/dev/null 2>&1 || die "'$c' não encontrado no PATH"; done
+for c in git python3 docker ssh ssh-keygen; do command -v "$c" >/dev/null 2>&1 || die "'$c' não encontrado no PATH"; done
 docker compose version >/dev/null 2>&1 || die "'docker compose' (v2) não disponível"
 python3 -c 'import sys; raise SystemExit(0 if sys.version_info[:2] >= (3, 11) else 1)' \
     || die "precisa de Python >= 3.11 (achei: $(python3 -V 2>&1))"
@@ -30,6 +30,8 @@ if [ -e "$DEST" ] && [ ! -d "$DEST/.git" ]; then
     die "$DEST já existe e não é um repositório git — remova-o ou defina ADMINFORGE_LAB_DIR"
 fi
 if [ -d "$DEST/.git" ]; then
+    [ -f "$DEST/docs/usability-study/lab/prep.sh" ] \
+        || die "$DEST é um repo git mas não parece ser o adminforge-v1 — defina ADMINFORGE_LAB_DIR para outro lugar"
     say "atualizando o repo em $DEST"
     git -C "$DEST" fetch -q --depth 1 origin "$REPO_REF"
     git -C "$DEST" reset -q --hard FETCH_HEAD
