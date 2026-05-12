@@ -14,6 +14,19 @@ são containers Docker; o `adminforge` em si roda no host, num venv criado pelo 
 
 ## Subir
 
+### Numa máquina nova — uma linha só
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/BagualOps/adminforge-v1/main/docs/usability-study/lab/bootstrap.sh | bash
+```
+
+O `bootstrap.sh` clona o repo em `./adminforge-v1` (no diretório onde você rodar a one-liner — tudo a
+nível de usuário, sem instalar nada no sistema) e roda o `prep.sh`. Customizável por env:
+`ADMINFORGE_LAB_DIR` (destino — default `./adminforge-v1`), `ADMINFORGE_REPO_URL`, `ADMINFORGE_REPO_REF`.
+Requisitos: `git`, `python3` ≥ 3.11, `docker` (com `docker compose` v2).
+
+### Com o repo já clonado
+
 ```bash
 cd docs/usability-study/lab
 ./prep.sh
