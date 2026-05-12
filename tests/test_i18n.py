@@ -60,8 +60,8 @@ def test_t_chave_desconhecida_cai_para_ingles():
 
 def test_help_ingles_por_padrao(env):
     out = _run(["--help"])
-    assert "privileged identity management" in out
-    assert "gestao de identidades" not in out
+    assert "manages who has privileged access" in out
+    assert "gerencia quem tem acesso" not in out
 
 
 def test_help_portugues_com_lang(env):

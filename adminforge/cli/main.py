@@ -1077,9 +1077,10 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="adminforge",
         description=_(
-            "AdminForge - privileged identity management for Linux server fleets.\n\n"
-            "Operations change the desired state; 'apply' converges the real state to it "
-            "via SSH. Every command is recorded in history.jsonl."
+            "AdminForge - manages who has privileged access (SSH keys and sudo) on a fleet of "
+            "Linux servers.\n\n"
+            "You edit the desired state with these commands; 'apply' pushes the changes to the "
+            "servers over SSH. Every command goes into history.jsonl."
         ),
         epilog=_(EPILOG_GERAL),
         formatter_class=argparse.RawDescriptionHelpFormatter,

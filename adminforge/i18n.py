@@ -61,12 +61,14 @@ _ = t
 _CATALOGS: dict[str, dict[str, str]] = {
     "pt": {
         # ---- parser: descricao geral e epilogos ----
-        "AdminForge - privileged identity management for Linux server fleets.\n\n"
-        "Operations change the desired state; 'apply' converges the real state to it "
-        "via SSH. Every command is recorded in history.jsonl.":
-        "AdminForge - gestao de identidades privilegiadas em frotas de servidores Linux.\n\n"
-        "Operacoes mudam o estado desejado; 'apply' converge o estado real ate ele "
-        "via SSH. Todo comando e registrado em history.jsonl.",
+        "AdminForge - manages who has privileged access (SSH keys and sudo) on a fleet of "
+        "Linux servers.\n\n"
+        "You edit the desired state with these commands; 'apply' pushes the changes to the "
+        "servers over SSH. Every command goes into history.jsonl.":
+        "AdminForge - gerencia quem tem acesso privilegiado (chaves SSH e sudo) numa frota de "
+        "servidores Linux.\n\n"
+        "Voce edita o estado desejado com estes comandos; o 'apply' leva as mudancas para os "
+        "servidores via SSH. Todo comando vai para o history.jsonl.",
 
         "EXAMPLES\n"
         "  adminforge user add --username marina --name \"Marina Silva\" --email marina@empresa.com\n"
