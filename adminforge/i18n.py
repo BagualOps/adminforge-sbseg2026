@@ -179,6 +179,34 @@ _CATALOGS: dict[str, dict[str, str]] = {
         "List users.": "Lista usuarios.",
         "Show user details.": "Mostra detalhes do usuario.",
         "Disable user (revokes all keys).": "Desabilita o usuario (revoga todas as chaves).",
+        "Edit a user's name or e-mail.": "Edita o nome ou e-mail de um usuario.",
+        "New full name.": "Novo nome completo.",
+        "New e-mail.": "Novo e-mail.",
+        "Rename a user (cascades to group memberships).":
+            "Renomeia um usuario (cascateia para os grupos a que pertence).",
+        "Current username.": "Username atual.",
+        "New username.": "Novo username.",
+        "Rename a user-group (cascades to permissions).":
+            "Renomeia um user-group (cascateia para as permissoes).",
+        "Current name.": "Nome atual.",
+        "New name.": "Novo nome.",
+        "Edit a server's IP, port or host_key.":
+            "Edita IP, porta ou host_key de um servidor.",
+        "New IPv4.": "Novo IPv4.",
+        "New SSH port.": "Nova porta SSH.",
+        "New host_key (rotates the trusted key — use with care).":
+            "Nova host_key (rotaciona a chave confiada — use com cuidado).",
+        "Rename a server (cascades to server-groups).":
+            "Renomeia um servidor (cascateia para os server-groups).",
+        "Current hostname.": "Hostname atual.",
+        "New hostname.": "Novo hostname.",
+        "Rename a server-group (cascades to permissions).":
+            "Renomeia um server-group (cascateia para as permissoes).",
+        "Rename a sudo profile (cascades to permissions).":
+            "Renomeia um sudo-profile (cascateia para as permissoes).",
+        "provide --name and/or --email": "informe --name e/ou --email",
+        "provide --ip, --port and/or --host-key":
+            "informe --ip, --port e/ou --host-key",
         "Register and revoke user SSH keys.": "Cadastra e revoga chaves SSH de usuarios.",
         "Register an SSH key.": "Cadastra uma chave SSH.",
         "Path to a .pub file.": "Caminho para um arquivo .pub.",
@@ -224,16 +252,48 @@ _CATALOGS: dict[str, dict[str, str]] = {
             "Lista o estado declarado completo (usuarios, grupos, servidores, permissoes).",
         "Show the delta without applying.": "Mostra o delta sem aplicar.",
         "Apply the delta to servers via SSH.": "Aplica o delta nos servidores via SSH.",
+        "Apply the delta (pending changes) to servers via SSH.\n\n"
+        "Tip: run 'adminforge preview' first to see exactly what will change without\n"
+        "touching anything. The 'apply' command also shows the changes and asks for\n"
+        "confirmation before doing anything.":
+        "Aplica o delta (mudancas pendentes) nos servidores via SSH.\n\n"
+        "Dica: rode 'adminforge preview' antes para ver exatamente o que vai mudar sem\n"
+        "tocar em nada. O proprio 'apply' tambem mostra as mudancas e pede confirmacao\n"
+        "antes de agir.",
+        "See also:\n"
+        "  adminforge preview         # read-only: show the delta\n"
+        "  adminforge apply verify    # compare declared state vs real servers":
+        "Veja tambem:\n"
+        "  adminforge preview         # somente leitura: mostra o delta\n"
+        "  adminforge apply verify    # confere o estado declarado vs os servidores",
+        "SSH port on the server (default: 22).": "Porta SSH do servidor (padrao: 22).",
+        "Compare declared state vs real servers (authorized_keys + sudoers).":
+            "Compara o estado declarado vs os servidores reais (authorized_keys + sudoers).",
+        "Apply {n} change(s) now?": "Aplicar {n} mudanca(s) agora?",
         "Use the fake Deployer.": "Usa o Deployer falso (dry-run).",
         "Show authorized_keys before/after diff per user.":
             "Mostra o diff antes/depois do authorized_keys por usuario.",
-        "Compare declared chaves_instaladas vs real authorized_keys.":
-            "Compara o chaves_instaladas declarado vs o authorized_keys real.",
         "Query operational history.": "Consulta o historico operacional.",
         "Operational audit (read-only via SSH).":
             "Auditoria operacional (somente leitura via SSH).",
         "Inspect users, groups, sudoers and services of the server.":
             "Inspeciona usuarios, grupos, sudoers e servicos do servidor.",
+        "Inspect users, groups, sudoers and services of one or more servers.":
+            "Inspeciona usuarios, grupos, sudoers e servicos de um ou mais servidores.",
+        "One or more hostnames.": "Um ou mais hostnames.",
+        "Audit every server in this group.": "Audita todos os servidores deste grupo.",
+        "Audit every registered server.": "Audita todos os servidores cadastrados.",
+        "no servers to audit": "nenhum servidor para auditar",
+        "Examples:\n"
+        "  adminforge audit server --hostname web-01\n"
+        "  adminforge audit server --hostname web-01 web-02\n"
+        "  adminforge audit server --server-group prod\n"
+        "  adminforge audit server --all":
+        "Exemplos:\n"
+        "  adminforge audit server --hostname web-01\n"
+        "  adminforge audit server --hostname web-01 web-02\n"
+        "  adminforge audit server --server-group prod\n"
+        "  adminforge audit server --all",
         "Highlight occurrences of this user.": "Destaca ocorrencias deste usuario.",
         "Filter groups by substring.": "Filtra grupos por substring.",
         "Highlight occurrences of this service.": "Destaca ocorrencias deste servico.",
@@ -300,10 +360,16 @@ _CATALOGS: dict[str, dict[str, str]] = {
             "  {u} {ref} — declarado sob {decl} mas encontrado sob {real}",
         "  {u} {ref} — block on server but not in state":
             "  {u} {ref} — bloco no servidor mas ausente no estado",
+        "  ssh failed listing sudoers: {e}": "  ssh falhou ao listar sudoers: {e}",
+        "  {u} sudoers — present": "  {u} sudoers — presente",
+        "  {u} sudoers — declared but missing on server":
+            "  {u} sudoers — declarado mas ausente no servidor",
+        "  {u} sudoers — present on server but not declared":
+            "  {u} sudoers — presente no servidor mas nao declarado",
         "Summary": "Resumo",
-        "matches": "coincidencias",
+        "matches": "iguais",
         "divergences": "divergencias",
-        "ssh errors": "erros de ssh",
+        "ssh errors": "falhas de ssh",
         "Result": "Resultado",
         "operation": "operacao",
         "status": "status",
@@ -382,6 +448,8 @@ _CATALOGS: dict[str, dict[str, str]] = {
         "fingerprint {fp} does not exist": "o fingerprint {fp} nao existe",
         "invalid group name: {n}": "nome de grupo invalido: {n}",
         "group {g} does not exist": "o grupo {g} nao existe",
+        "{kind} {n} does not exist": "{kind} {n} nao existe",
+        "{kind} {n} already exists": "{kind} {n} ja existe",
         "unknown users: {u}": "usuarios desconhecidos: {u}",
         "unknown servers: {s}": "servidores desconhecidos: {s}",
         "invalid hostname: {h}": "hostname invalido: {h}",

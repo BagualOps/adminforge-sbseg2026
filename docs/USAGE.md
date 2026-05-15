@@ -23,6 +23,8 @@ adminforge user add --username <username> --name "Nome" --email a@e.com --key-fi
 adminforge user list                          # tabela
 adminforge user show --username alice         # detalha + chaves + grupos
 adminforge user disable --username alice      # status=inativo, chaves revogadas
+adminforge user edit --username alice --name "Alice Souza" --email alice@empresa.com
+adminforge user rename --from alice --to alicia      # cascateia para membros de grupos
 ```
 
 ---
@@ -53,6 +55,7 @@ A revogação muda o status para `revogada`. A remoção física do `authorized_
 adminforge user-group create --name sysadmins
 adminforge user-group add-member --group sysadmins --username alice bob carla
 adminforge user-group remove-member --group sysadmins --username bob
+adminforge user-group rename --from sysadmins --to sa        # cascateia para permissoes
 adminforge user-group delete --name sysadmins        # bloqueia se houver permissoes associadas
 adminforge user-group list
 ```
@@ -109,6 +112,8 @@ Para aceitar a nova: `adminforge server remove --hostname web-01 --yes` e `serve
 ```bash
 adminforge server list
 adminforge server show --hostname web-01
+adminforge server edit --hostname web-01 --port 2222          # edita ip/porta/host_key
+adminforge server rename --from web-01 --to web-001           # cascateia para server-groups
 adminforge server remove --hostname web-01     # remove do estado; nao limpa chaves no servidor
 ```
 
@@ -122,6 +127,7 @@ Análogo ao UC-3, com suporte a N hostnames de uma vez (espaço, vírgula ou mis
 adminforge server-group create --name producao
 adminforge server-group add-member --group producao --hostname web-01,web-02 web-03
 adminforge server-group remove-member --group producao --hostname web-03
+adminforge server-group rename --from producao --to prod       # cascateia para permissoes
 adminforge server-group delete --name producao
 adminforge server-group list
 ```
@@ -186,11 +192,11 @@ db-03
 ## UC-8 — Aplicar mudanças
 
 ```bash
-adminforge apply              # confirma antes
+adminforge apply              # confirma antes (mostrando N mudanças)
 adminforge apply --yes        # sem confirmacao
 adminforge apply --dry-run    # simula com DryRunDeployer
 adminforge apply --diff       # mostra unified diff do authorized_keys antes da confirmacao
-adminforge apply verify       # nao aplica nada — confere declarado vs real (rc=2 se houver drift)
+adminforge apply verify       # nao aplica nada — confere declarado vs real (authorized_keys + sudoers; rc=2 se houver drift)
 ```
 
 Antes de cada edição em `authorized_keys`, o arquivo atual é copiado para `authorized_keys.bak` (mesmo dono, `0600`). Permite rollback manual em caso de erro.
@@ -230,7 +236,10 @@ adminforge history verify                     # checa cadeia SHA256
 ## UC-10 — Auditar servidor
 
 ```bash
-adminforge audit server --hostname web-01                  # tudo
+adminforge audit server --hostname web-01                  # um servidor
+adminforge audit server --hostname web-01 web-02           # vários hostnames
+adminforge audit server --server-group prod                # todos do grupo
+adminforge audit server --all                              # todos os cadastrados
 adminforge audit server --hostname web-01 --humans         # só UID >= 1000
 adminforge audit server --hostname web-01 --user tomcat    # destaca usuário
 adminforge audit server --hostname web-01 --group docker   # filtra grupos

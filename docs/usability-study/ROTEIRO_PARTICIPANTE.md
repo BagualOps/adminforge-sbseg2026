@@ -136,16 +136,17 @@ e depois **confirmar** que ficou como deveria.
 
 ---
 
-### Tarefa 6 — Restringir o sudo no banco
+### Tarefa 6 — Dar sudo limitado no banco
 
-Mudança de planejamento: no **`db-03`**, ninguém da `sre` deveria ter sudo *total*. O combinado agora
-é que a `sre`, no `banco`, possa rodar **com sudo apenas estes dois comandos**:
+A `sre` precisou de **sudo no `banco`** pra resolver um chamado — mas só pra dois comandos
+específicos, não sudo geral. O acesso atual da `sre` no `banco` é só `shell` (login sem sudo);
+o combinado agora é elevar para **sudo restrito** a estes dois comandos:
 
 - `/bin/journalctl`
 - `/bin/systemctl restart postgresql`
 
-**Objetivo:** ajustar o acesso da `sre` ao `banco` para sudo **limitado a esses dois comandos**, e
-fazer essa mudança valer no servidor.
+**Objetivo:** ajustar o acesso da `sre` ao `banco` de `shell` para **sudo limitado a esses dois
+comandos** (não sudo total), e fazer essa mudança valer no servidor.
 
 ---
 

@@ -510,6 +510,170 @@ class Nucleo:
         except Exception as e:
             return self._registrar_falha(op, str(e))
 
+    # ---------------------------------------------------------------------------
+    # Edits / renames
+    # ---------------------------------------------------------------------------
+    def editar_user(self, username: str, nome: str | None = None, email: str | None = None) -> Operacao:
+        op = self._nova_op(f"user edit {username}")
+        try:
+            with self.store:
+                user = self.store.get_user(username)
+                if not user:
+                    raise NaoExiste(_("user {u} does not exist").format(u=repr(username)))
+                if nome is not None:
+                    if not nome.strip():
+                        raise FormatoInvalido(_("name is required"))
+                    user.nome = nome
+                if email is not None:
+                    if not _RE_EMAIL.match(email):
+                        raise FormatoInvalido(_("invalid email: {e}").format(e=repr(email)))
+                    user.email = email
+                self.store.save_user(user)
+                return self._registrar(op, StatusOperacao.SUCESSO)
+        except Exception as e:
+            return self._registrar_falha(op, str(e))
+
+    def renomear_user(self, de: str, para: str) -> Operacao:
+        op = self._nova_op(f"user rename {de} -> {para}")
+        try:
+            with self.store:
+                if de == para:
+                    return self._registrar(op, StatusOperacao.SUCESSO)
+                if not _RE_USERNAME.match(para):
+                    raise FormatoInvalido(_("invalid username: {u}").format(u=repr(para)))
+                if not self.store.get_user(de):
+                    raise NaoExiste(_("user {u} does not exist").format(u=repr(de)))
+                if self.store.get_user(para):
+                    raise JaExiste(_("username {u} already exists").format(u=repr(para)))
+                self.store.rename_user(de, para)
+                for g in self.store.list_grupos_user():
+                    if de in g.membros:
+                        g.membros = [para if m == de else m for m in g.membros]
+                        self.store.save_grupo_user(g)
+                return self._registrar(op, StatusOperacao.SUCESSO)
+        except Exception as e:
+            return self._registrar_falha(op, str(e))
+
+    def editar_servidor(
+        self,
+        hostname: str,
+        ipv4: str | None = None,
+        porta: int | None = None,
+        chave_host: str | None = None,
+    ) -> Operacao:
+        op = self._nova_op(f"server edit {hostname}")
+        try:
+            with self.store:
+                servidor = self.store.get_servidor(hostname)
+                if not servidor:
+                    raise NaoExiste(_("server {h} does not exist").format(h=repr(hostname)))
+                if ipv4 is not None:
+                    if not _RE_IPV4.match(ipv4):
+                        raise FormatoInvalido(_("invalid ipv4: {ip}").format(ip=repr(ipv4)))
+                    servidor.ipv4 = ipv4
+                if porta is not None:
+                    if not (1 <= porta <= 65535):
+                        raise FormatoInvalido(_("invalid port: {p}").format(p=porta))
+                    servidor.porta_ssh = porta
+                if chave_host is not None:
+                    if not chave_host.strip():
+                        raise FormatoInvalido(_("host_key is required"))
+                    servidor.chave_host = chave_host.strip()
+                self.store.save_servidor(servidor)
+                return self._registrar(op, StatusOperacao.SUCESSO)
+        except Exception as e:
+            return self._registrar_falha(op, str(e))
+
+    def renomear_servidor(self, de: str, para: str) -> Operacao:
+        op = self._nova_op(f"server rename {de} -> {para}")
+        try:
+            with self.store:
+                if de == para:
+                    return self._registrar(op, StatusOperacao.SUCESSO)
+                if not _RE_HOSTNAME.match(para):
+                    raise FormatoInvalido(_("invalid hostname: {h}").format(h=repr(para)))
+                if not self.store.get_servidor(de):
+                    raise NaoExiste(_("server {h} does not exist").format(h=repr(de)))
+                if self.store.get_servidor(para):
+                    raise JaExiste(_("server {h} already exists").format(h=repr(para)))
+                self.store.rename_servidor(de, para)
+                for g in self.store.list_grupos_servidor():
+                    if de in g.membros:
+                        g.membros = [para if m == de else m for m in g.membros]
+                        self.store.save_grupo_servidor(g)
+                return self._registrar(op, StatusOperacao.SUCESSO)
+        except Exception as e:
+            return self._registrar_falha(op, str(e))
+
+    def _renomear_grupo(
+        self,
+        tipo: str,
+        de: str,
+        para: str,
+        get,
+        rename,
+        atualizar_permissao,
+    ) -> Operacao:
+        op = self._nova_op(f"{tipo} rename {de} -> {para}")
+        try:
+            with self.store:
+                if de == para:
+                    return self._registrar(op, StatusOperacao.SUCESSO)
+                if not _RE_NOME_GRUPO.match(para):
+                    raise FormatoInvalido(_("invalid group name: {n}").format(n=repr(para)))
+                if not get(de):
+                    raise NaoExiste(_("{kind} {n} does not exist").format(kind=tipo, n=repr(de)))
+                if get(para):
+                    raise JaExiste(_("{kind} {n} already exists").format(kind=tipo, n=repr(para)))
+                rename(de, para)
+                perms = self.store.list_permissoes()
+                for p in perms:
+                    atualizar_permissao(p, de, para)
+                self.store.replace_permissoes(perms)
+                return self._registrar(op, StatusOperacao.SUCESSO)
+        except Exception as e:
+            return self._registrar_falha(op, str(e))
+
+    def renomear_grupo_user(self, de: str, para: str) -> Operacao:
+        def _swap(p, antigo, novo):
+            if p.grupo_user == antigo:
+                p.grupo_user = novo
+        return self._renomear_grupo(
+            "user-group", de, para,
+            self.store.get_grupo_user, self.store.rename_grupo_user, _swap,
+        )
+
+    def renomear_grupo_servidor(self, de: str, para: str) -> Operacao:
+        def _swap(p, antigo, novo):
+            if p.grupo_servidor == antigo:
+                p.grupo_servidor = novo
+        return self._renomear_grupo(
+            "server-group", de, para,
+            self.store.get_grupo_servidor, self.store.rename_grupo_servidor, _swap,
+        )
+
+    def renomear_sudo_profile(self, de: str, para: str) -> Operacao:
+        op = self._nova_op(f"sudo-profile rename {de} -> {para}")
+        try:
+            with self.store:
+                if de == para:
+                    return self._registrar(op, StatusOperacao.SUCESSO)
+                if not _RE_NOME_GRUPO.match(para):
+                    raise FormatoInvalido(_("invalid sudo-profile name: {n}").format(n=repr(para)))
+                if not self.store.get_sudo_profile(de):
+                    raise NaoExiste(_("sudo-profile {n} does not exist").format(n=repr(de)))
+                if self.store.get_sudo_profile(para):
+                    raise JaExiste(_("sudo-profile {n} already exists").format(n=repr(para)))
+                self.store.rename_sudo_profile(de, para)
+                perms = self.store.list_permissoes()
+                for p in perms:
+                    if p.profile == de:
+                        p.profile = para
+                self.store.replace_permissoes(perms)
+                return self._registrar(op, StatusOperacao.SUCESSO)
+        except Exception as e:
+            return self._registrar_falha(op, str(e))
+
     def auditar_servidor(self, hostname: str) -> tuple[Operacao, dict]:
         op = self._nova_op(f"audit server {hostname}")
         try:

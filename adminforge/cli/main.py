@@ -155,6 +155,19 @@ def cmd_user_disable(args: argparse.Namespace) -> int:
     return ui.imprimir_resultado(op)
 
 
+def cmd_user_edit(args: argparse.Namespace) -> int:
+    if args.name is None and args.email is None:
+        ui.fail(_("provide --name and/or --email"))
+        return 2
+    op = _nucleo(args).editar_user(args.username, nome=args.name, email=args.email)
+    return ui.imprimir_resultado(op)
+
+
+def cmd_user_rename(args: argparse.Namespace) -> int:
+    op = _nucleo(args).renomear_user(args.de, args.para)
+    return ui.imprimir_resultado(op)
+
+
 # ---------------------------------------------------------------------------
 # UC-2: user key
 # ---------------------------------------------------------------------------
@@ -206,6 +219,10 @@ def cmd_ug_remove_member(args: argparse.Namespace) -> int:
 
 def cmd_ug_delete(args: argparse.Namespace) -> int:
     return ui.imprimir_resultado(_nucleo(args).excluir_grupo_user(args.name))
+
+
+def cmd_ug_rename(args: argparse.Namespace) -> int:
+    return ui.imprimir_resultado(_nucleo(args).renomear_grupo_user(args.de, args.para))
 
 
 def cmd_ug_list(args: argparse.Namespace) -> int:
@@ -290,6 +307,21 @@ def cmd_server_remove(args: argparse.Namespace) -> int:
     return ui.imprimir_resultado(_nucleo(args).excluir_servidor(args.hostname))
 
 
+def cmd_server_edit(args: argparse.Namespace) -> int:
+    if args.ip is None and args.port is None and args.host_key is None:
+        ui.fail(_("provide --ip, --port and/or --host-key"))
+        return 2
+    op = _nucleo(args).editar_servidor(
+        args.hostname, ipv4=args.ip, porta=args.port, chave_host=args.host_key,
+    )
+    return ui.imprimir_resultado(op)
+
+
+def cmd_server_rename(args: argparse.Namespace) -> int:
+    op = _nucleo(args).renomear_servidor(args.de, args.para)
+    return ui.imprimir_resultado(op)
+
+
 # ---------------------------------------------------------------------------
 # UC-5: server-group
 # ---------------------------------------------------------------------------
@@ -307,6 +339,10 @@ def cmd_sg_rm(args: argparse.Namespace) -> int:
 
 def cmd_sg_delete(args: argparse.Namespace) -> int:
     return ui.imprimir_resultado(_nucleo(args).excluir_grupo_servidor(args.name))
+
+
+def cmd_sg_rename(args: argparse.Namespace) -> int:
+    return ui.imprimir_resultado(_nucleo(args).renomear_grupo_servidor(args.de, args.para))
 
 
 def cmd_sg_list(args: argparse.Namespace) -> int:
@@ -509,6 +545,10 @@ def cmd_sudo_profile_delete(args: argparse.Namespace) -> int:
     return ui.imprimir_resultado(_nucleo(args).excluir_sudo_profile(args.name))
 
 
+def cmd_sudo_profile_rename(args: argparse.Namespace) -> int:
+    return ui.imprimir_resultado(_nucleo(args).renomear_sudo_profile(args.de, args.para))
+
+
 def cmd_permission_revoke(args: argparse.Namespace) -> int:
     if not args.yes and not ui.confirmar(
         _("Revoke {ug} -> {sg}? (apply removes keys)").format(ug=args.user_group, sg=args.server_group)
@@ -590,8 +630,27 @@ def _imprimir_diff(nucleo: Nucleo, subacoes: list) -> None:
                 ui.echo(f"    {linha}")
 
 
+_SUDOERS_PREFIX = "adminforge-"
+
+
+def _esperado_do_servidor(servidor) -> tuple[dict[str, str], set[str]]:
+    blocks: dict[str, str] = {}
+    sudo: set[str] = set()
+    for item in servidor.chaves_instaladas:
+        if isinstance(item, dict):
+            ref = item["ref"]
+            u = item.get("username") or ref.split(":", 1)[0]
+            blocks[ref] = u
+            if item.get("nivel") == "sudo":
+                sudo.add(u)
+        else:
+            blocks[item] = item.split(":", 1)[0]
+    return blocks, sudo
+
+
 def cmd_apply_verify(args: argparse.Namespace) -> int:
-    """Compara chaves_instaladas declarado vs blocos AdminForge reais via SSH."""
+    """Compara o estado declarado vs o real do servidor: blocos AdminForge no
+    authorized_keys + arquivos `adminforge-<user>` em /etc/sudoers.d/."""
     from adminforge import authorized_keys as ak
 
     nucleo = _nucleo(args, com_ssh=not args.dry_run)
@@ -600,25 +659,17 @@ def cmd_apply_verify(args: argparse.Namespace) -> int:
     erros_ssh: list[str] = []
 
     for servidor in nucleo.store.list_servidores():
-        # esperado: dict ref -> nome_user
-        esperado: dict[str, str] = {}
-        for item in servidor.chaves_instaladas:
-            if isinstance(item, dict):
-                esperado[item["ref"]] = item.get("username") or item["ref"].split(":", 1)[0]
-            else:
-                esperado[item] = item.split(":", 1)[0]
-
-        # users a consultar (declarados + nada extra; extras seriam descobertos via audit server)
-        usernames = sorted(set(esperado.values()))
+        esperado_blocks, esperado_sudo = _esperado_do_servidor(servidor)
 
         ui.heading(servidor.hostname)
-        if not usernames:
+        if not esperado_blocks and not esperado_sudo:
             ui.secho(_("  (no installed keys declared)"), dim=True)
             continue
 
+        # 1) authorized_keys
         ssh_falhou = False
-        real: dict[str, str] = {}
-        for u in usernames:
+        real_blocks: dict[str, str] = {}
+        for u in sorted(set(esperado_blocks.values())):
             try:
                 conteudo, ok = nucleo.deployer.ler_authorized_keys(servidor, u)
             except Exception as e:
@@ -630,14 +681,14 @@ def cmd_apply_verify(args: argparse.Namespace) -> int:
                 ssh_falhou = True
                 break
             for ref in ak.parse_blocos(conteudo):
-                real[ref] = u
+                real_blocks[ref] = u
 
         if ssh_falhou:
             erros_ssh.append(servidor.hostname)
             continue
 
-        for ref, username in sorted(esperado.items()):
-            real_user = real.get(ref)
+        for ref, username in sorted(esperado_blocks.items()):
+            real_user = real_blocks.get(ref)
             if real_user is None:
                 ui.fail(_("  {u} {ref} — declared but not present on server").format(u=f"{username:20}", ref=ref))
                 total_div += 1
@@ -647,10 +698,37 @@ def cmd_apply_verify(args: argparse.Namespace) -> int:
             else:
                 ui.ok(f"  {username:20} {ref}")
                 total_ok += 1
-        for ref, username in sorted(real.items()):
-            if ref not in esperado:
+        for ref, username in sorted(real_blocks.items()):
+            if ref not in esperado_blocks:
                 ui.warn(_("  {u} {ref} — block on server but not in state").format(u=f"{username:20}", ref=ref))
                 total_div += 1
+
+        # 2) sudoers files (adminforge-<user> em /etc/sudoers.d/)
+        try:
+            relatorio = nucleo.deployer.inspecionar(servidor)
+        except Exception as e:
+            ui.fail(_("  ssh failed listing sudoers: {e}").format(e=e))
+            erros_ssh.append(servidor.hostname)
+            continue
+        if "erro" in relatorio:
+            ui.fail(_("  ssh failed listing sudoers: {e}").format(e=relatorio["erro"]))
+            erros_ssh.append(servidor.hostname)
+            continue
+        arquivos = relatorio.get("sudoers_arquivos") or []
+        real_sudo = {
+            a["nome"][len(_SUDOERS_PREFIX):] for a in arquivos
+            if a.get("adminforge") and a.get("nome", "").startswith(_SUDOERS_PREFIX)
+        }
+        for u in sorted(esperado_sudo):
+            if u in real_sudo:
+                ui.ok(_("  {u} sudoers — present").format(u=f"{u:20}"))
+                total_ok += 1
+            else:
+                ui.fail(_("  {u} sudoers — declared but missing on server").format(u=f"{u:20}"))
+                total_div += 1
+        for u in sorted(real_sudo - esperado_sudo):
+            ui.warn(_("  {u} sudoers — present on server but not declared").format(u=f"{u:20}"))
+            total_div += 1
 
     ui.echo()
     ui.heading(_("Summary"))
@@ -680,7 +758,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
     if args.diff:
         _imprimir_diff(nucleo, subacoes)
 
-    if not args.yes and not ui.confirmar(_("Apply now?")):
+    if not args.yes and not ui.confirmar(_("Apply {n} change(s) now?").format(n=len(subacoes))):
         ui.warn(_("apply cancelled"))
         return 1
 
@@ -988,13 +1066,39 @@ def cmd_dump(args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 # UC-10: audit server
 # ---------------------------------------------------------------------------
-def cmd_audit_server(args: argparse.Namespace) -> int:
-    nucleo = _nucleo(args, com_ssh=not args.dry_run)
-    op, relatorio = nucleo.auditar_servidor(args.hostname)
-    if "erro" in relatorio:
-        ui.fail(relatorio["erro"])
-        return 2
+def _hosts_para_auditar(nucleo: Nucleo, args: argparse.Namespace) -> list[str]:
+    if getattr(args, "all", False):
+        return [s.hostname for s in nucleo.store.list_servidores()]
+    if getattr(args, "server_group", None):
+        g = nucleo.store.get_grupo_servidor(args.server_group)
+        if not g:
+            ui.fail(_("server-group {g} does not exist").format(g=repr(args.server_group)))
+            return []
+        return list(g.membros)
+    return list(args.hostname or [])
 
+
+def cmd_audit_server(args: argparse.Namespace) -> int:
+    nucleo = _nucleo(args, com_ssh=True)
+    hostnames = _hosts_para_auditar(nucleo, args)
+    if not hostnames:
+        ui.fail(_("no servers to audit"))
+        return 2
+    qualquer_falha = False
+    for i, hostname in enumerate(hostnames):
+        if i > 0:
+            ui.echo()
+            ui.secho("─" * 60, dim=True)
+        op, relatorio = nucleo.auditar_servidor(hostname)
+        if "erro" in relatorio:
+            ui.fail(f"{hostname}: {relatorio['erro']}")
+            qualquer_falha = True
+            continue
+        _imprimir_audit_relatorio(args, hostname, op, relatorio)
+    return 2 if qualquer_falha else 0
+
+
+def _imprimir_audit_relatorio(args: argparse.Namespace, hostname: str, op, relatorio: dict) -> None:
     usuarios = relatorio.get("usuarios", [])
     grupos = relatorio.get("grupos", [])
     servicos = relatorio.get("servicos", [])
@@ -1004,6 +1108,7 @@ def cmd_audit_server(args: argparse.Namespace) -> int:
     if args.humans:
         usuarios = [u for u in usuarios if u.get("categoria") == "human"]
 
+    ui.heading(hostname)
     # Users
     titulo = _("Users ({n})").format(n=len(usuarios))
     if args.humans:
@@ -1142,6 +1247,17 @@ def _build_parser() -> argparse.ArgumentParser:
     a.add_argument("--yes", action="store_true")
     a.set_defaults(func=cmd_user_disable)
 
+    a = s_user.add_parser("edit", help=_("Edit a user's name or e-mail."))
+    a.add_argument("--username", required=True).completer = completers.usernames
+    a.add_argument("--name", help=_("New full name."))
+    a.add_argument("--email", help=_("New e-mail."))
+    a.set_defaults(func=cmd_user_edit)
+
+    a = s_user.add_parser("rename", help=_("Rename a user (cascades to group memberships)."))
+    a.add_argument("--from", dest="de", required=True, help=_("Current username.")).completer = completers.usernames
+    a.add_argument("--to", dest="para", required=True, help=_("New username."))
+    a.set_defaults(func=cmd_user_rename)
+
     # user key (subcomando aninhado de user)
     p_uk = s_user.add_parser("key", help=_("Register and revoke user SSH keys."))
     s_uk = p_uk.add_subparsers(dest="key_sub", required=True)
@@ -1190,6 +1306,11 @@ def _build_parser() -> argparse.ArgumentParser:
     a.add_argument("--name", required=True).completer = completers.user_groups
     a.set_defaults(func=cmd_ug_delete)
 
+    a = s_ug.add_parser("rename", help=_("Rename a user-group (cascades to permissions)."))
+    a.add_argument("--from", dest="de", required=True, help=_("Current name.")).completer = completers.user_groups
+    a.add_argument("--to", dest="para", required=True, help=_("New name."))
+    a.set_defaults(func=cmd_ug_rename)
+
     a = s_ug.add_parser("list")
     a.add_argument("--format", choices=["table", "json"], default="table")
     a.set_defaults(func=cmd_ug_list)
@@ -1211,7 +1332,7 @@ def _build_parser() -> argparse.ArgumentParser:
     a = s_server.add_parser("add", help=_("Register a server (TOFU host_key)."))
     a.add_argument("--hostname", required=True)
     a.add_argument("--ip", required=True, help=_("Server IPv4."))
-    a.add_argument("--port", type=int, default=22)
+    a.add_argument("--port", type=int, default=22, help=_("SSH port on the server (default: 22)."))
     a.add_argument("--host-key", help=_("ssh-keyscan output, e.g. 'ssh-ed25519 AAAA...'"))
     a.add_argument("--auto", action="store_true", help=_("Capture host_key via ssh-keyscan."))
     a.set_defaults(func=cmd_server_add)
@@ -1228,6 +1349,18 @@ def _build_parser() -> argparse.ArgumentParser:
     a.add_argument("--hostname", required=True).completer = completers.hostnames
     a.add_argument("--yes", action="store_true")
     a.set_defaults(func=cmd_server_remove)
+
+    a = s_server.add_parser("edit", help=_("Edit a server's IP, port or host_key."))
+    a.add_argument("--hostname", required=True).completer = completers.hostnames
+    a.add_argument("--ip", help=_("New IPv4."))
+    a.add_argument("--port", type=int, help=_("New SSH port."))
+    a.add_argument("--host-key", dest="host_key", help=_("New host_key (rotates the trusted key — use with care)."))
+    a.set_defaults(func=cmd_server_edit)
+
+    a = s_server.add_parser("rename", help=_("Rename a server (cascades to server-groups)."))
+    a.add_argument("--from", dest="de", required=True, help=_("Current hostname.")).completer = completers.hostnames
+    a.add_argument("--to", dest="para", required=True, help=_("New hostname."))
+    a.set_defaults(func=cmd_server_rename)
 
     # server-group
     p_sg = sub.add_parser(
@@ -1259,6 +1392,11 @@ def _build_parser() -> argparse.ArgumentParser:
     a = s_sg.add_parser("delete")
     a.add_argument("--name", required=True).completer = completers.server_groups
     a.set_defaults(func=cmd_sg_delete)
+
+    a = s_sg.add_parser("rename", help=_("Rename a server-group (cascades to permissions)."))
+    a.add_argument("--from", dest="de", required=True, help=_("Current name.")).completer = completers.server_groups
+    a.add_argument("--to", dest="para", required=True, help=_("New name."))
+    a.set_defaults(func=cmd_sg_rename)
 
     a = s_sg.add_parser("list")
     a.add_argument("--format", choices=["table", "json"], default="table")
@@ -1345,6 +1483,11 @@ def _build_parser() -> argparse.ArgumentParser:
     a.add_argument("--name", required=True).completer = completers.sudo_profiles
     a.set_defaults(func=cmd_sudo_profile_delete)
 
+    a = s_sp.add_parser("rename", help=_("Rename a sudo profile (cascades to permissions)."))
+    a.add_argument("--from", dest="de", required=True, help=_("Current name.")).completer = completers.sudo_profiles
+    a.add_argument("--to", dest="para", required=True, help=_("New name."))
+    a.set_defaults(func=cmd_sudo_profile_rename)
+
     # status
     a = sub.add_parser(
         "status",
@@ -1363,13 +1506,31 @@ def _build_parser() -> argparse.ArgumentParser:
     a.set_defaults(func=cmd_preview)
 
     # apply
-    p_apply = sub.add_parser("apply", help=_("Apply the delta to servers via SSH."))
+    p_apply = sub.add_parser(
+        "apply",
+        help=_("Apply the delta to servers via SSH."),
+        description=_(
+            "Apply the delta (pending changes) to servers via SSH.\n\n"
+            "Tip: run 'adminforge preview' first to see exactly what will change without\n"
+            "touching anything. The 'apply' command also shows the changes and asks for\n"
+            "confirmation before doing anything."
+        ),
+        epilog=_(
+            "See also:\n"
+            "  adminforge preview         # read-only: show the delta\n"
+            "  adminforge apply verify    # compare declared state vs real servers"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     p_apply.add_argument("--yes", action="store_true", help=_("Skip confirmation."))
     p_apply.add_argument("--dry-run", action="store_true", help=_("Use the fake Deployer."))
     p_apply.add_argument("--diff", action="store_true", help=_("Show authorized_keys before/after diff per user."))
     p_apply.set_defaults(func=cmd_apply)
     s_apply = p_apply.add_subparsers(dest="apply_sub", required=False)
-    a = s_apply.add_parser("verify", help=_("Compare declared chaves_instaladas vs real authorized_keys."))
+    a = s_apply.add_parser(
+        "verify",
+        help=_("Compare declared state vs real servers (authorized_keys + sudoers)."),
+    )
     a.add_argument("--dry-run", action="store_true")
     a.set_defaults(func=cmd_apply_verify)
 
@@ -1399,14 +1560,24 @@ def _build_parser() -> argparse.ArgumentParser:
     s_audit = p_audit.add_subparsers(dest="sub", required=True)
     a = s_audit.add_parser(
         "server",
-        help=_("Inspect users, groups, sudoers and services of the server."),
+        help=_("Inspect users, groups, sudoers and services of one or more servers."),
+        epilog=_(
+            "Examples:\n"
+            "  adminforge audit server --hostname web-01\n"
+            "  adminforge audit server --hostname web-01 web-02\n"
+            "  adminforge audit server --server-group prod\n"
+            "  adminforge audit server --all"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    a.add_argument("--hostname", required=True).completer = completers.hostnames
+    alvo = a.add_mutually_exclusive_group(required=True)
+    alvo.add_argument("--hostname", nargs="+", help=_("One or more hostnames.")).completer = completers.hostnames
+    alvo.add_argument("--server-group", dest="server_group", help=_("Audit every server in this group.")).completer = completers.server_groups
+    alvo.add_argument("--all", action="store_true", help=_("Audit every registered server."))
     a.add_argument("--user", help=_("Highlight occurrences of this user."))
     a.add_argument("--group", help=_("Filter groups by substring."))
     a.add_argument("--service", help=_("Highlight occurrences of this service."))
     a.add_argument("--humans", action="store_true", help=_("Show only human users (UID >= 1000)."))
-    a.add_argument("--dry-run", action="store_true")
     a.set_defaults(func=cmd_audit_server)
 
     return parser
