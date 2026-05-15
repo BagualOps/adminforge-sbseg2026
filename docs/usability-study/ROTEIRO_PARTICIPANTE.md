@@ -9,12 +9,49 @@ existe resposta "certa" de *como* fazer. Se travar de verdade, pode pedir ajuda;
 
 ## Como começar
 
-O facilitador vai te dizer como **entrar** no ambiente (um `ssh ...` ou comando equivalente que cai
-num terminal já com a ferramenta `adminforge` disponível — tem **autocomplete** com `Tab`, e `af`
-funciona como atalho de `adminforge`).
+Você recebeu (por mensagem) **dois arquivos**:
 
-A **chave pública da Alice** (Tarefa 1) está num arquivo `alice.pub` no diretório em que você cai —
-um `ls` mostra. Quando estiver no terminal, comece quando o facilitador disser.
+- a **chave SSH privada** que te autentica no servidor (o nome do arquivo está na mensagem);
+- **este roteiro**.
+
+Junto, a mensagem também traz três dados específicos da sessão (são esses que você usa nos
+comandos abaixo no lugar dos placeholders entre `< >`):
+
+- **`<usuario>@<endereço-do-servidor>`** — onde você vai se conectar;
+- **`<fingerprint>`** — o *fingerprint* do servidor (pra confirmar na primeira conexão);
+- **`<chave>`** — o nome do arquivo de chave que veio na mensagem.
+
+### 1. Salvar a chave e proteger as permissões
+
+No terminal da **sua máquina** (Linux/Mac, ou Windows 10+ com o `ssh` do PowerShell):
+
+```bash
+mkdir -p ~/.ssh
+mv <chave> ~/.ssh/
+chmod 600 ~/.ssh/<chave>
+```
+
+O `chmod 600` é obrigatório — o `ssh` recusa chaves com permissões abertas.
+
+### 2. Conectar
+
+```bash
+ssh -i ~/.ssh/<chave> <usuario>@<endereço-do-servidor>
+```
+
+**Na primeira conexão**, o `ssh` mostra o *fingerprint* do servidor e pergunta se você confia.
+Responda `yes` **somente se** o fingerprint na tela bater **exatamente** com o `<fingerprint>` que
+veio na mensagem.
+
+### 3. Já está dentro
+
+Quando você vir um prompt do tipo `<usuario>@<host>:.../lab$`, está tudo pronto:
+
+- a ferramenta **`adminforge`** já está no `PATH` (atalho: **`af`**);
+- **autocomplete** funciona com `Tab` (subcomandos, flags e valores cadastrados);
+- o arquivo **`alice.pub`** (vai precisar na Tarefa 1) está no diretório em que você cai — confere com `ls`.
+
+Não precisa instalar nada na sua máquina além do cliente `ssh` (já vem em Linux/Mac, e Windows 10+ tem por padrão no PowerShell). Quando estiver com o prompt aberto, comece quando o facilitador (ou a mensagem) avisar.
 
 ---
 
