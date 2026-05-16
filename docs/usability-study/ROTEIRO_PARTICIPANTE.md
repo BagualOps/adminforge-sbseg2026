@@ -175,10 +175,8 @@ controle do AdminForge?
 
 ---
 
-> **Fim das tarefas.** Você "desligou a Alice" num comando só — limpo, auditado, com hash.
-> E aí o `audit` do `web-02` revelou uma regra de sudo que ela mesma tinha posto na mão,
-> se dando root por fora do AdminForge. Ahhh... *era por isso* que a Alice foi demitida.
-> (E é por isso que `apply` sozinho não basta: ele desfaz o que ele fez — o que a Alice
-> aprontou por fora, só o `audit` enxerga.)
+> **Fim das tarefas.** Você "desligou a Alice" hoje. E aí, no `web-02`, achou uma regra de
+> sudo que ela mesma tinha posto na mão, fora do AdminForge, se dando root. Ahhh... *era por
+> isso* que a Alice foi demitida.
 >
 > O facilitador vai te passar um questionário curto e fazer algumas perguntas.
