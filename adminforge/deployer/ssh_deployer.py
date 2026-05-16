@@ -79,13 +79,16 @@ class SSHDeployer(IDeployer):
             capture_output=True,
             text=True,
             timeout=self.timeout * 2,
+            stdin=subprocess.DEVNULL,  # não herda/consome o stdin de quem chamou
         )
         return proc.returncode, proc.stdout, proc.stderr
 
     def capturar_host_key(self, hostname: str, ipv4: str, porta: int) -> tuple[str, str]:
         host = ipv4 or hostname
         cmd = ["ssh-keyscan", "-T", str(self.timeout), "-t", "ed25519,rsa,ecdsa", "-p", str(porta), host]
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=self.timeout * 2)
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=self.timeout * 2, stdin=subprocess.DEVNULL
+        )
         if proc.returncode != 0 and not proc.stdout.strip():
             raise HostKeyDivergente(f"ssh-keyscan failed: {proc.stderr.strip()}")
 
