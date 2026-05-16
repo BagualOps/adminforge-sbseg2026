@@ -56,13 +56,27 @@ done
 # 6) ambiente para o participante (source nisso)
 cat > "$LAB/env.sh" <<EOF
 # source este arquivo para usar o adminforge no lab desta sessão
+
+# grava a sessão inteira (comandos + saída) p/ o estudo — o reset.sh arquiva.
+# 'script' grava tudo; \`bash -l\` re-entra aqui com AF_RECORDING setado e cai fora deste if.
+if [ -z "\${AF_RECORDING:-}" ] && [ -t 0 ] && command -v script >/dev/null 2>&1; then
+    export AF_RECORDING=1
+    exec script -q -a -f "$ARCHIVE/sessao-current.log" -c "bash -l"
+fi
+
 export PATH="$LAB/venv/bin:\$PATH"
 export ADMINFORGE_STATE="$STATE"
 export ADMINFORGE_SSH_KEY="$KEYS/adminforge_id"
 export ADMINFORGE_SSH_USER="adminforge"
 export ADMINFORGE_SUPERADMIN="\${USER:-pesquisa}"
 export ADMINFORGE_LANG="pt"                         # CLI em pt-br no estudo; troque p/ en se precisar
-export HISTFILE="$ARCHIVE/history-current"          # comandos da sessão; reset.sh arquiva
+# --- registro de comandos da sessão (o reset.sh arquiva isto) ---
+export HISTFILE="$ARCHIVE/history-current"
+export HISTTIMEFORMAT='%F %T  '                     # timestamp por comando
+export HISTSIZE=100000 HISTFILESIZE=100000          # não trunca a sessão
+export HISTCONTROL=                                 # registra TUDO, inclusive repetições
+shopt -s histappend
+export PROMPT_COMMAND='history -a'                  # grava cada comando na hora
 eval "\$(register-python-argcomplete adminforge 2>/dev/null)" || true
 eval "\$(register-python-argcomplete af 2>/dev/null)" || true   # 'af' = atalho de 'adminforge'
 cd "$LAB" || true                                   # passa a trabalhar na pasta do lab (alice.pub esta aqui)
