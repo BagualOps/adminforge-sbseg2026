@@ -136,16 +136,17 @@ e depois **confirmar** que ficou como deveria.
 
 ---
 
-### Tarefa 6 — Restringir o sudo no banco
+### Tarefa 6 — Dar sudo limitado no banco
 
-Mudança de planejamento: no **`db-03`**, ninguém da `sre` deveria ter sudo *total*. O combinado agora
-é que a `sre`, no `banco`, possa rodar **com sudo apenas estes dois comandos**:
+A `sre` precisou de **sudo no `banco`** pra resolver um chamado — mas só pra dois comandos
+específicos, não sudo geral. O acesso atual da `sre` no `banco` é só `shell` (login sem sudo);
+o combinado agora é elevar para **sudo restrito** a estes dois comandos:
 
 - `/bin/journalctl`
 - `/bin/systemctl restart postgresql`
 
-**Objetivo:** ajustar o acesso da `sre` ao `banco` para sudo **limitado a esses dois comandos**, e
-fazer essa mudança valer no servidor.
+**Objetivo:** ajustar o acesso da `sre` ao `banco` de `shell` para **sudo limitado a esses dois
+comandos** (não sudo total), e fazer essa mudança valer no servidor.
 
 ---
 
@@ -174,4 +175,10 @@ controle do AdminForge?
 
 ---
 
-> Fim das tarefas. O facilitador vai te passar um questionário curto e fazer algumas perguntas.
+> **Fim das tarefas.** Você "desligou a Alice" num comando só — limpo, auditado, com hash.
+> E aí o `audit` do `web-02` revelou uma regra de sudo que ela mesma tinha posto na mão,
+> se dando root por fora do AdminForge. Ahhh... *era por isso* que a Alice foi demitida.
+> (E é por isso que `apply` sozinho não basta: ele desfaz o que ele fez — o que a Alice
+> aprontou por fora, só o `audit` enxerga.)
+>
+> O facilitador vai te passar um questionário curto e fazer algumas perguntas.

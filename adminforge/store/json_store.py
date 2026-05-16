@@ -328,3 +328,51 @@ class JsonStore(IStore):
 
     def delete_sudo_profile(self, nome: str) -> None:
         (self.dir_sudo_profiles / f"{nome}.json").unlink(missing_ok=True)
+
+    # ---------------------------------------------------------------------------
+    # Renomeacao em lote: cada uma faz move atomico do arquivo + atualiza o campo
+    # de nome dentro do JSON. Cascata de referencias e responsabilidade do Nucleo.
+    # ---------------------------------------------------------------------------
+    def _renomear_entidade(self, diretorio: Path, de: str, para: str, campo: str) -> None:
+        antigo = diretorio / f"{de}.json"
+        novo = diretorio / f"{para}.json"
+        if not antigo.exists():
+            raise FileNotFoundError(antigo)
+        if novo.exists():
+            raise FileExistsError(novo)
+        data = self._load(antigo)
+        data[campo] = para
+        # atualiza o campo no proprio arquivo antigo e move atomicamente:
+        # os.replace e uma unica syscall — nao ha janela com os dois nomes presentes.
+        write_atomic(antigo, self._dump(data))
+        os.replace(antigo, novo)
+
+    def rename_user(self, de: str, para: str) -> None:
+        self._renomear_entidade(self.dir_users, de, para, "username")
+
+    def rename_servidor(self, de: str, para: str) -> None:
+        self._renomear_entidade(self.dir_servers, de, para, "hostname")
+
+    def rename_grupo_user(self, de: str, para: str) -> None:
+        self._renomear_entidade(self.dir_user_groups, de, para, "nome")
+
+    def rename_grupo_servidor(self, de: str, para: str) -> None:
+        self._renomear_entidade(self.dir_server_groups, de, para, "nome")
+
+    def rename_sudo_profile(self, de: str, para: str) -> None:
+        self._renomear_entidade(self.dir_sudo_profiles, de, para, "nome")
+
+    def replace_permissoes(self, perms: list[Permissao]) -> None:
+        data = {
+            "permissoes": [
+                {
+                    "id": str(p.id),
+                    "grupo_user": p.grupo_user,
+                    "grupo_servidor": p.grupo_servidor,
+                    "nivel": p.nivel.value,
+                    "profile": p.profile,
+                }
+                for p in perms
+            ]
+        }
+        write_atomic(self.file_permissions, self._dump(data))

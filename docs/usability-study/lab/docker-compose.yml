@@ -24,7 +24,7 @@ services:
       dockerfile: Dockerfile.servidor
       args:
         ADMINFORGE_PUBKEY: "${ADMINFORGE_PUBKEY}"
-        SEED_LEGACY_SUDOERS: "1"   # semeia /etc/sudoers.d/zzz-legacy-deploy (drift p/ a Tarefa 8)
+        SEED_LEGACY_SUDOERS: "1"   # semeia /etc/sudoers.d/zzz-alice (drift da Alice p/ a Tarefa 8)
     container_name: adminforge-lab-web-02
     hostname: web-02
     ports: ["127.0.0.1:2202:22"]

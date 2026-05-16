@@ -15,12 +15,12 @@ CLI Python para gestão de identidades privilegiadas em frotas de servidores Lin
 
 | Camada | Antes | Agora | Variação |
 |--------|-------|-------|----------|
-| Código nosso (produção) | 2.429 LOC | 4.067 LOC | +1.638 (+67%) |
+| Código nosso (produção) | 2.429 LOC | 4.564 LOC | +2.135 (+88%) |
 | Dependências de runtime obrigatórias | ~56.000 LOC (paramiko, click, PyYAML, cryptography, …) | **0** | **-100%** |
-| Total executado (sem extras) | ~58.400 LOC | 4.067 LOC | **-93%** |
+| Total executado (sem extras) | ~58.400 LOC | 4.564 LOC | **-92%** |
 | Extra opcional `completion` | — | +2.200 LOC (`argcomplete`) | opt-in |
 
-Crescimento em relação ao protótipo inicial vem do refactor de UX e endurecimento do `apply`: `dump`, métodos plurais no Núcleo (N membros), autocomplete com completers dinâmicos, `audit server` estendido (grupos/sudoers/drift), menu unificado `permission grant/revoke/list/show`, `sudo-profile`, `apply --diff`, `apply verify` e a CLI bilíngue (en/pt-br, catálogo em `adminforge/i18n.py`) e o atalho `af`.
+Crescimento em relação ao protótipo inicial vem do refactor de UX e endurecimento do `apply`: `dump`, métodos plurais no Núcleo (N membros), autocomplete com completers dinâmicos, `audit server` estendido (grupos/sudoers/drift, agora com `--all`/`--server-group`/multi-`--hostname`), menu unificado `permission grant/revoke/list/show`, `sudo-profile`, `apply --diff`, `apply verify` (estende para sudoers), `edit`/`rename` em usuários/servidores/grupos/sudo-profiles com cascateamento atômico das referências, a CLI bilíngue (en/pt-br, catálogo em `adminforge/i18n.py`) e o atalho `af`.
 
 Substituições que compõem essa redução:
 
