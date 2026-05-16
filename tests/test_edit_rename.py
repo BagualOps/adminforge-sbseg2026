@@ -103,6 +103,18 @@ def test_editar_servidor_porta_invalida_falha(nucleo: Nucleo):
     assert op.status == StatusOperacao.FALHA
 
 
+def test_editar_servidor_ipv4_octeto_fora_de_faixa_falha(nucleo: Nucleo):
+    _setup(nucleo)
+    op = nucleo.editar_servidor("web-01", ipv4="999.999.999.999")
+    assert op.status == StatusOperacao.FALHA
+    assert nucleo.store.get_servidor("web-01").ipv4 == "10.0.0.10"
+
+
+def test_cadastrar_servidor_ipv4_octeto_fora_de_faixa_falha(nucleo: Nucleo):
+    op = nucleo.cadastrar_servidor("web-99", "10.0.0.300", 22, HOST_KEY_FAKE)
+    assert op.status == StatusOperacao.FALHA
+
+
 def test_editar_servidor_preserva_chaves_instaladas(nucleo: Nucleo):
     _setup(nucleo)
     s = nucleo.store.get_servidor("web-01")

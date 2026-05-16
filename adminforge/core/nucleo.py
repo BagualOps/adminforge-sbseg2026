@@ -41,6 +41,12 @@ _RE_NOME_GRUPO = re.compile(r"^[a-z0-9][a-z0-9_-]{0,30}$")
 _RE_IPV4 = re.compile(r"^(?:\d{1,3}\.){3}\d{1,3}$")
 
 
+def _ipv4_valido(ip: str) -> bool:
+    if not _RE_IPV4.match(ip):
+        return False
+    return all(0 <= int(octeto) <= 255 for octeto in ip.split("."))
+
+
 def _msg_permissoes_associadas(tipo: str, nome: str, perms: list[Permissao]) -> str:
     """Mensagem de erro do delete bloqueado: lista as N permissões e sugere o comando."""
     pares = [(p.grupo_user, p.grupo_servidor, p.nivel.value) for p in perms]
@@ -253,7 +259,7 @@ class Nucleo:
             with self.store:
                 if not _RE_HOSTNAME.match(hostname):
                     raise FormatoInvalido(_("invalid hostname: {h}").format(h=repr(hostname)))
-                if not _RE_IPV4.match(ipv4):
+                if not _ipv4_valido(ipv4):
                     raise FormatoInvalido(_("invalid ipv4: {ip}").format(ip=repr(ipv4)))
                 if not (1 <= porta <= 65535):
                     raise FormatoInvalido(_("invalid port: {p}").format(p=porta))
@@ -568,7 +574,7 @@ class Nucleo:
                 if not servidor:
                     raise NaoExiste(_("server {h} does not exist").format(h=repr(hostname)))
                 if ipv4 is not None:
-                    if not _RE_IPV4.match(ipv4):
+                    if not _ipv4_valido(ipv4):
                         raise FormatoInvalido(_("invalid ipv4: {ip}").format(ip=repr(ipv4)))
                     servidor.ipv4 = ipv4
                 if porta is not None:

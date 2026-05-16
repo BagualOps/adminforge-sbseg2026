@@ -361,11 +361,15 @@ _CATALOGS: dict[str, dict[str, str]] = {
         "  {u} {ref} — block on server but not in state":
             "  {u} {ref} — bloco no servidor mas ausente no estado",
         "  ssh failed listing sudoers: {e}": "  ssh falhou ao listar sudoers: {e}",
-        "  {u} sudoers — present": "  {u} sudoers — presente",
+        "  {u} sudoers — present ({lvl})": "  {u} sudoers — presente ({lvl})",
         "  {u} sudoers — declared but missing on server":
             "  {u} sudoers — declarado mas ausente no servidor",
         "  {u} sudoers — present on server but not declared":
             "  {u} sudoers — presente no servidor mas nao declarado",
+        "  {u} sudoers — expected full sudo, server has a restricted profile":
+            "  {u} sudoers — esperava sudo total, servidor tem um perfil restrito",
+        "  {u} sudoers — expected restricted profile {p}, server grants full sudo":
+            "  {u} sudoers — esperava o perfil restrito {p}, servidor concede sudo total",
         "Summary": "Resumo",
         "matches": "iguais",
         "divergences": "divergencias",

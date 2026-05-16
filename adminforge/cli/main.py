@@ -633,24 +633,33 @@ def _imprimir_diff(nucleo: Nucleo, subacoes: list) -> None:
 _SUDOERS_PREFIX = "adminforge-"
 
 
-def _esperado_do_servidor(servidor) -> tuple[dict[str, str], set[str]]:
+def _esperado_do_servidor(servidor) -> tuple[dict[str, str], dict[str, str | None]]:
+    """Lê chaves_instaladas e retorna ({ref: username} dos blocos,
+    {username: profile} dos que têm sudo — profile None = sudo total)."""
     blocks: dict[str, str] = {}
-    sudo: set[str] = set()
+    sudo: dict[str, str | None] = {}
     for item in servidor.chaves_instaladas:
         if isinstance(item, dict):
             ref = item["ref"]
             u = item.get("username") or ref.split(":", 1)[0]
             blocks[ref] = u
             if item.get("nivel") == "sudo":
-                sudo.add(u)
+                sudo[u] = item.get("profile")
         else:
             blocks[item] = item.split(":", 1)[0]
     return blocks, sudo
 
 
+def _regra_e_full_sudo(regra: str) -> bool:
+    """Heurística: a regra do sudoers concede TODOS os comandos (NOPASSWD:ALL).
+    Confiável porque o AdminForge escreve esses arquivos ele mesmo."""
+    return "NOPASSWD:ALL" in regra.replace(" ", "").upper()
+
+
 def cmd_apply_verify(args: argparse.Namespace) -> int:
     """Compara o estado declarado vs o real do servidor: blocos AdminForge no
-    authorized_keys + arquivos `adminforge-<user>` em /etc/sudoers.d/."""
+    authorized_keys + arquivos `adminforge-<user>` em /etc/sudoers.d/ (presença
+    e nível — sudo total vs perfil restrito)."""
     from adminforge import authorized_keys as ak
 
     nucleo = _nucleo(args, com_ssh=not args.dry_run)
@@ -660,50 +669,47 @@ def cmd_apply_verify(args: argparse.Namespace) -> int:
 
     for servidor in nucleo.store.list_servidores():
         esperado_blocks, esperado_sudo = _esperado_do_servidor(servidor)
-
         ui.heading(servidor.hostname)
-        if not esperado_blocks and not esperado_sudo:
+
+        # 1) authorized_keys — só se há blocos declarados
+        if esperado_blocks:
+            ssh_falhou = False
+            real_blocks: dict[str, str] = {}
+            for u in sorted(set(esperado_blocks.values())):
+                try:
+                    conteudo, ok = nucleo.deployer.ler_authorized_keys(servidor, u)
+                except Exception as e:
+                    ui.fail(_("  ssh failed reading {u}: {e}").format(u=u, e=e))
+                    ssh_falhou = True
+                    break
+                if not ok:
+                    ui.fail(_("  ssh: could not read authorized_keys for {u} (sudo blocked?)").format(u=u))
+                    ssh_falhou = True
+                    break
+                for ref in ak.parse_blocos(conteudo):
+                    real_blocks[ref] = u
+            if ssh_falhou:
+                erros_ssh.append(servidor.hostname)
+                continue
+            for ref, username in sorted(esperado_blocks.items()):
+                real_user = real_blocks.get(ref)
+                if real_user is None:
+                    ui.fail(_("  {u} {ref} — declared but not present on server").format(u=f"{username:20}", ref=ref))
+                    total_div += 1
+                elif real_user != username:
+                    ui.fail(_("  {u} {ref} — declared under {decl} but found under {real}").format(u=f"{username:20}", ref=ref, decl=repr(username), real=repr(real_user)))
+                    total_div += 1
+                else:
+                    ui.ok(f"  {username:20} {ref}")
+                    total_ok += 1
+            for ref, username in sorted(real_blocks.items()):
+                if ref not in esperado_blocks:
+                    ui.warn(_("  {u} {ref} — block on server but not in state").format(u=f"{username:20}", ref=ref))
+                    total_div += 1
+        else:
             ui.secho(_("  (no installed keys declared)"), dim=True)
-            continue
 
-        # 1) authorized_keys
-        ssh_falhou = False
-        real_blocks: dict[str, str] = {}
-        for u in sorted(set(esperado_blocks.values())):
-            try:
-                conteudo, ok = nucleo.deployer.ler_authorized_keys(servidor, u)
-            except Exception as e:
-                ui.fail(_("  ssh failed reading {u}: {e}").format(u=u, e=e))
-                ssh_falhou = True
-                break
-            if not ok:
-                ui.fail(_("  ssh: could not read authorized_keys for {u} (sudo blocked?)").format(u=u))
-                ssh_falhou = True
-                break
-            for ref in ak.parse_blocos(conteudo):
-                real_blocks[ref] = u
-
-        if ssh_falhou:
-            erros_ssh.append(servidor.hostname)
-            continue
-
-        for ref, username in sorted(esperado_blocks.items()):
-            real_user = real_blocks.get(ref)
-            if real_user is None:
-                ui.fail(_("  {u} {ref} — declared but not present on server").format(u=f"{username:20}", ref=ref))
-                total_div += 1
-            elif real_user != username:
-                ui.fail(_("  {u} {ref} — declared under {decl} but found under {real}").format(u=f"{username:20}", ref=ref, decl=repr(username), real=repr(real_user)))
-                total_div += 1
-            else:
-                ui.ok(f"  {username:20} {ref}")
-                total_ok += 1
-        for ref, username in sorted(real_blocks.items()):
-            if ref not in esperado_blocks:
-                ui.warn(_("  {u} {ref} — block on server but not in state").format(u=f"{username:20}", ref=ref))
-                total_div += 1
-
-        # 2) sudoers files (adminforge-<user> em /etc/sudoers.d/)
+        # 2) sudoers — sempre roda (mesmo sem blocos declarados, p/ achar arquivos órfãos)
         try:
             relatorio = nucleo.deployer.inspecionar(servidor)
         except Exception as e:
@@ -719,14 +725,31 @@ def cmd_apply_verify(args: argparse.Namespace) -> int:
             a["nome"][len(_SUDOERS_PREFIX):] for a in arquivos
             if a.get("adminforge") and a.get("nome", "").startswith(_SUDOERS_PREFIX)
         }
-        for u in sorted(esperado_sudo):
-            if u in real_sudo:
-                ui.ok(_("  {u} sudoers — present").format(u=f"{u:20}"))
-                total_ok += 1
-            else:
+        # regras reais por usuário (1ª coluna; ignora regras de grupo '%...')
+        real_regras: dict[str, list[str]] = {}
+        for regra in relatorio.get("sudoers_regras") or []:
+            col = regra.split(None, 1)[0] if regra else ""
+            if col and not col.startswith("%"):
+                real_regras.setdefault(col, []).append(regra)
+
+        for u, profile in sorted(esperado_sudo.items()):
+            if u not in real_sudo:
                 ui.fail(_("  {u} sudoers — declared but missing on server").format(u=f"{u:20}"))
                 total_div += 1
-        for u in sorted(real_sudo - esperado_sudo):
+                continue
+            real_full = any(_regra_e_full_sudo(r) for r in real_regras.get(u, []))
+            esperado_full = profile is None
+            if real_full != esperado_full:
+                if esperado_full:
+                    ui.fail(_("  {u} sudoers — expected full sudo, server has a restricted profile").format(u=f"{u:20}"))
+                else:
+                    ui.fail(_("  {u} sudoers — expected restricted profile {p}, server grants full sudo").format(u=f"{u:20}", p=repr(profile)))
+                total_div += 1
+            else:
+                nivel = "full" if esperado_full else "restricted"
+                ui.ok(_("  {u} sudoers — present ({lvl})").format(u=f"{u:20}", lvl=nivel))
+                total_ok += 1
+        for u in sorted(real_sudo - set(esperado_sudo)):
             ui.warn(_("  {u} sudoers — present on server but not declared").format(u=f"{u:20}"))
             total_div += 1
 
@@ -1066,14 +1089,16 @@ def cmd_dump(args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 # UC-10: audit server
 # ---------------------------------------------------------------------------
-def _hosts_para_auditar(nucleo: Nucleo, args: argparse.Namespace) -> list[str]:
+def _hosts_para_auditar(nucleo: Nucleo, args: argparse.Namespace) -> list[str] | None:
+    """Resolve o conjunto de hostnames a auditar. Retorna None quando já reportou
+    um erro (ex.: server-group inexistente) — o chamador não imprime nada a mais."""
     if getattr(args, "all", False):
         return [s.hostname for s in nucleo.store.list_servidores()]
     if getattr(args, "server_group", None):
         g = nucleo.store.get_grupo_servidor(args.server_group)
         if not g:
             ui.fail(_("server-group {g} does not exist").format(g=repr(args.server_group)))
-            return []
+            return None
         return list(g.membros)
     return list(args.hostname or [])
 
@@ -1081,6 +1106,8 @@ def _hosts_para_auditar(nucleo: Nucleo, args: argparse.Namespace) -> list[str]:
 def cmd_audit_server(args: argparse.Namespace) -> int:
     nucleo = _nucleo(args, com_ssh=True)
     hostnames = _hosts_para_auditar(nucleo, args)
+    if hostnames is None:
+        return 2
     if not hostnames:
         ui.fail(_("no servers to audit"))
         return 2

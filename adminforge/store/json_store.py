@@ -342,8 +342,10 @@ class JsonStore(IStore):
             raise FileExistsError(novo)
         data = self._load(antigo)
         data[campo] = para
-        write_atomic(novo, self._dump(data))
-        antigo.unlink()
+        # atualiza o campo no proprio arquivo antigo e move atomicamente:
+        # os.replace e uma unica syscall — nao ha janela com os dois nomes presentes.
+        write_atomic(antigo, self._dump(data))
+        os.replace(antigo, novo)
 
     def rename_user(self, de: str, para: str) -> None:
         self._renomear_entidade(self.dir_users, de, para, "username")
