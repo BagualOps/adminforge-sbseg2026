@@ -81,7 +81,7 @@ cat <<EOF
 
  Frota (ja consta na Tarefa 2 do roteiro):
    web-01  ->  127.0.0.1 : 2201
-   web-02  ->  127.0.0.1 : 2202   (tem drift de sudoers semeado p/ a Tarefa 8)
+   web-02  ->  127.0.0.1 : 2202   (tem regra de sudo da Alice semeada, fora do AdminForge — Tarefa 8)
    db-03   ->  127.0.0.1 : 2203
 
  Roteiro do participante:  ../ROTEIRO_PARTICIPANTE.md

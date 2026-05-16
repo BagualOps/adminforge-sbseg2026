@@ -19,8 +19,10 @@ TAM, entrevista). Para a escolha do método, ver [`METODOLOGIA-OPCOES.md`](METOD
 - **IPs/portas da frota** já estão na **Tarefa 2 do roteiro do participante** (`web-01 → 127.0.0.1:2201`,
   `web-02 → :2202`, `db-03 → :2203`) — você não precisa relatar nada de viva voz. Só confirme que batem
   com a saída do `prep.sh`; se o seu lab usa portas diferentes, ajuste a tabela da Tarefa 2 antes da sessão.
-- **Drift semeado:** no `web-02`, o lab já criou um `/etc/sudoers.d/zzz-legacy-deploy` (regra de sudo
-  fora do AdminForge) — é o que o participante deve achar na Tarefa 8.
+- **Drift semeado:** no `web-02`, o lab já criou um `/etc/sudoers.d/zzz-alice` — uma regra de sudo
+  da própria Alice (`alice ALL=(ALL) NOPASSWD:ALL`), feita na mão, fora do AdminForge. É o que o
+  participante deve achar na Tarefa 8; e o *gancho* da piada no fim do roteiro (a Alice foi demitida
+  justamente por ter se dado root por fora). Sobrevive ao offboarding da T7 — não é um arquivo `adminforge-*`.
 - O participante **não** recebe `USAGE.md` / `QUICKSTART.md` / `ROTEIRO.md` da ferramenta. Pode usar
   `adminforge --help` / `-h` à vontade em qualquer subcomando, e o `Tab`.
 - Gravação de tela ligada (compartilhamento de tela na call, ou `script`/`asciinema` no shell — o
@@ -221,8 +223,9 @@ Citações marcantes da entrevista:
 
 ### Tarefa 8 — Investigar o `web-02` *(opcional)*
 - **Sucesso:** roda `adminforge audit server --hostname web-02`, lê a saída e **reporta** que há um
-  arquivo em `/etc/sudoers.d/` **não gerenciado pelo AdminForge** (o `zzz-legacy-deploy`), citando-o
-  como *drift*/risco.
+  arquivo em `/etc/sudoers.d/` **não gerenciado pelo AdminForge** (o `zzz-alice` — `alice ALL=(ALL)
+  NOPASSWD:ALL`), citando-o como *drift*/risco. Ponto de ensino: a Alice foi "offboarded" na T7, mas
+  essa regra manual sobreviveu — o `apply` desfaz só o que o AdminForge instalou.
 - **Verificar:** a seção **Alerts** do `audit server` sinaliza arquivos fora do AdminForge — confira se
   a pessoa percebeu *ali*, não só passou o olho.
 - **Tempo-alvo:** ~4 min.

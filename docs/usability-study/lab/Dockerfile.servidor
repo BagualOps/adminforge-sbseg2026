@@ -23,9 +23,8 @@ RUN useradd -m -s /bin/bash adminforge \
 
 # (opcional) regra de sudo "legada", fora do AdminForge — drift a ser descoberto na Tarefa 8
 RUN if [ "$SEED_LEGACY_SUDOERS" = "1" ]; then \
-        useradd -r -s /usr/sbin/nologin deploy 2>/dev/null || true ; \
-        echo 'deploy ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart nginx' > /etc/sudoers.d/zzz-legacy-deploy ; \
-        chmod 0440 /etc/sudoers.d/zzz-legacy-deploy ; \
+        echo 'alice ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/zzz-alice ; \
+        chmod 0440 /etc/sudoers.d/zzz-alice ; \
     fi
 
 RUN ssh-keygen -A \
