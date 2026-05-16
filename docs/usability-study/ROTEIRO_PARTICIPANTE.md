@@ -47,7 +47,7 @@ veio na mensagem.
 
 Quando você vir um prompt do tipo `<usuario>@<host>:.../lab$`, está tudo pronto:
 
-- a ferramenta **`adminforge`** já está no `PATH` (atalho: **`af`**);
+- a ferramenta **`af`** já está no `PATH` (`adminforge` é o nome longo do mesmo comando);
 - **autocomplete** funciona com `Tab` (subcomandos, flags e valores cadastrados);
 - o arquivo **`alice.pub`** (vai precisar na Tarefa 1) está no diretório em que você cai — confere com `ls`.
 
@@ -72,7 +72,7 @@ trabalho descobrir como.
 
 ### Tarefa 0 — Primeira impressão (aquecimento)
 
-Rode `adminforge --help`. Em voz alta: na sua leitura, **o que essa ferramenta faz?** Se tivesse que
+Rode `af --help`. Em voz alta: na sua leitura, **o que essa ferramenta faz?** Se tivesse que
 começar do zero, **por onde começaria?**
 
 *(Não precisa "concluir" nada aqui — é só pra calibrar e ouvir sua primeira impressão.)*
