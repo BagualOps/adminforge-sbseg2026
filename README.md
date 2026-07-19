@@ -7,22 +7,22 @@ This repository is the artifact of the paper *"AdminForge: Declarative Privilege
 
 # Estrutura do readme.md
 
-1. [Selos Considerados](#selos-considerados)
-2. [Informações básicas](#informações-básicas)
-3. [Dependências](#dependências)
-4. [Preocupações com segurança](#preocupações-com-segurança)
-5. [Instalação](#instalação)
-6. [Teste mínimo](#teste-mínimo)
-7. [Experimentos](#experimentos) (Reivindicações #1 a #3)
+1. [Considered Seals](#considered-seals)
+2. [Basic information](#basic-information)
+3. [Dependencies](#dependencies)
+4. [Security concerns](#security-concerns)
+5. [Installation](#installation)
+6. [Minimal test](#minimal-test)
+7. [Experiments](#experiments) (Claims #1–#3)
 8. [LICENSE](#license)
 
 Repository layout: `adminforge/` (the tool: one package per architecture module: `cli/`, `store/`, `planner/`, `deployer/`, `auditor/`, plus `domain.py`); `tests/` (offline unit tests); `infra/perf/` (performance-experiment harness and results); `docs/` (full tool documentation in `docs/TOOL.md`, usage guides, conceptual model, and the usability-study replication package under `docs/usability-study/`); `paper_data/AVAILABILITY.md` (index of every paper artefact).
 
-# Selos Considerados
+# Considered Seals
 
-Os selos considerados são: **Disponíveis (SeloD), Funcionais (SeloF), Sustentáveis (SeloS) e Reprodutíveis (SeloR)**.
+The considered seals are: **Available (SeloD), Functional (SeloF), Sustainable (SeloS), and Reproducible (SeloR)**.
 
-# Informações básicas
+# Basic information
 
 | Component | Requirement |
 |---|---|
@@ -33,15 +33,15 @@ Os selos considerados são: **Disponíveis (SeloD), Funcionais (SeloF), Sustent�
 
 Paper experiments ran on: AMD Ryzen 5 8600G (6 cores), 30 GB RAM, Linux kernel 6.17, Python 3.12, Docker Engine 29.4.
 
-# Dependências
+# Dependencies
 
-The tool has **zero third-party Python dependencies at run time** (`dependencies = []` in `pyproject.toml`; only the standard library is imported). Optional extras: `completion` (argcomplete, shell autocompletion) and `dev` (pytest ≥ 8.0, for the test suite). The experiment fleet uses the `debian:12-slim` Docker image with `openssh-server` and `sudo` (built locally by the claim scripts; ~150 MB download on first run). The Ansible baseline of Reivindicação #2 runs inside a container built by the harness; no Ansible is installed on the host.
+The tool has **zero third-party Python dependencies at run time** (`dependencies = []` in `pyproject.toml`; only the standard library is imported). Optional extras: `completion` (argcomplete, shell autocompletion) and `dev` (pytest ≥ 8.0, for the test suite). The experiment fleet uses the `debian:12-slim` Docker image with `openssh-server` and `sudo` (built locally by the claim scripts; ~150 MB download on first run). The Ansible baseline of Claim #1 runs inside a container built by the harness; no Ansible is installed on the host.
 
-# Preocupações com segurança
+# Security concerns
 
 Everything runs locally: no telemetry, no external API calls, no credentials leave the machine. The claim scripts create a local Docker fleet whose SSH ports bind to `127.0.0.1` only (never exposed to the network); containers, networks, and temporary state directories are removed at the end of each script. The tool itself only ever distributes SSH *public* keys to the containers it manages.
 
-# Instalação
+# Installation
 
 ```bash
 git clone https://github.com/BagualOps/adminforge-sbseg2026
@@ -52,7 +52,7 @@ pip install -e ".[dev]"        # < 1 min; installs the tool + pytest only
 
 After this, the `af` command (alias of `adminforge`) is available.
 
-# Teste mínimo
+# Minimal test
 
 Offline unit tests, then one real registration observed end to end with the hash chain verified (~30 s, no Docker needed):
 
@@ -72,37 +72,82 @@ Expected final lines:
   OK  chain intact (last hash: <64 hex digits>)
 ```
 
-# Experimentos
+# Experiments
 
-The paper makes three performance claims, each reproduced by one script that builds a local Docker fleet, runs the measurement, prints a result box ending in `OK`, and cleans up after itself. Wall-clock times below are for the reference machine; they scale with CPU speed, and the assertions are hardware-independent (ratios and structural counts, not absolute seconds).
+The paper makes three claims. Each is one command and prints a result box ending in `→ OK` so the evaluator knows it came out right.  Claim #1 needs Docker (the rest do not).  Wall-clock times scale with CPU speed; the assertions are hardware-independent (ratios, counts, recomputed statistics).
 
-## Reivindicação #1: Apply time scales linearly with fleet size
+## Claim #1: Apply time scales linearly with fleet size
 
-- **Description:** cold `apply` costs a constant time per host (no super-linear growth), and a no-change `apply` is near-instant regardless of fleet size. Runs the reduced ladder (N=1 and N=5 hosts, 1 repetition each) and asserts that the per-host cold-apply times at N=1 and N=5 differ by less than 40%, and that the no-op apply stays under 2 s.
-- **Execution:** `./run_claim1.sh`
-- **Expected time:** ~6 min (first run: +2 min image build)
-- **Expected resources:** ~2 GB RAM, ~1 GB disk, 6 containers
-- **Expected result:** a box reporting per-host times and ending in `→  OK`
+**What the paper asserts.**  Cold `apply` costs a constant time per host, and a no-change `apply` is near-instant.  Runs a reduced ladder (N=1 and N=5 hosts, 1 repetition each) and checks that the per-host cold-apply times differ by less than 40 % and the no-op stays under 2 s.
 
-## Reivindicação #2: Cold apply within the same order of magnitude as an Ansible playbook on the identical fleet
+**Execution:** one command (~6 min first run including image build).
 
-- **Description:** the same fleet state applied by AdminForge and by the equivalent Ansible playbook (identical inputs, N=5 hosts); asserts both complete and reports the ratio. The paper claims comparable order of magnitude, not victory: AdminForge is not optimized for speed (administrative operations are sporadic; the design priorities are security, ease of use, and zero external dependencies).
-- **Execution:** `./run_claim2.sh`
-- **Expected time:** ~8 min
-- **Expected resources:** ~2 GB RAM, ~1.5 GB disk, 6 containers
-- **Expected result:** a box with both wall-clock times and the ratio, ending in `→  OK`
+```bash
+./run_claim1.sh
+```
 
-## Reivindicação #3: Executed code surface under 4,600 lines with zero third-party runtime imports
-
-- **Description:** recounts the tool's own source lines, walks every `import` reachable from the CLI entry point, and asserts: own source < 4,600 lines and no module outside the Python standard library in the base install. Deterministic; no Docker.
-- **Execution:** `./run_claim3.sh`
-- **Expected time:** < 1 min
-- **Expected resources:** negligible
-- **Expected result (deterministic):**
+**Expected result:**
 
 ```
 ══════════════════════════════════════════════════════════════
-  Reivindicação #3: attack surface of the base install
+  Claim #1 — Apply time scales linearly with fleet size
+══════════════════════════════════════════════════════════════
+  N=1  cold apply : … s   no-op apply : … s
+  N=5  cold apply : … s   no-op apply : … s
+  Per-host cold   : … s/host  (N=5)
+  No-op constant  : N=1 …s N=5 …s
+  Assertion: per-host at N=1 and N=5 differ by < 40%, no-op < 2 s  →  OK
+══════════════════════════════════════════════════════════════
+```
+
+## Claim #2: Usability-study statistics recomputed from the anonymized response data
+
+**What the paper asserts.**  All 39 numbers reported in the paper's per-task table and construct-aggregate table (medians, means, IQRs, standard deviations, top-box percentages).  The evaluator recomputes them from the raw data without repeating the study; the annotation was performed by the paper authors and is not expected to be reproduced.
+
+**Execution:** one command (~2 s, no Docker).
+
+```bash
+./run_claim2.sh
+```
+
+**Expected result:**
+
+```
+═══════════════════════════════════════════════════════════════════════════════════
+  Claim #2 — Usability study: paper statistics recomputed from the
+  anonymized response data  (5 participants, no re-run of the study)
+═══════════════════════════════════════════════════════════════════════════════════
+  Task                               Confidence               Ease
+  ──────────────────────────  ─────────────────  ─────────────────
+  Register user and SSH key   7 (6.6)           6 (6.0)
+  ... (all 9 tasks) ...
+  Construct                         Med       IQR   Top%    Mean     SD
+  Perceived usefulness (PU)           6   3.8–7.0     60%   5.40   1.76
+  Perceived ease of use (PEOU)        6   4.5–7.0     70%   5.55   1.61
+  Intention to use (ITU)              6   4.5–7.0     73%   5.47   1.77
+  Security and confidence (SC)        6   3.0–7.0     65%   5.30   1.81
+
+  All 39 study numbers match the paper  →  OK
+═══════════════════════════════════════════════════════════════════════════════════
+```
+
+**Reference data in the repository:** anonymized spreadsheet `paper_data/study-responses.xlsx` (timestamps removed, no names, no emails) and the questionnaire instrument `paper_data/study-questionnaire.pdf`.
+
+## Claim #3: Executed code surface under 4,600 lines with zero third-party runtime imports
+
+**What the paper asserts.**  The tool's own source is under 4,600 lines and the base install imports nothing beyond the Python standard library at run time.
+
+**Execution:** one command (< 1 min, no Docker).
+
+```bash
+./run_claim3.sh
+```
+
+**Expected result (deterministic):**
+
+```
+══════════════════════════════════════════════════════════════
+  Claim #3: attack surface of the base install
 ══════════════════════════════════════════════════════════════
   Own source (adminforge/**.py) : 4567 lines   (claim: < 4,600)
   Third-party runtime imports   : 0   (claim: 0)
@@ -111,7 +156,7 @@ The paper makes three performance claims, each reproduced by one script that bui
 ══════════════════════════════════════════════════════════════
 ```
 
-The full measurement harness behind the paper's performance section (5-repetition ladders up to N=50 hosts, the Ansible comparison, and the attack-surface audit) lives in `infra/perf/`, with the raw per-repetition results committed under `infra/perf/results/`.
+The full measurement harness behind the paper's performance section (5-repetition ladders up to N=50 hosts, the Ansible comparison, and the attack-surface audit) lives in `infra/perf/`.  Claim #2's reference data is in `paper_data/`.
 
 # LICENSE
 
