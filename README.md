@@ -2,6 +2,9 @@
 
 This repository is the artifact of the paper *"AdminForge: Declarative Privileged-Identity Management for Linux Server Fleets"* (SBSeg 2026, Salão de Ferramentas, Código Aberto). AdminForge is an open-source command-line tool that manages users, SSH keys, and access permissions on Linux server fleets: the operator declares the desired access state, previews the resulting changes, and applies them over SSH, with every operation appended to a local, hash-chained operation history and no resident service installed on managed hosts. The paper reports an exploratory usability evaluation (five experienced Linux administrators completed the full nine-task workflow without prior training, median ratings 6/7) and a performance evaluation on a local Docker fleet.
 
+<p align="center"><img src="docs/img/architecture.png" alt="AdminForge architecture: the operator drives the CLI; Planner and Deployer carry changes to the managed hosts over SSH; the Auditor records and inspects; the Store keeps the declared state and history in local JSON files" width="72%"></p>
+<p align="center"><img src="docs/img/use-cases.png" alt="Use cases: the superadmin registers admins, SSH keys and servers, manages groups, grants or revokes access, previews and applies changes, audits users and services, and views the history" width="46%"></p>
+
 # Estrutura do readme.md
 
 1. [Selos Considerados](#selos-considerados)

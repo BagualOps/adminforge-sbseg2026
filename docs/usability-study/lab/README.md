@@ -31,7 +31,7 @@ Requisitos: `git`, `python3` ≥ 3.11, `docker` (com `docker compose` v2), `ssh`
 > `ADMINFORGE_REPO_REF=<tag>`), pra todo mundo rodar exatamente a mesma versão. (`ADMINFORGE_REPO_REF`
 > aceita branch ou tag — não SHA de commit, porque o script usa `git clone --branch`.)
 >
-> **Repo privado.** Hoje `BagualOps/adminforge-sbseg2026` é privado, então `raw.githubusercontent.com` só
+> **Nota.** Se o repositório estiver privado no seu fork, `raw.githubusercontent.com` só
 > responde com autenticação — a one-liner anônima acima só funciona se o repo virar público. Em
 > máquina sem credencial do GitHub, copie o repo pra lá (`rsync`/`scp`) e rode `./prep.sh` direto.
 

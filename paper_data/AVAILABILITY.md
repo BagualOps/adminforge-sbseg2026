@@ -1,12 +1,12 @@
 # Research Artefacts
 
-> **Tool source code, installation, and minimal test are documented in the [README](../README.md).**
+> **Installation, minimal test, and the three claims are documented in the [artifact README](../README.md); the full tool documentation is in [docs/TOOL.md](../docs/TOOL.md).**
 
 All artefacts of the AdminForge paper are publicly available at the links below.
 
 ## Tool
 
-- [Source code and documentation](../README.md)
+- [Artifact README (CTA)](../README.md) and [full tool documentation](../docs/TOOL.md)
 - [Conceptual model specification](../docs/modelagem-v1.pdf) (entities, central rule, use cases)
 
 ## Usability study (replication package)
@@ -20,4 +20,4 @@ All artefacts of the AdminForge paper are publicly available at the links below.
 
 ## Performance experiments
 
-- Harness, raw per-repetition results, and aggregated numbers: `infra/perf/` (added with the camera-ready)
+- Harness and configuration: [infra/perf/](../infra/perf/); raw per-repetition results and aggregates land under `infra/perf/results/` with the camera-ready claims (`run_claim1.sh` to `run_claim3.sh` at the repository root)
