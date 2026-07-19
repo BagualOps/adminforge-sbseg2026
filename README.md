@@ -90,7 +90,7 @@ The paper makes three claims. Each is one command and prints a result box ending
 
 ```
 ══════════════════════════════════════════════════════════════
-  Claim #1 — Apply time scales linearly with fleet size
+  Claim #1: Apply time scales linearly with fleet size
 ══════════════════════════════════════════════════════════════
   N=1  cold apply : … s   no-op apply : … s
   N=5  cold apply : … s   no-op apply : … s
@@ -114,7 +114,7 @@ The paper makes three claims. Each is one command and prints a result box ending
 
 ```
 ═══════════════════════════════════════════════════════════════════════════════════
-  Claim #2 — Usability study: paper statistics recomputed from the
+  Claim #2: Usability-study statistics recomputed from the
   anonymized response data  (5 participants, no re-run of the study)
 ═══════════════════════════════════════════════════════════════════════════════════
   Task                               Confidence               Ease
@@ -147,7 +147,7 @@ The paper makes three claims. Each is one command and prints a result box ending
 
 ```
 ══════════════════════════════════════════════════════════════
-  Claim #3: attack surface of the base install
+  Claim #3: Attack surface of the base install
 ══════════════════════════════════════════════════════════════
   Own source (adminforge/**.py) : 4567 lines   (claim: < 4,600)
   Third-party runtime imports   : 0   (claim: 0)
