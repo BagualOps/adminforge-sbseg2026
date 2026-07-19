@@ -656,6 +656,17 @@ def _regra_e_full_sudo(regra: str) -> bool:
     return "NOPASSWD:ALL" in regra.replace(" ", "").upper()
 
 
+def _mapear_hosts(fn, itens, jobs):
+    """Run fn over itens, up to `jobs` at once when jobs > 1 (order preserved)."""
+    itens = list(itens)
+    jobs = max(1, jobs)
+    if jobs > 1 and len(itens) > 1:
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=min(jobs, len(itens))) as pool:
+            return list(pool.map(fn, itens))
+    return [fn(x) for x in itens]
+
+
 def cmd_apply_verify(args: argparse.Namespace) -> int:
     """Compara o estado declarado vs o real do servidor: blocos AdminForge no
     authorized_keys + arquivos `adminforge-<user>` em /etc/sudoers.d/ (presença
@@ -667,30 +678,47 @@ def cmd_apply_verify(args: argparse.Namespace) -> int:
     total_div = 0
     erros_ssh: list[str] = []
 
-    for servidor in nucleo.store.list_servidores():
-        esperado_blocks, esperado_sudo = _esperado_do_servidor(servidor)
-        ui.heading(servidor.hostname)
+    servidores = nucleo.store.list_servidores()
 
-        # 1) authorized_keys — só se há blocos declarados
+    def _coletar(servidor):
+        # SSH-only gathering for one host (no printing, safe to run concurrently).
+        esperado_blocks, esperado_sudo = _esperado_do_servidor(servidor)
+        dados = {"esperado_blocks": esperado_blocks, "esperado_sudo": esperado_sudo,
+                 "real_blocks": {}, "blocks_erro": None, "relatorio": None}
         if esperado_blocks:
-            ssh_falhou = False
             real_blocks: dict[str, str] = {}
             for u in sorted(set(esperado_blocks.values())):
                 try:
                     conteudo, ok = nucleo.deployer.ler_authorized_keys(servidor, u)
                 except Exception as e:
-                    ui.fail(_("  ssh failed reading {u}: {e}").format(u=u, e=e))
-                    ssh_falhou = True
+                    dados["blocks_erro"] = _("  ssh failed reading {u}: {e}").format(u=u, e=e)
                     break
                 if not ok:
-                    ui.fail(_("  ssh: could not read authorized_keys for {u} (sudo blocked?)").format(u=u))
-                    ssh_falhou = True
+                    dados["blocks_erro"] = _("  ssh: could not read authorized_keys for {u} (sudo blocked?)").format(u=u)
                     break
                 for ref in ak.parse_blocos(conteudo):
                     real_blocks[ref] = u
-            if ssh_falhou:
+            dados["real_blocks"] = real_blocks
+        try:
+            dados["relatorio"] = nucleo.deployer.inspecionar(servidor)
+        except Exception as e:
+            dados["relatorio"] = {"erro": str(e)}
+        return dados
+
+    coletados = _mapear_hosts(_coletar, servidores, getattr(args, "jobs", 1))
+
+    for servidor, dados in zip(servidores, coletados):
+        esperado_blocks = dados["esperado_blocks"]
+        esperado_sudo = dados["esperado_sudo"]
+        ui.heading(servidor.hostname)
+
+        # 1) authorized_keys — só se há blocos declarados
+        if esperado_blocks:
+            if dados["blocks_erro"]:
+                ui.fail(dados["blocks_erro"])
                 erros_ssh.append(servidor.hostname)
                 continue
+            real_blocks = dados["real_blocks"]
             for ref, username in sorted(esperado_blocks.items()):
                 real_user = real_blocks.get(ref)
                 if real_user is None:
@@ -710,12 +738,7 @@ def cmd_apply_verify(args: argparse.Namespace) -> int:
             ui.secho(_("  (no installed keys declared)"), dim=True)
 
         # 2) sudoers — sempre roda (mesmo sem blocos declarados, p/ achar arquivos órfãos)
-        try:
-            relatorio = nucleo.deployer.inspecionar(servidor)
-        except Exception as e:
-            ui.fail(_("  ssh failed listing sudoers: {e}").format(e=e))
-            erros_ssh.append(servidor.hostname)
-            continue
+        relatorio = dados["relatorio"]
         if "erro" in relatorio:
             ui.fail(_("  ssh failed listing sudoers: {e}").format(e=relatorio["erro"]))
             erros_ssh.append(servidor.hostname)
@@ -1111,12 +1134,13 @@ def cmd_audit_server(args: argparse.Namespace) -> int:
     if not hostnames:
         ui.fail(_("no servers to audit"))
         return 2
+    resultados = _mapear_hosts(nucleo.auditar_servidor, hostnames, getattr(args, "jobs", 1))
+
     qualquer_falha = False
-    for i, hostname in enumerate(hostnames):
+    for i, (hostname, (op, relatorio)) in enumerate(zip(hostnames, resultados)):
         if i > 0:
             ui.echo()
             ui.secho("─" * 60, dim=True)
-        op, relatorio = nucleo.auditar_servidor(hostname)
         if "erro" in relatorio:
             ui.fail(f"{hostname}: {relatorio['erro']}")
             qualquer_falha = True
@@ -1560,6 +1584,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help=_("Compare declared state vs real servers (authorized_keys + sudoers)."),
     )
     a.add_argument("--dry-run", action="store_true")
+    a.add_argument("--jobs", type=int, default=1, metavar="N", help=_("Inspect up to N hosts in parallel (default 1)."))
     a.set_defaults(func=cmd_apply_verify)
 
     # history
@@ -1601,6 +1626,7 @@ def _build_parser() -> argparse.ArgumentParser:
     alvo = a.add_mutually_exclusive_group(required=True)
     alvo.add_argument("--hostname", nargs="+", help=_("One or more hostnames.")).completer = completers.hostnames
     alvo.add_argument("--server-group", dest="server_group", help=_("Audit every server in this group.")).completer = completers.server_groups
+    a.add_argument("--jobs", type=int, default=1, metavar="N", help=_("Audit up to N hosts in parallel (default 1)."))
     alvo.add_argument("--all", action="store_true", help=_("Audit every registered server."))
     a.add_argument("--user", help=_("Highlight occurrences of this user."))
     a.add_argument("--group", help=_("Filter groups by substring."))

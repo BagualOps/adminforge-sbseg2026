@@ -223,6 +223,8 @@ _CATALOGS: dict[str, dict[str, str]] = {
             "saida do ssh-keyscan, ex.: 'ssh-ed25519 AAAA...'",
         "Capture host_key via ssh-keyscan.": "Captura a host_key via ssh-keyscan.",
         "Apply to up to N hosts in parallel (default 1, sequential).": "Aplica em ate N hosts em paralelo (padrao 1, sequencial).",
+        "Inspect up to N hosts in parallel (default 1).": "Inspeciona ate N hosts em paralelo (padrao 1).",
+        "Audit up to N hosts in parallel (default 1).": "Audita ate N hosts em paralelo (padrao 1).",
         "Server groups.": "Grupos de servidores.",
         "one or more hostnames (separated by space or comma)":
             "um ou mais hostnames (separados por espaco ou virgula)",

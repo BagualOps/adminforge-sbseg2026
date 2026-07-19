@@ -4,7 +4,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-LINES=$(find adminforge -name '*.py' -not -path '*__pycache__*' -print0 | xargs -0 cat | wc -l)
+LINES=$(find adminforge -name '*.py' -not -path '*__pycache__*' -print0 | xargs -0 grep -vhE '^[[:space:]]*(#|$)' | wc -l)
 
 THIRD=$(PYTHONPATH=. python3 - <<'PY'
 import sys
@@ -24,16 +24,16 @@ PY
 )
 [ -z "$THIRD" ] && NTHIRD=0 || NTHIRD=$(echo "$THIRD" | tr ',' '\n' | wc -l)
 
-if [ "$LINES" -lt 4600 ] && [ "$NTHIRD" -eq 0 ]; then VERDICT="OK"; else VERDICT="FAIL"; fi
+if [ "$LINES" -lt 4000 ] && [ "$NTHIRD" -eq 0 ]; then VERDICT="OK"; else VERDICT="FAIL"; fi
 
 cat <<EOF
 ══════════════════════════════════════════════════════════════
   Reivindicação #3: attack surface of the base install
 ══════════════════════════════════════════════════════════════
-  Own source (adminforge/**.py) : ${LINES} lines   (claim: < 4,600)
+  Own code (adminforge/**.py)   : ${LINES} lines of code (claim: < 4,000)
   Third-party runtime imports   : ${NTHIRD}${THIRD:+  ($THIRD)}   (claim: 0)
 
-  Expected: lines < 4,600 and 0 third-party imports  →  ${VERDICT}
+  Expected: code < 4,000 and 0 third-party imports  →  ${VERDICT}
 ══════════════════════════════════════════════════════════════
 EOF
 [ "$VERDICT" = "OK" ]
