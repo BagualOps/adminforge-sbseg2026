@@ -98,7 +98,18 @@ The paper makes three performance claims, each reproduced by one script that bui
 - **Execution:** `./run_claim3.sh`
 - **Expected time:** < 1 min
 - **Expected resources:** negligible
-- **Expected result:** a box with the line count and the import audit, ending in `→  OK`
+- **Expected result (deterministic):**
+
+```
+══════════════════════════════════════════════════════════════
+  Reivindicação #3: attack surface of the base install
+══════════════════════════════════════════════════════════════
+  Own source (adminforge/**.py) : 4567 lines   (claim: < 4,600)
+  Third-party runtime imports   : 0   (claim: 0)
+
+  Expected: lines < 4,600 and 0 third-party imports  →  OK
+══════════════════════════════════════════════════════════════
+```
 
 The full measurement harness behind the paper's performance section (5-repetition ladders up to N=50 hosts, the Ansible comparison, and the attack-surface audit) lives in `infra/perf/`, with the raw per-repetition results committed under `infra/perf/results/`.
 
