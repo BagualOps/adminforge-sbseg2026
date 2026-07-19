@@ -1,0 +1,64 @@
+{
+  "fleet": 10,
+  "hosts_side": {
+    "afperf-01": {
+      "after": [
+        "tcp 0.0.0.0 22",
+        "tcp 127.0.0.11 39389",
+        "tcp :: 22",
+        "udp 127.0.0.11 57177"
+      ],
+      "before": [
+        "tcp 0.0.0.0 22",
+        "tcp 127.0.0.11 39389",
+        "tcp :: 22",
+        "udp 127.0.0.11 57177"
+      ],
+      "new_sockets": []
+    },
+    "afperf-06": {
+      "after": [
+        "tcp 0.0.0.0 22",
+        "tcp 127.0.0.11 34225",
+        "tcp :: 22",
+        "udp 127.0.0.11 37012"
+      ],
+      "before": [
+        "tcp 0.0.0.0 22",
+        "tcp 127.0.0.11 34225",
+        "tcp :: 22",
+        "udp 127.0.0.11 37012"
+      ],
+      "new_sockets": []
+    },
+    "afperf-10": {
+      "after": [
+        "tcp 0.0.0.0 22",
+        "tcp 127.0.0.11 46375",
+        "tcp :: 22",
+        "udp 127.0.0.11 52787"
+      ],
+      "before": [
+        "tcp 0.0.0.0 22",
+        "tcp 127.0.0.11 46375",
+        "tcp :: 22",
+        "udp 127.0.0.11 52787"
+      ],
+      "new_sockets": []
+    }
+  },
+  "operator_side": {
+    "listening_socket_violations": [],
+    "rc": 0,
+    "samples": 2489
+  },
+  "sampled_containers": [
+    "afperf-01",
+    "afperf-06",
+    "afperf-10"
+  ],
+  "verdict": {
+    "af_opened_no_listening_socket": true,
+    "zero_new_listening_services_on_hosts": true
+  }
+}

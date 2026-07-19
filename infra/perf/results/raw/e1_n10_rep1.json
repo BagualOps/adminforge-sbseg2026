@@ -1,0 +1,15 @@
+{
+  "cells": {
+    "apply_verify": 47.09497441499843,
+    "audit_all": 2.349641116015846,
+    "cold_apply": 140.3473669179948,
+    "history_verify": 0.06297709298087284,
+    "incremental_apply": 16.210595094016753,
+    "noop_apply": 0.12903082300908864,
+    "revoke_apply": 11.416816977987764
+  },
+  "cold_apply_peak_rss_kib": 20660,
+  "n": 10,
+  "rep": 1,
+  "setup_commands": 29
+}

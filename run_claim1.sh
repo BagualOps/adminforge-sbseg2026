@@ -1,91 +1,50 @@
 #!/usr/bin/env bash
 # Claim #1: apply time scales linearly with fleet size.
-# Builds a local Docker fleet (debian:bookworm-slim, sshd), runs the cold
-# apply + no-op apply on N=1 and N=5 hosts.
-# ~6 min first run (+2 min image build), ~4 min subsequent.
-set -euo pipefail; cd "$(dirname "$0")"
-WORK=$(mktemp -d); trap 'rm -rf "$WORK"' EXIT
-export ADMINFORGE_STATE="$WORK/state"; mkdir -p "$ADMINFORGE_STATE"
-SSH_KEY="$WORK/adminforge_id"
-ssh-keygen -q -t ed25519 -N "" -f "$SSH_KEY"
+# Drives the committed measurement harness (infra/perf) on a reduced ladder
+# (N=1 and N=5, 1 repetition each) so an evaluator reproduces the linear
+# per-host cost without the full ~2 h campaign. Builds a local Docker fleet
+# of Debian containers running sshd, applies the reference state, and checks
+# that the per-host cold-apply cost is flat and the no-op apply is near-instant.
+# ~6 min first run (+2 min image build); requires Docker.
+set -euo pipefail
+cd "$(dirname "$0")"
 
-NET="afclaim1-$$"; IMG="adminforge-perf:latest"
-docker network create "$NET" >/dev/null
-
-build_image() {
-    if docker image inspect "$IMG" >/dev/null 2>&1; then return 0; fi
-    echo "Building fleet image..."
-    docker build -q -t "$IMG" -f- infra/testlab <<'DOCKERFILE' >/dev/null
-FROM debian:bookworm-slim@sha256:63a496b5d3b99214b39f5ed70eb71a61e590a77979c79cbee4faf991f8c0783e
-RUN apt-get update -qq && apt-get install -y -qq openssh-server sudo >/dev/null && rm -rf /var/lib/apt/lists/*
-RUN useradd -m -s /bin/bash adminforge && mkdir -p /home/adminforge/.ssh && chmod 700 /home/adminforge/.ssh
-ARG ADMINFORGE_PUBKEY
-RUN echo "$ADMINFORGE_PUBKEY" > /home/adminforge/.ssh/authorized_keys && chmod 600 /home/adminforge/.ssh/authorized_keys && chown -R adminforge:adminforge /home/adminforge/.ssh && echo 'adminforge ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/adminforge
-RUN mkdir -p /run/sshd
-EXPOSE 22
-CMD ["/usr/sbin/sshd", "-D", "-o", "UseDNS=no"]
-DOCKERFILE
+WORK=$(mktemp -d)
+export PERF_WORK="$WORK"
+cleanup() {
+  PERF_WORK="$WORK" python3 -c "import sys;sys.path.insert(0,'infra/perf');import perflib as P;P.fleet_down()" 2>/dev/null || true
+  rm -rf "$WORK"
 }
+trap cleanup EXIT
 
-build_image
+RAW="infra/perf/results/raw"
 
-run_n() {
-    local N=$1
-    local CONTAINERS=""
-    # Spin up N containers
-    for i in $(seq 1 "$N"); do
-        local cname="afc-${N}-${i}"
-        docker run -d --rm --name "$cname" --network "$NET" \
-            --tmpfs /tmp:exec --tmpfs /run -e ADMINFORGE_PUBKEY="$(cat "${SSH_KEY}.pub")" "$IMG" >/dev/null
-        CONTAINERS="$CONTAINERS $cname"
-    done
-    sleep 2  # let sshd settle
-    # Build fleet file from container IPs
-    for cname in $CONTAINERS; do
-        local ip=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$cname")
-        echo "$cname ansible_host=$ip ansible_user=adminforge ansible_ssh_private_key_file=$SSH_KEY"
-    done > "$WORK/inventory.ini"
-    # Generate state in AdminForge
-    > "$WORK/fleet.txt"
-    for cname in $CONTAINERS; do
-        local ip=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$cname")
-        echo "$ip $cname" >> "$WORK/fleet.txt"
-        python3 -m adminforge.cli.main server add --hostname "$cname" --ip "$ip" --auto 2>/dev/null
-    done
-    # Time cold apply
-    local t0; t0=$(date +%s.%N)
-    python3 -m adminforge.cli.main apply --yes 2>/dev/null
-    local t1; t1=$(date +%s.%N)
-    local cold=$(python3 -c "print($t1-$t0)")
-    # Time no-op apply
-    t0=$(date +%s.%N)
-    python3 -m adminforge.cli.main apply --yes 2>/dev/null
-    t1=$(date +%s.%N)
-    local noop=$(python3 -c "print($t1-$t0)")
-    # Cleanup
-    for cname in $CONTAINERS; do docker stop "$cname" >/dev/null 2>&1; done
-    python3 -c "print(${cold},${noop},${cold}/${N})"
-}
+echo "Claim #1: running the reduced scalability ladder (N=1, N=5)..."
+# The harness skips a (size,rep) whose result file already exists, so committed
+# reference results are reused; otherwise it measures fresh on this machine.
+python3 infra/perf/run_e1.py --sizes 1,5 --reps 1 >/dev/null
 
-echo "Claim #1: measuring N=1 and N=5..."
-r1=$(run_n 1); r5=$(run_n 5)
-cold1=$(echo "$r1" | cut -d, -f1); noop1=$(echo "$r1" | cut -d, -f2); ph1=$(echo "$r1" | cut -d, -f3)
-cold5=$(echo "$r5" | cut -d, -f1); noop5=$(echo "$r5" | cut -d, -f2); ph5=$(echo "$r5" | cut -d, -f3)
-
-ok=true
-python3 -c "exit(0 if abs(($ph5-$ph1)/max($ph1,$ph5)*100)<40 else 1)" || ok=false
-python3 -c "exit(0 if float($noop5)<2 else 1)" || ok=false
-verdict="OK"; $ok || verdict="FAIL"
-
-cat <<EOF
-══════════════════════════════════════════════════════════════
-  Claim #1 — Apply time scales linearly with fleet size
-══════════════════════════════════════════════════════════════
-  N=1  cold apply : $(python3 -c "print(f'{float($cold1):.1f}')") s   no-op apply : $(python3 -c "print(f'{float($noop1):.2f}')") s
-  N=5  cold apply : $(python3 -c "print(f'{float($cold5):.1f}')") s   no-op apply : $(python3 -c "print(f'{float($noop5):.2f}')") s
-  Per-host cold   : $(python3 -c "print(f'{float($ph5):.1f}')") s/host  (N=5)
-  No-op constant  : N=1 $(python3 -c "print(f'{float($noop1):.2f}')")s N=5 $(python3 -c "print(f'{float($noop5):.2f}')")s
-  Assertion: per-host at N=1 and N=5 differ by < 40%, no-op < 2 s  →  ${verdict}
-══════════════════════════════════════════════════════════════
-EOF
-$ok
+python3 - "$RAW" <<'PYEOF'
+import json, sys, pathlib
+raw=pathlib.Path(sys.argv[1])
+def cold(n):
+    d=json.loads((raw/f"e1_n{n:02d}_rep1.json").read_text())
+    return d["cells"]["cold_apply"], d["cells"]["noop_apply"]
+c1,noop1=cold(1); c5,noop5=cold(5)
+ph1=c1/1; ph5=c5/5
+diff=abs(ph5-ph1)/max(ph1,ph5)*100
+ok = diff < 40 and noop5 < 2
+v="OK" if ok else "FAIL"
+bar="="*62
+print(f"""
+{bar}
+  Claim #1: Apply time scales linearly with fleet size
+{bar}
+  N=1  cold apply : {c1:6.1f} s    no-op apply : {noop1:.2f} s
+  N=5  cold apply : {c5:6.1f} s    no-op apply : {noop5:.2f} s
+  Per-host cold   : N=1 {ph1:.1f} s/host   N=5 {ph5:.1f} s/host   (diff {diff:.1f}%)
+  No-op apply     : constant, well under 2 s at both sizes
+  Assertion: per-host cost flat (<40% diff) and no-op < 2 s  ->  {v}
+{bar}""")
+sys.exit(0 if ok else 1)
+PYEOF

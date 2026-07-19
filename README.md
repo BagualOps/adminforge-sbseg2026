@@ -89,16 +89,18 @@ The paper makes three claims. Each is one command and prints a result box ending
 **Expected result:**
 
 ```
-══════════════════════════════════════════════════════════════
+==============================================================
   Claim #1: Apply time scales linearly with fleet size
-══════════════════════════════════════════════════════════════
-  N=1  cold apply : … s   no-op apply : … s
-  N=5  cold apply : … s   no-op apply : … s
-  Per-host cold   : … s/host  (N=5)
-  No-op constant  : N=1 …s N=5 …s
-  Assertion: per-host at N=1 and N=5 differ by < 40%, no-op < 2 s  →  OK
-══════════════════════════════════════════════════════════════
+==============================================================
+  N=1  cold apply :   14.0 s    no-op apply : 0.06 s
+  N=5  cold apply :   70.5 s    no-op apply : 0.09 s
+  Per-host cold   : N=1 14.0 s/host   N=5 14.1 s/host   (diff 0.8%)
+  No-op apply     : constant, well under 2 s at both sizes
+  Assertion: per-host cost flat (<40% diff) and no-op < 2 s  ->  OK
+==============================================================
 ```
+
+(Values above are from the reference machine; on a fresh clone with no committed reference data the script measures live on your hardware. The full 5-repetition ladder up to N=50, the Ansible comparison, and the attack-surface check are in `infra/perf/`, with raw per-repetition results under `infra/perf/results/`.)
 
 ## Claim #2: Usability-study statistics recomputed from the anonymized response data
 

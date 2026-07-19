@@ -1,0 +1,407 @@
+{
+  "hardware": {
+    "cpu": "AMD Ryzen 5 8600G w/ Radeon 760M Graphics",
+    "mem_gib": 30.5,
+    "kernel": "6.17.0-40-generic",
+    "os": "Linux-6.17.0-40-generic-x86_64-with-glibc2.39",
+    "docker": "Docker version 29.4.1, build 055a478",
+    "python": "3.12.3"
+  },
+  "declared_state": {
+    "admins": 10,
+    "admin_groups": 2,
+    "sudo_profile_commands": [
+      "/usr/bin/systemctl",
+      "/usr/bin/journalctl"
+    ]
+  },
+  "e1_scalability": {
+    "1": {
+      "cells": {
+        "apply_verify": {
+          "median_s": 4.782,
+          "min_s": 4.719,
+          "max_s": 4.837,
+          "reps": 5
+        },
+        "audit_all": {
+          "median_s": 0.294,
+          "min_s": 0.285,
+          "max_s": 0.3,
+          "reps": 5
+        },
+        "cold_apply": {
+          "median_s": 14.001,
+          "min_s": 13.891,
+          "max_s": 14.135,
+          "reps": 5
+        },
+        "history_verify": {
+          "median_s": 0.061,
+          "min_s": 0.056,
+          "max_s": 0.07,
+          "reps": 5
+        },
+        "incremental_apply": {
+          "median_s": 1.658,
+          "min_s": 1.64,
+          "max_s": 1.695,
+          "reps": 5
+        },
+        "noop_apply": {
+          "median_s": 0.065,
+          "min_s": 0.065,
+          "max_s": 0.077,
+          "reps": 5
+        },
+        "revoke_apply": {
+          "median_s": 1.191,
+          "min_s": 1.185,
+          "max_s": 1.24,
+          "reps": 5
+        }
+      },
+      "setup_cli_commands": 20,
+      "cold_apply_peak_rss_mib": 20.1
+    },
+    "5": {
+      "cells": {
+        "apply_verify": {
+          "median_s": 23.666,
+          "min_s": 23.576,
+          "max_s": 24.474,
+          "reps": 5
+        },
+        "audit_all": {
+          "median_s": 1.238,
+          "min_s": 1.213,
+          "max_s": 1.378,
+          "reps": 5
+        },
+        "cold_apply": {
+          "median_s": 70.459,
+          "min_s": 69.9,
+          "max_s": 70.724,
+          "reps": 5
+        },
+        "history_verify": {
+          "median_s": 0.061,
+          "min_s": 0.057,
+          "max_s": 0.068,
+          "reps": 5
+        },
+        "incremental_apply": {
+          "median_s": 8.11,
+          "min_s": 8.013,
+          "max_s": 8.204,
+          "reps": 5
+        },
+        "noop_apply": {
+          "median_s": 0.089,
+          "min_s": 0.078,
+          "max_s": 0.098,
+          "reps": 5
+        },
+        "revoke_apply": {
+          "median_s": 5.736,
+          "min_s": 5.701,
+          "max_s": 5.796,
+          "reps": 5
+        }
+      },
+      "setup_cli_commands": 24,
+      "cold_apply_peak_rss_mib": 20.2
+    },
+    "10": {
+      "cells": {
+        "apply_verify": {
+          "median_s": 47.564,
+          "min_s": 47.095,
+          "max_s": 48.186,
+          "reps": 5
+        },
+        "audit_all": {
+          "median_s": 2.42,
+          "min_s": 2.35,
+          "max_s": 2.436,
+          "reps": 5
+        },
+        "cold_apply": {
+          "median_s": 140.974,
+          "min_s": 140.327,
+          "max_s": 141.965,
+          "reps": 5
+        },
+        "history_verify": {
+          "median_s": 0.067,
+          "min_s": 0.062,
+          "max_s": 0.078,
+          "reps": 5
+        },
+        "incremental_apply": {
+          "median_s": 16.211,
+          "min_s": 16.18,
+          "max_s": 16.354,
+          "reps": 5
+        },
+        "noop_apply": {
+          "median_s": 0.11,
+          "min_s": 0.099,
+          "max_s": 0.129,
+          "reps": 5
+        },
+        "revoke_apply": {
+          "median_s": 11.609,
+          "min_s": 11.417,
+          "max_s": 11.663,
+          "reps": 5
+        }
+      },
+      "setup_cli_commands": 29,
+      "cold_apply_peak_rss_mib": 20.4
+    },
+    "25": {
+      "cells": {
+        "apply_verify": {
+          "median_s": 118.26,
+          "min_s": 117.254,
+          "max_s": 120.157,
+          "reps": 5
+        },
+        "audit_all": {
+          "median_s": 5.859,
+          "min_s": 5.816,
+          "max_s": 5.968,
+          "reps": 5
+        },
+        "cold_apply": {
+          "median_s": 350.745,
+          "min_s": 349.716,
+          "max_s": 356.319,
+          "reps": 5
+        },
+        "history_verify": {
+          "median_s": 0.066,
+          "min_s": 0.055,
+          "max_s": 0.078,
+          "reps": 5
+        },
+        "incremental_apply": {
+          "median_s": 40.532,
+          "min_s": 39.798,
+          "max_s": 41.399,
+          "reps": 5
+        },
+        "noop_apply": {
+          "median_s": 0.163,
+          "min_s": 0.158,
+          "max_s": 0.189,
+          "reps": 5
+        },
+        "revoke_apply": {
+          "median_s": 28.507,
+          "min_s": 28.248,
+          "max_s": 28.967,
+          "reps": 5
+        }
+      },
+      "setup_cli_commands": 44,
+      "cold_apply_peak_rss_mib": 21.0
+    },
+    "50": {
+      "cells": {
+        "apply_verify": {
+          "median_s": 234.928,
+          "min_s": 234.385,
+          "max_s": 237.246,
+          "reps": 5
+        },
+        "audit_all": {
+          "median_s": 11.614,
+          "min_s": 11.597,
+          "max_s": 11.767,
+          "reps": 5
+        },
+        "cold_apply": {
+          "median_s": 703.568,
+          "min_s": 696.507,
+          "max_s": 705.824,
+          "reps": 5
+        },
+        "history_verify": {
+          "median_s": 0.063,
+          "min_s": 0.056,
+          "max_s": 0.068,
+          "reps": 5
+        },
+        "incremental_apply": {
+          "median_s": 79.855,
+          "min_s": 79.58,
+          "max_s": 80.733,
+          "reps": 5
+        },
+        "noop_apply": {
+          "median_s": 0.27,
+          "min_s": 0.236,
+          "max_s": 0.292,
+          "reps": 5
+        },
+        "revoke_apply": {
+          "median_s": 56.578,
+          "min_s": 56.527,
+          "max_s": 57.236,
+          "reps": 5
+        }
+      },
+      "setup_cli_commands": 69,
+      "cold_apply_peak_rss_mib": 21.7
+    }
+  },
+  "e2_ansible_comparison": {
+    "n10_forksdefault": {
+      "cells": {
+        "first_apply": {
+          "median_s": 19.157,
+          "min_s": 19.117,
+          "max_s": 19.199,
+          "reps": 5
+        },
+        "noop_apply": {
+          "median_s": 17.424,
+          "min_s": 17.407,
+          "max_s": 17.487,
+          "reps": 5
+        }
+      },
+      "n": 10,
+      "forks": "default",
+      "ansible_version": "ansible [core 2.21.2]",
+      "effort": {
+        "ansible_inventory_lines": 15,
+        "ansible_playbook_lines": 37,
+        "ansible_users_yml_lines": 26
+      }
+    },
+    "n50_forks25": {
+      "cells": {
+        "first_apply": {
+          "median_s": 59.443,
+          "min_s": 59.178,
+          "max_s": 59.511,
+          "reps": 5
+        },
+        "noop_apply": {
+          "median_s": 57.434,
+          "min_s": 57.363,
+          "max_s": 57.691,
+          "reps": 5
+        }
+      },
+      "n": 50,
+      "forks": 25,
+      "ansible_version": "ansible [core 2.21.2]",
+      "effort": {
+        "ansible_inventory_lines": 55,
+        "ansible_playbook_lines": 37,
+        "ansible_users_yml_lines": 26
+      }
+    },
+    "n50_forksdefault": {
+      "cells": {
+        "first_apply": {
+          "median_s": 93.876,
+          "min_s": 93.777,
+          "max_s": 94.352,
+          "reps": 5
+        },
+        "noop_apply": {
+          "median_s": 86.471,
+          "min_s": 86.161,
+          "max_s": 86.54,
+          "reps": 5
+        }
+      },
+      "n": 50,
+      "forks": "default",
+      "ansible_version": "ansible [core 2.21.2]",
+      "effort": {
+        "ansible_inventory_lines": 55,
+        "ansible_playbook_lines": 37,
+        "ansible_users_yml_lines": 26
+      }
+    }
+  },
+  "e2_af_sanity_python3_image": {
+    "cells": {
+      "cold_apply": 139.21090107000782,
+      "noop_apply": 0.09296902597998269
+    },
+    "image": "adminforge-perf-ansible:latest",
+    "n": 10,
+    "note": "adminforge on the python3 image variant, single repetition"
+  },
+  "e3_attack_surface": {
+    "fleet": 10,
+    "hosts_side": {
+      "afperf-01": {
+        "after": [
+          "tcp 0.0.0.0 22",
+          "tcp 127.0.0.11 39389",
+          "tcp :: 22",
+          "udp 127.0.0.11 57177"
+        ],
+        "before": [
+          "tcp 0.0.0.0 22",
+          "tcp 127.0.0.11 39389",
+          "tcp :: 22",
+          "udp 127.0.0.11 57177"
+        ],
+        "new_sockets": []
+      },
+      "afperf-06": {
+        "after": [
+          "tcp 0.0.0.0 22",
+          "tcp 127.0.0.11 34225",
+          "tcp :: 22",
+          "udp 127.0.0.11 37012"
+        ],
+        "before": [
+          "tcp 0.0.0.0 22",
+          "tcp 127.0.0.11 34225",
+          "tcp :: 22",
+          "udp 127.0.0.11 37012"
+        ],
+        "new_sockets": []
+      },
+      "afperf-10": {
+        "after": [
+          "tcp 0.0.0.0 22",
+          "tcp 127.0.0.11 46375",
+          "tcp :: 22",
+          "udp 127.0.0.11 52787"
+        ],
+        "before": [
+          "tcp 0.0.0.0 22",
+          "tcp 127.0.0.11 46375",
+          "tcp :: 22",
+          "udp 127.0.0.11 52787"
+        ],
+        "new_sockets": []
+      }
+    },
+    "operator_side": {
+      "listening_socket_violations": [],
+      "rc": 0,
+      "samples": 2489
+    },
+    "sampled_containers": [
+      "afperf-01",
+      "afperf-06",
+      "afperf-10"
+    ],
+    "verdict": {
+      "af_opened_no_listening_socket": true,
+      "zero_new_listening_services_on_hosts": true
+    }
+  }
+}

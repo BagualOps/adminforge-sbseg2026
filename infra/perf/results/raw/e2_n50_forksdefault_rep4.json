@@ -1,0 +1,16 @@
+{
+  "ansible_forks_default": "DEFAULT_FORKS(default) = 5",
+  "ansible_version": "ansible [core 2.21.2]",
+  "cells": {
+    "first_apply": 93.81077543200809,
+    "noop_apply": 86.50119802198606
+  },
+  "effort": {
+    "ansible_inventory_lines": 55,
+    "ansible_playbook_lines": 37,
+    "ansible_users_yml_lines": 26
+  },
+  "forks": "default",
+  "n": 50,
+  "rep": 4
+}

@@ -1,0 +1,9 @@
+{
+  "cells": {
+    "cold_apply": 139.21090107000782,
+    "noop_apply": 0.09296902597998269
+  },
+  "image": "adminforge-perf-ansible:latest",
+  "n": 10,
+  "note": "adminforge on the python3 image variant, single repetition"
+}
