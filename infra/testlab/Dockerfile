@@ -1,4 +1,4 @@
-FROM debian:bookworm-slim@sha256:0a76e7e4bfb58c0e8fd3bf8a73dae32c8c84b48d6efca19a0e308e08f5930915
+FROM debian:bookworm-slim@sha256:sha256:63a496b5d3b99214b39f5ed70eb71a61e590a77979c79cbee4faf991f8c0783e
 
 ARG ADMINFORGE_PUBKEY=""
 
