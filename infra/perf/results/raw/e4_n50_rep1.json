@@ -1,9 +1,11 @@
 {
   "cells": {
-    "cold_apply_parallel": 36.834679318999406,
-    "noop_apply_parallel": 0.24925355199957266
+    "audit_parallel": 0.8679963010363281,
+    "cold_apply_parallel": 38.932188159029465,
+    "noop_apply_parallel": 0.2430205899872817,
+    "verify_parallel": 13.160490396025125
   },
-  "cold_apply_peak_rss_kib": 24320,
+  "cold_apply_peak_rss_kib": 24644,
   "jobs": 25,
   "n": 50,
   "rep": 1
