@@ -22,8 +22,8 @@ Em cada servidor da frota:
 ## 1. Instalar (uma vez)
 
 ```bash
-git clone https://github.com/BagualOps/adminforge-v1.git
-cd adminforge-v1
+git clone https://github.com/BagualOps/adminforge-sbseg2026.git
+cd adminforge-sbseg2026
 alias af='python3 -m adminforge.cli.main'
 ```
 

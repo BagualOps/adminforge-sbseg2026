@@ -9,8 +9,8 @@
 **Zero dependências de runtime.** Basta Python 3.11+ e cliente OpenSSH (presente em qualquer Linux).
 
 ```bash
-git clone https://github.com/BagualOps/adminforge-v1.git
-cd adminforge-v1
+git clone https://github.com/BagualOps/adminforge-sbseg2026.git
+cd adminforge-sbseg2026
 
 # Forma mais simples (sem venv, sem pip install):
 python3 -m adminforge.cli.main --version

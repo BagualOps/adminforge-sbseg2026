@@ -73,8 +73,8 @@ Detalhes em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Modelagem completa (
 **Zero dependências de runtime** — basta Python 3.11+ e o cliente OpenSSH (já vem em qualquer Linux).
 
 ```bash
-git clone https://github.com/BagualOps/adminforge-v1.git
-cd adminforge-v1
+git clone https://github.com/BagualOps/adminforge-sbseg2026.git
+cd adminforge-sbseg2026
 
 # Roda direto, sem pip install (nem venv):
 python3 -m adminforge.cli.main --help
