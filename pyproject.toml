@@ -4,6 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "adminforge"
+license = {text = "AGPL-3.0"}
 version = "0.1.0"
 description = "CLI para gestao de identidades privilegiadas em frotas de servidores Linux"
 authors = [{ name = "Rui de Quadros Ribeiro" }, { name = "Cristhian Kapelinski" }, { name = "Diego Kreutz" }]

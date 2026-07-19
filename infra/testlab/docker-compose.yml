@@ -6,7 +6,7 @@ services:
         ADMINFORGE_PUBKEY: ${ADMINFORGE_PUBKEY}
     container_name: adminforge-web-01
     hostname: web-01
-    ports: ["2201:22"]
+    ports: ["127.0.0.1:2201:22"]
     networks: [lab]
 
   web-02:
@@ -16,7 +16,7 @@ services:
         ADMINFORGE_PUBKEY: ${ADMINFORGE_PUBKEY}
     container_name: adminforge-web-02
     hostname: web-02
-    ports: ["2202:22"]
+    ports: ["127.0.0.1:2202:22"]
     networks: [lab]
 
   db-03:
@@ -26,7 +26,7 @@ services:
         ADMINFORGE_PUBKEY: ${ADMINFORGE_PUBKEY}
     container_name: adminforge-db-03
     hostname: db-03
-    ports: ["2203:22"]
+    ports: ["127.0.0.1:2203:22"]
     networks: [lab]
 
 networks:

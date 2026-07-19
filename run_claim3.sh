@@ -28,7 +28,7 @@ if [ "$LINES" -lt 4600 ] && [ "$NTHIRD" -eq 0 ]; then VERDICT="OK"; else VERDICT
 
 cat <<EOF
 ══════════════════════════════════════════════════════════════
-  Reivindicação #3: attack surface of the base install
+  Claim #3: attack surface of the base install
 ══════════════════════════════════════════════════════════════
   Own source (adminforge/**.py) : ${LINES} lines   (claim: < 4,600)
   Third-party runtime imports   : ${NTHIRD}${THIRD:+  ($THIRD)}   (claim: 0)
