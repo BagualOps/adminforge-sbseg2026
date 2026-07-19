@@ -257,9 +257,15 @@ def hardware_info() -> dict:
             mem_kib = int(line.split()[1])
             break
     docker = sh(["docker", "--version"], check=False).stdout.strip()
+    mem_gib = round(mem_kib / (1024 * 1024), 1)
+    # MemTotal is what the OS sees, which is below the installed capacity on a
+    # machine whose integrated GPU reserves system RAM as VRAM. Report both: the
+    # OS-visible GiB and the nearest installed size in GB for the hardware line.
+    installed_gb = 8 * round(mem_kib * 1024 / 1e9 / 8) or round(mem_kib * 1024 / 1e9)
     return {
         "cpu": cpu,
-        "mem_gib": round(mem_kib / (1024 * 1024), 1),
+        "mem_gib": mem_gib,
+        "mem_installed_gb": installed_gb,
         "kernel": platform.release(),
         "os": platform.platform(),
         "docker": docker,

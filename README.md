@@ -31,7 +31,7 @@ The considered seals are: **Available (SeloD), Functional (SeloF), Sustainable (
 | System packages | `git`, `docker` (Engine ≥ 24, for the experiment fleet), `ssh`, `ssh-keygen` |
 | Hardware | any 4-core / 8 GB RAM machine; ~2 GB free disk |
 
-Paper experiments ran on: AMD Ryzen 5 8600G (6 cores), 30 GB RAM, Linux kernel 6.17, Python 3.12, Docker Engine 29.4.
+Paper experiments ran on: AMD Ryzen 5 8600G (6 cores), 32 GB RAM, Linux kernel 6.17, Python 3.12, Docker Engine 29.4.
 
 # Dependencies
 
