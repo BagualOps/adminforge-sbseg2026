@@ -41,6 +41,8 @@ def main() -> int:
     e2: dict = defaultdict(lambda: defaultdict(list))
     e2_meta: dict = {}
     e3 = None
+    e4: dict = defaultdict(lambda: defaultdict(list))
+    e4_rss: dict = defaultdict(list)
 
     for path in raws:
         data = json.loads(path.read_text())
@@ -61,6 +63,12 @@ def main() -> int:
             e2_meta[key] = {"n": data["n"], "forks": data["forks"],
                             "ansible_version": data.get("ansible_version"),
                             "effort": data.get("effort")}
+        elif name.startswith("e4_"):
+            n = data["n"]
+            for cell, wall in data["cells"].items():
+                e4[n][cell].append(wall)
+            if data.get("cold_apply_peak_rss_kib"):
+                e4_rss[n].append(data["cold_apply_peak_rss_kib"])
         elif name.startswith("e3_"):
             e3 = data
 
@@ -88,6 +96,14 @@ def main() -> int:
             for key, cells in sorted(e2.items())
         },
         "e2_af_sanity_python3_image": e2_meta.get("af_sanity_python3_image"),
+        "e4_parallelism": {
+            str(n): {
+                "cells": {cell: summarize(vals) for cell, vals in sorted(cells.items())},
+                "cold_apply_peak_rss_mib": (
+                    round(max(e4_rss[n]) / 1024, 1) if e4_rss.get(n) else None),
+            }
+            for n, cells in sorted(e4.items())
+        },
         "e3_attack_surface": e3,
     }
 

@@ -451,7 +451,7 @@ class Nucleo:
     def preview(self) -> list[Subacao]:
         return self.planner.calcular_delta()
 
-    def aplicar(self) -> Operacao:
+    def aplicar(self, jobs: int = 1) -> Operacao:
         op = self._nova_op("apply")
         try:
             with self.store:
@@ -465,8 +465,29 @@ class Nucleo:
 
                 from adminforge.planner.planner import ChaveInstalada
 
+                # Resolve each host's target state once, in a deterministic order.
+                hostnames = list(por_servidor)
+                servidores = {h: self.store.get_servidor(h) for h in hostnames}
+
+                # The SSH work (deployer.aplicar) is independent per host and is
+                # the wall-clock cost; run it with a bounded thread pool when
+                # jobs > 1. The Store update below stays serial and ordered, so
+                # the result is identical regardless of jobs. ThreadPoolExecutor
+                # is part of the standard library, preserving the zero-dependency
+                # runtime.
+                pendentes = {h: lote for h, lote in por_servidor.items() if servidores[h] is not None}
+                if jobs > 1 and len(pendentes) > 1:
+                    from concurrent.futures import ThreadPoolExecutor
+                    with ThreadPoolExecutor(max_workers=min(jobs, len(pendentes))) as pool:
+                        resultados = dict(zip(
+                            pendentes,
+                            pool.map(lambda h: self.deployer.aplicar(servidores[h], pendentes[h]), pendentes),
+                        ))
+                else:
+                    resultados = {h: self.deployer.aplicar(servidores[h], lote) for h, lote in pendentes.items()}
+
                 for hostname, lote in por_servidor.items():
-                    servidor = self.store.get_servidor(hostname)
+                    servidor = servidores[hostname]
                     if servidor is None:
                         for s in lote:
                             s.status = "falha"
@@ -474,7 +495,7 @@ class Nucleo:
                         op.subacoes.extend(lote)
                         continue
 
-                    aplicadas = self.deployer.aplicar(servidor, lote)
+                    aplicadas = resultados[hostname]
                     op.subacoes.extend(aplicadas)
 
                     instaladas = {

@@ -340,6 +340,76 @@
     "n": 10,
     "note": "adminforge on the python3 image variant, single repetition"
   },
+  "e4_parallelism": {
+    "5": {
+      "cells": {
+        "cold_apply_parallel": {
+          "median_s": 14.46,
+          "min_s": 14.359,
+          "max_s": 14.806,
+          "reps": 5
+        },
+        "noop_apply_parallel": {
+          "median_s": 0.082,
+          "min_s": 0.078,
+          "max_s": 0.091,
+          "reps": 5
+        }
+      },
+      "cold_apply_peak_rss_mib": 21.2
+    },
+    "10": {
+      "cells": {
+        "cold_apply_parallel": {
+          "median_s": 14.716,
+          "min_s": 14.672,
+          "max_s": 14.754,
+          "reps": 5
+        },
+        "noop_apply_parallel": {
+          "median_s": 0.1,
+          "min_s": 0.098,
+          "max_s": 0.104,
+          "reps": 5
+        }
+      },
+      "cold_apply_peak_rss_mib": 21.4
+    },
+    "25": {
+      "cells": {
+        "cold_apply_parallel": {
+          "median_s": 18.374,
+          "min_s": 18.307,
+          "max_s": 18.469,
+          "reps": 5
+        },
+        "noop_apply_parallel": {
+          "median_s": 0.154,
+          "min_s": 0.151,
+          "max_s": 0.16,
+          "reps": 5
+        }
+      },
+      "cold_apply_peak_rss_mib": 23.0
+    },
+    "50": {
+      "cells": {
+        "cold_apply_parallel": {
+          "median_s": 36.812,
+          "min_s": 36.58,
+          "max_s": 37.082,
+          "reps": 5
+        },
+        "noop_apply_parallel": {
+          "median_s": 0.249,
+          "min_s": 0.244,
+          "max_s": 0.254,
+          "reps": 5
+        }
+      },
+      "cold_apply_peak_rss_mib": 23.8
+    }
+  },
   "e3_attack_surface": {
     "fleet": 10,
     "hosts_side": {

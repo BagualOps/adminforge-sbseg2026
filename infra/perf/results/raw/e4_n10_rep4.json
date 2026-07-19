@@ -1,0 +1,10 @@
+{
+  "cells": {
+    "cold_apply_parallel": 14.67190593999112,
+    "noop_apply_parallel": 0.09984611097024754
+  },
+  "cold_apply_peak_rss_kib": 21736,
+  "jobs": 10,
+  "n": 10,
+  "rep": 4
+}
