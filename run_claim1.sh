@@ -16,7 +16,7 @@ build_image() {
     if docker image inspect "$IMG" >/dev/null 2>&1; then return 0; fi
     echo "Building fleet image..."
     docker build -q -t "$IMG" -f- infra/testlab <<'DOCKERFILE' >/dev/null
-FROM debian:bookworm-slim@sha256:sha256:63a496b5d3b99214b39f5ed70eb71a61e590a77979c79cbee4faf991f8c0783e
+FROM debian:bookworm-slim@sha256:63a496b5d3b99214b39f5ed70eb71a61e590a77979c79cbee4faf991f8c0783e
 RUN apt-get update -qq && apt-get install -y -qq openssh-server sudo >/dev/null && rm -rf /var/lib/apt/lists/*
 RUN useradd -m -s /bin/bash adminforge && mkdir -p /home/adminforge/.ssh && chmod 700 /home/adminforge/.ssh
 ARG ADMINFORGE_PUBKEY
