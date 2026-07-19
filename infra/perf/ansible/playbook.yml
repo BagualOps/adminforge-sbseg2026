@@ -1,0 +1,44 @@
+# Equivalent operation to the AdminForge declared state used in E1:
+# ensure the managed users exist, install their authorized_keys and
+# their sudoers entries on every host. Only ansible-core builtin
+# modules are used, so no extra collection is required.
+- hosts: all
+  become: true
+  gather_facts: false
+  vars_files:
+    - users.yml
+  tasks:
+    - name: Ensure managed users exist
+      ansible.builtin.user:
+        name: "{{ item.name }}"
+        shell: /bin/bash
+        create_home: true
+      loop: "{{ managed_users }}"
+
+    - name: Ensure .ssh directory
+      ansible.builtin.file:
+        path: "/home/{{ item.name }}/.ssh"
+        state: directory
+        owner: "{{ item.name }}"
+        group: "{{ item.name }}"
+        mode: "0700"
+      loop: "{{ managed_users }}"
+
+    - name: Install authorized_keys
+      ansible.builtin.copy:
+        content: "{{ item.pubkey }}\n"
+        dest: "/home/{{ item.name }}/.ssh/authorized_keys"
+        owner: "{{ item.name }}"
+        group: "{{ item.name }}"
+        mode: "0600"
+      loop: "{{ managed_users }}"
+
+    - name: Install sudoers entries
+      ansible.builtin.copy:
+        content: "{{ item.sudoers }}\n"
+        dest: "/etc/sudoers.d/adminforge-{{ item.name }}"
+        owner: root
+        group: root
+        mode: "0440"
+        validate: /usr/sbin/visudo -cf %s
+      loop: "{{ managed_users | selectattr('sudoers', 'defined') | list }}"

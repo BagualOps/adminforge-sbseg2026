@@ -1,0 +1,26 @@
+managed_users:
+  - name: admin01
+    pubkey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIogPyLt7ANAkyeJS1/g0eo0yWKAtIsCCopmnu96v2F2 admin01@perf"
+  - name: admin02
+    pubkey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKQzvAYe6UMIG/B38dwUmgDdVP5rJTRwvg5jbHEPpL3D admin02@perf"
+  - name: admin03
+    pubkey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILR9RbeRTmwu2NsfW7y/Vg8Cvp15MajKHuzfwoVgXfdS admin03@perf"
+  - name: admin04
+    pubkey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHI5+WKMp1Mq3WJY8/pEz6UrjUomgLY9iNOeKtAEvt48 admin04@perf"
+  - name: admin05
+    pubkey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILmjFJcSrM599YOsoznr9FAoaC2HDVsCepbqG5+//ytW admin05@perf"
+  - name: admin06
+    pubkey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAII/UNePDR2cEp+SjldjRNy2MAC8l6ex8z66ngzpk65It admin06@perf"
+    sudoers: "admin06 ALL=(ALL) NOPASSWD: /usr/bin/systemctl, /usr/bin/journalctl"
+  - name: admin07
+    pubkey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGTNdXMTdly1km8Rkf9l8XBLWE3msfbd1wJNvFblcwWW admin07@perf"
+    sudoers: "admin07 ALL=(ALL) NOPASSWD: /usr/bin/systemctl, /usr/bin/journalctl"
+  - name: admin08
+    pubkey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBLYVC1nIXteyN5/fc0YS3ippE6HNiFHAOLX3f/r+8GU admin08@perf"
+    sudoers: "admin08 ALL=(ALL) NOPASSWD: /usr/bin/systemctl, /usr/bin/journalctl"
+  - name: admin09
+    pubkey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFp/VIskzPCXqCdhr5rMmqAv8UzydgBbs26tA5GInCbr admin09@perf"
+    sudoers: "admin09 ALL=(ALL) NOPASSWD: /usr/bin/systemctl, /usr/bin/journalctl"
+  - name: admin10
+    pubkey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIF3WV/Ifo+P+YWC7VJZ0ogzyhQZ3P5xTQI3ZwQ9XZoXu admin10@perf"
+    sudoers: "admin10 ALL=(ALL) NOPASSWD: /usr/bin/systemctl, /usr/bin/journalctl"

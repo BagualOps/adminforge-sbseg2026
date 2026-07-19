@@ -1,0 +1,9 @@
+# E2 only: Ansible requires a Python interpreter on every managed host.
+# The base testlab image (sshd + sudo on debian-slim) has none, and
+# AdminForge does not need one. This variant adds python3 so the Ansible
+# baseline can run; sshd and everything else are identical.
+ARG BASE_IMAGE=adminforge-perf:latest
+FROM ${BASE_IMAGE}
+
+RUN apt-get update && apt-get install -y --no-install-recommends python3 \
+    && rm -rf /var/lib/apt/lists/*
