@@ -40,8 +40,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import perflib as P
 
 ANSIBLE_DIR = P.PERF_DIR / "ansible"
-VENV = P.WORK_DIR / "venv-ansible"
 IMAGE_PY3 = "adminforge-perf-ansible:latest"
+CONTROLLER = "adminforge-perf-ansible-controller:latest"
 
 
 def build_image_py3() -> None:
@@ -51,13 +51,17 @@ def build_image_py3() -> None:
           "-f", str(ANSIBLE_DIR / "Dockerfile.python3"), str(ANSIBLE_DIR)])
 
 
-def ensure_ansible() -> tuple[str, str]:
-    if not (VENV / "bin" / "ansible-playbook").exists():
-        P.sh([sys.executable, "-m", "venv", str(VENV)])
-        P.sh([str(VENV / "bin" / "pip"), "install", "--quiet", "ansible-core"])
-    proc = P.sh([str(VENV / "bin" / "ansible"), "--version"])
+def build_controller() -> None:
+    """The Ansible control node runs as a container; the host installs no ansible."""
+    P.sh(["docker", "build", "-t", CONTROLLER,
+          "-f", str(ANSIBLE_DIR / "Dockerfile.controller"), str(ANSIBLE_DIR)])
+
+
+def controller_info() -> tuple[str, str]:
+    proc = P.sh(["docker", "run", "--rm", CONTROLLER, "ansible", "--version"])
     version = proc.stdout.splitlines()[0].strip()
-    dump = P.sh([str(VENV / "bin" / "ansible-config"), "dump"], check=False).stdout
+    dump = P.sh(["docker", "run", "--rm", CONTROLLER, "ansible-config", "dump"],
+                check=False).stdout
     forks_default = ""
     for line in dump.splitlines():
         if line.startswith("DEFAULT_FORKS"):
@@ -84,7 +88,8 @@ def write_users_yml(keys: dict[str, Path]) -> Path:
 
 
 def write_inventory(hosts: list[dict], known_hosts: Path) -> Path:
-    key = P.operator_key()
+    # Paths here are the fixed locations the controller container sees (the key
+    # and known_hosts are bind-mounted / copied into the container by run_playbook).
     lines = ["[fleet]"]
     for h in hosts:
         lines.append(f"{h['hostname']} ansible_host={h['ip']}")
@@ -92,9 +97,9 @@ def write_inventory(hosts: list[dict], known_hosts: Path) -> Path:
         "",
         "[fleet:vars]",
         "ansible_user=adminforge",
-        f"ansible_ssh_private_key_file={key}",
+        "ansible_ssh_private_key_file=/tmp/opkey",
         ("ansible_ssh_common_args=-o StrictHostKeyChecking=yes "
-         f"-o UserKnownHostsFile={known_hosts}"),
+         "-o UserKnownHostsFile=/tmp/known_hosts"),
     ]
     path = P.WORK_DIR / "inventory.ini"
     path.write_text("\n".join(lines) + "\n")
@@ -112,18 +117,36 @@ def keyscan(hosts: list[dict]) -> Path:
 
 
 def run_playbook(inventory: Path, forks: int | None) -> float:
-    env = {"ANSIBLE_HOST_KEY_CHECKING": "True"}
-    cmd = [str(VENV / "bin" / "ansible-playbook"), "-i", str(inventory),
-           str(ANSIBLE_DIR / "playbook.yml")]
-    if forks is not None:
-        cmd += ["--forks", str(forks)]
+    """Run the playbook from the controller container on the fleet network.
+
+    The container runs as root (so getpwuid works and ssh accepts the key). The
+    operator key is bind-mounted read-only and copied to a root-owned 0600 file
+    inside the container, so ssh's ownership/mode check passes regardless of the
+    host uid. Inventory, known_hosts and the playbook dir are bind-mounted to
+    the fixed container paths the inventory references.
+    """
+    key = P.operator_key()
+    known_hosts = P.WORK_DIR / "ansible_known_hosts"
+    forks_arg = f" --forks {forks}" if forks is not None else ""
+    inner = (
+        "cp /tmp/opkey-src /tmp/opkey && chmod 600 /tmp/opkey && "
+        f"ansible-playbook -i /tmp/inventory.ini /ansible/playbook.yml{forks_arg}"
+    )
+    cmd = ["docker", "run", "--rm", "--network", P.NETWORK,
+           "-v", f"{key}:/tmp/opkey-src:ro",
+           "-v", f"{known_hosts}:/tmp/known_hosts:ro",
+           "-v", f"{inventory}:/tmp/inventory.ini:ro",
+           "-v", f"{ANSIBLE_DIR}:/ansible:ro",
+           CONTROLLER, "sh", "-c", inner]
     t0 = time.monotonic()
-    P.sh(cmd, env=env, cwd=ANSIBLE_DIR)
+    P.sh(cmd)
     return time.monotonic() - t0
 
 
 def af_sanity(n: int, keys: dict) -> None:
-    """One AdminForge cold+noop repetition on the python3 image variant."""
+    """AdminForge on the same python3 image fleet Ansible uses: one parallel
+    cold apply (--jobs 25, the fair counterpart to Ansible's forks) and one
+    no-op apply (answered from local state, no SSH)."""
     import shutil
 
     out = P.RESULTS_RAW / "e2_af_sanity_python3_image.json"
@@ -135,12 +158,12 @@ def af_sanity(n: int, keys: dict) -> None:
     shutil.rmtree(state, ignore_errors=True)
     try:
         P.declare_state(state, hosts, keys)
-        _, cold, _ = P.af(["apply", "--yes"], state)
+        _, cold, _ = P.af(["apply", "--yes", "--jobs", "25"], state)
         _, noop, _ = P.af(["apply", "--yes"], state)
         P.save_raw("e2_af_sanity_python3_image",
                    {"n": n, "image": IMAGE_PY3, "note":
                     "adminforge on the python3 image variant, single repetition",
-                    "cells": {"cold_apply": cold, "noop_apply": noop}})
+                    "cells": {"cold_apply_parallel": cold, "noop_apply": noop}})
     finally:
         P.fleet_down()
 
@@ -180,7 +203,8 @@ def main() -> int:
     args = ap.parse_args()
 
     build_image_py3()
-    version, forks_default = ensure_ansible()
+    build_controller()
+    version, forks_default = controller_info()
     keys = P.gen_user_keys(P.WORK_DIR / "userkeys", P.N_ADMINS)
     write_users_yml(keys)
     af_sanity(10, keys)

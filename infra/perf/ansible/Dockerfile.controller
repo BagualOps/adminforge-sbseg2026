@@ -1,0 +1,18 @@
+# E2 only: the Ansible control node, run as a container so the host needs no
+# ansible install (host deps stay: git, docker, python3, openssh-client).
+# ansible-core is pinned by the build; the exact version is recorded in the raw
+# results via `ansible --version`. openssh-client provides the ssh transport.
+FROM python:3.12-slim
+
+RUN pip install --no-cache-dir ansible-core \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends openssh-client \
+    && rm -rf /var/lib/apt/lists/*
+
+# Retry files and fact cache would try to write next to a read-only playbook
+# mount; disable them so the control node needs nothing writable but its HOME.
+ENV ANSIBLE_RETRY_FILES_ENABLED=False \
+    ANSIBLE_HOST_KEY_CHECKING=True \
+    ANSIBLE_LOCAL_TEMP=/tmp/.ansible
+
+CMD ["ansible-playbook", "--version"]

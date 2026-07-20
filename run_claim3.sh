@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Reivindicacao #3: executed code surface under 4,600 lines, zero third-party
-# runtime imports in the base install. Deterministic; no Docker; ~5 s.
+# Reivindicacao #3: executed code surface under 4,000 lines of code, zero
+# third-party runtime imports in the base install. Deterministic; no Docker; ~5 s.
 set -euo pipefail
 cd "$(dirname "$0")"
 

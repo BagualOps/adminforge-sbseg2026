@@ -20,7 +20,11 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PERF_DIR = REPO_ROOT / "infra" / "perf"
 WORK_DIR = Path(os.environ.get("PERF_WORK", PERF_DIR / "work"))
-RESULTS_RAW = PERF_DIR / "results" / "raw"
+# Where per-repetition raw results are written and looked up. Defaults to the
+# committed reference directory (the paper's full campaign). The claim scripts
+# override it (PERF_RESULTS_RAW) to a fresh temp dir so they always measure live
+# on the evaluator's machine instead of reusing the committed numbers.
+RESULTS_RAW = Path(os.environ.get("PERF_RESULTS_RAW", PERF_DIR / "results" / "raw"))
 TESTLAB = REPO_ROOT / "infra" / "testlab"
 
 
@@ -73,13 +77,25 @@ def sh(cmd: list[str], check: bool = True, env: dict | None = None,
 # Operator SSH key (the testlab key committed in infra/testlab/keys)
 # ---------------------------------------------------------------------------
 def operator_key() -> Path:
-    """Copy the testlab operator key into the key dir with 0600 perms."""
-    src = TESTLAB / "keys" / "adminforge_id"
+    """Return the operator private key (0600) in a key dir ssh will accept.
+
+    Uses the committed test key if the developer has it; otherwise generates a
+    throwaway ed25519 keypair once, so a fresh clone needs no committed private
+    key. build_image() bakes the matching public key into the fleet, so whatever
+    key this returns is the one the containers accept.
+    """
     dst_dir = key_dir()
     dst = dst_dir / "adminforge_id"
-    shutil.copyfile(src, dst)
+    if dst.exists():
+        return dst
+    src = TESTLAB / "keys" / "adminforge_id"
+    if src.exists():
+        shutil.copyfile(src, dst)
+        shutil.copyfile(src.with_suffix(".pub"), dst.with_suffix(".pub"))
+    else:
+        sh(["ssh-keygen", "-t", "ed25519", "-N", "", "-C", "adminforge-perf",
+            "-f", str(dst), "-q"])
     os.chmod(dst, 0o600)
-    shutil.copyfile(src.with_suffix(".pub"), dst.with_suffix(".pub"))
     return dst
 
 
@@ -87,7 +103,7 @@ def operator_key() -> Path:
 # Docker fleet
 # ---------------------------------------------------------------------------
 def build_image() -> None:
-    pubkey = (TESTLAB / "keys" / "adminforge_id.pub").read_text().strip()
+    pubkey = operator_key().with_suffix(".pub").read_text().strip()
     sh(["docker", "build", "-t", IMAGE,
         "--build-arg", f"ADMINFORGE_PUBKEY={pubkey}", str(TESTLAB)])
 
