@@ -4,8 +4,8 @@ Reproducible performance and scalability experiments for AdminForge. The
 numbers reported in the paper's Performance Evaluation section are computed
 from `results/results.json`, which is produced by the scripts in this
 directory. Everything uses only the Python standard library, Docker and the
-OpenSSH client; the Ansible baseline is installed into an isolated venv
-under `work/` automatically.
+OpenSSH client; the Ansible baseline runs from a Docker control-node
+container built by the harness, so no Ansible is installed on the host.
 
 ## Testbed
 
@@ -51,9 +51,14 @@ Fleet sizes and repetitions are parameters, e.g.
   the same containers with the same operator key. Cells: first apply and
   no-op re-run, at N=10 and N=50 with default forks, plus N=50 with
   forks=25. Fairness settings are documented in the script header and
-  recorded in the raw output. Configuration effort is recorded as
-  non-empty line counts of playbook, inventory and user data versus the
-  number of AdminForge CLI commands.
+  recorded in the raw output. Configuration effort is the total of the
+  non-empty, non-comment lines of the three Ansible files, versus the
+  number of AdminForge CLI commands. At N=10 the "78 YAML lines" reported
+  in the paper is a **sum**: `ansible/playbook.yml` (37) + the inventory
+  (15, one line per host, generated at run time in `work/` and therefore
+  not committed) + `ansible/users.yml` (26) = 78. The breakdown is stored
+  per repetition in the `effort` field of `results/raw/e2_n10_*.json`, and
+  the AdminForge side is `setup_cli_commands` (19 + N = 29 at N=10).
 - E3 (`run_e3.py`): listening TCP sockets and bound UDP sockets inside 3
   sampled managed containers (parsed from `/proc/net/tcp{,6}` and
   `/proc/net/udp{,6}`) before management and after full management plus
@@ -68,5 +73,5 @@ Containers are removed automatically at the end of each run. To force it:
 docker rm -f $(docker ps -aq --filter name=afperf-)
 ```
 
-`work/` holds throwaway keys, state directories and the Ansible venv; it is
-gitignored and safe to delete.
+`work/` holds throwaway keys, state directories and the generated Ansible
+inventory; it is gitignored and safe to delete.
