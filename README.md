@@ -33,9 +33,23 @@ The considered seals are: **Available (SeloD), Functional (SeloF), Sustainable (
 
 Paper experiments ran on: AMD Ryzen 5 8600G (6 cores), 32 GB RAM, Linux kernel 6.17, Python 3.12, Docker Engine 29.4.
 
+### Reproduction time (and why it depends on your hardware)
+
+The claim scripts **measure live on your machine**, so wall-clock times scale with CPU speed, disk, and (first run only) how long Docker takes to build the fleet images and pull base images. The table below is a full clean-clone run on the reference machine above (a fast desktop). **On a slower CPU, a laptop, or a cold Docker cache, expect noticeably longer, especially for Claim #1.** What is *not* hardware-dependent, and is what each claim actually asserts, is the printed **`→ OK`** verdict and the ratios/counts behind it (per-host flatness, the ~200× no-op speedup over Ansible, the SLOC and import counts, the recomputed study statistics).
+
+| Step | Command | Reference machine (Ryzen 5 8600G) |
+|---|---|---|
+| Install | `pip install -e ".[dev]"` | ~5 s |
+| Minimal test | `pytest` + the `af` commands | ~3 s |
+| **Claim #1** | `./run_claim1.sh` | **~3.5 min** (Docker build + a live N=1/5 ladder and an N=10 Ansible run) |
+| **Claim #2** | `./run_claim2.sh` | **~1 s** |
+| **Claim #3** | `./run_claim3.sh` | **~0.1 s** |
+
+> Times are the reference machine's; your numbers will differ. Only Claim #1 uses Docker; the first run also builds the fleet and Ansible-controller images (add build time on a cold cache). If you reproduce on other hardware, please open a PR/issue adding a row here.
+
 # Dependencies
 
-The tool has **zero third-party Python dependencies at run time** (`dependencies = []` in `pyproject.toml`; only the standard library is imported). Optional extras: `completion` (argcomplete, shell autocompletion) and `dev` (pytest ≥ 8.0, for the test suite). The experiment fleet uses the `debian:12-slim` Docker image with `openssh-server` and `sudo` (built locally by the claim scripts; ~150 MB download on first run). The Ansible baseline of Claim #1 runs inside a container built by the harness; no Ansible is installed on the host.
+The tool has **zero third-party Python dependencies at run time** (`dependencies = []` in `pyproject.toml`; only the standard library is imported). Optional extras: `completion` (argcomplete, shell autocompletion) and `dev` (pytest ≥ 8.0, for the test suite). Host tools needed are only **git, docker, python3, ssh, and ssh-keygen** (all standard on a Linux dev box). The experiment fleet uses the `debian:12-slim` Docker image with `openssh-server` and `sudo` (built locally by the claim scripts). **Ansible is never installed on the host:** Claim #1 builds an Ansible control-node container (`python:3.12-slim` + `ansible-core` + `openssh-client`) and runs the playbook from it, on the fleet's Docker network. Claim #1's first run therefore needs **internet** to pull the base images and install `ansible-core` into the controller image (Claims #2 and #3 are fully offline).
 
 # Security concerns
 
@@ -76,31 +90,44 @@ Expected final lines:
 
 The paper makes three claims. Each is one command and prints a result box ending in `→ OK` so the evaluator knows it came out right.  Claim #1 needs Docker (the rest do not).  Wall-clock times scale with CPU speed; the assertions are hardware-independent (ratios, counts, recomputed statistics).
 
-## Claim #1: Apply time scales linearly with fleet size
+## Claim #1: Linear per-host cost, and an instant "is anything pending?" against Ansible
 
-**What the paper asserts.**  Cold `apply` costs a constant time per host, and a no-change `apply` is near-instant.  Runs a reduced ladder (N=1 and N=5 hosts, 1 repetition each) and checks that the per-host cold-apply times differ by less than 40 % and the no-op stays under 2 s.
+**What the paper asserts.** Cold `apply` costs a roughly constant time per host (so it scales linearly with the fleet), and a no-change `apply` is answered from local state without touching any host, far faster than an Ansible re-run that must reconnect to every host. The script measures both **live on your machine**, into a throwaway directory (it never reuses the committed reference numbers):
 
-**Execution:** one command (~6 min first run including image build).
+- **(a) Scalability:** a reduced ladder (N=1 and N=5, 1 repetition) via `infra/perf/run_e1.py`; checks the per-host cold-apply cost is flat (< 40% difference) and the no-op stays under 2 s.
+- **(b) Comparison with Ansible:** N=10 via `infra/perf/run_e2.py`; the Ansible control node runs as a container (no Ansible on the host), applies the equivalent playbook to the same fleet, and the script checks AdminForge's no-change apply is at least 5x faster than Ansible's equivalent re-run.
+
+**Execution:** one command (needs Docker + internet on first run).
 
 ```bash
 ./run_claim1.sh
 ```
 
-**Expected result:**
+**Expected result** (numbers are from the reference machine; **your absolute seconds will differ** - what the claim asserts is the final `-> OK` and the hardware-independent quantities: per-host flatness, the tens-to-hundreds-x no-op speedup over Ansible, and 78 lines of YAML vs 29 commands):
 
 ```
-==============================================================
-  Claim #1: Apply time scales linearly with fleet size
-==============================================================
-  N=1  cold apply :   14.0 s    no-op apply : 0.06 s
-  N=5  cold apply :   70.5 s    no-op apply : 0.09 s
-  Per-host cold   : N=1 14.0 s/host   N=5 14.1 s/host   (diff 0.8%)
-  No-op apply     : constant, well under 2 s at both sizes
-  Assertion: per-host cost flat (<40% diff) and no-op < 2 s  ->  OK
-==============================================================
+======================================================================
+  Claim #1: linear per-host cost, and instant "is anything pending?"
+======================================================================
+  (a) Scalability (base image, measured live)
+      N=1  cold apply :   13.0 s     no-op apply : 0.05 s
+      N=5  cold apply :   64.9 s     no-op apply : 0.07 s
+      Per-host cold   : N=1 13.0 s/host   N=5 13.0 s/host   (diff 0.0%)
+
+  (b) Comparison with Ansible at N=10 (python3 image, measured live)
+      First apply     : AdminForge   14.1 s (parallel)   Ansible   23.6 s
+      No-op re-run    : AdminForge   0.09 s (local)      Ansible  20.81 s   (240x faster)
+      Write effort    : AdminForge 29 commands    Ansible 78 lines of YAML
+
+  Assertions (hardware-independent):
+    per-host cold flat (<40% diff)                         -> OK
+    no-op apply < 2 s                                      -> OK
+    AdminForge no-op >= 5x faster than Ansible re-run      -> OK
+  Overall  ->  OK
+======================================================================
 ```
 
-(Values above are from the reference machine; on a fresh clone with no committed reference data the script measures live on your hardware. The full 5-repetition ladder up to N=50, the Ansible comparison, and the attack-surface check are in `infra/perf/`, with raw per-repetition results under `infra/perf/results/`.)
+The full 5-repetition ladder up to N=50, all Ansible configurations, and the attack-surface check live in `infra/perf/`, with the paper's committed per-repetition results under `infra/perf/results/`.
 
 ## Claim #2: Usability-study statistics recomputed from the anonymized response data
 
@@ -135,30 +162,30 @@ The paper makes three claims. Each is one command and prints a result box ending
 
 **Reference data in the repository:** anonymized spreadsheet `paper_data/study-responses.xlsx` (timestamps removed, no names, no emails) and the questionnaire instrument `paper_data/study-questionnaire.pdf`.
 
-## Claim #3: Executed code surface under 4,600 lines with zero third-party runtime imports
+## Claim #3: Executed code surface under 4,000 lines with zero third-party runtime imports
 
-**What the paper asserts.**  The tool's own source is under 4,600 lines and the base install imports nothing beyond the Python standard library at run time.
+**What the paper asserts.** The tool's own source is under 4,000 lines of code (blank lines and comments excluded) and the base install imports nothing beyond the Python standard library at run time.
 
-**Execution:** one command (< 1 min, no Docker).
+**Execution:** one command (< 5 s, no Docker, no network).
 
 ```bash
 ./run_claim3.sh
 ```
 
-**Expected result (deterministic):**
+**Expected result (deterministic; the numbers below are exact, not hardware-dependent):**
 
 ```
 ══════════════════════════════════════════════════════════════
-  Claim #3: Attack surface of the base install
+  Reivindicação #3: attack surface of the base install
 ══════════════════════════════════════════════════════════════
-  Own source (adminforge/**.py) : 4567 lines   (claim: < 4,600)
+  Own code (adminforge/**.py)   : 3916 lines of code (claim: < 4,000)
   Third-party runtime imports   : 0   (claim: 0)
 
-  Expected: lines < 4,600 and 0 third-party imports  →  OK
+  Expected: code < 4,000 and 0 third-party imports  →  OK
 ══════════════════════════════════════════════════════════════
 ```
 
-The full measurement harness behind the paper's performance section (5-repetition ladders up to N=50 hosts, the Ansible comparison, and the attack-surface audit) lives in `infra/perf/`.  Claim #2's reference data is in `paper_data/`.
+The line count excludes blank lines and comments (`grep -vhE '^[[:space:]]*(#|$)'`); the import check loads every runtime module and asserts none resolves to `site-packages`. The full measurement harness behind the paper's performance section (5-repetition ladders up to N=50 hosts, the Ansible comparison, and the attack-surface audit) lives in `infra/perf/`. Claim #2's reference data is in `paper_data/`.
 
 # LICENSE
 
