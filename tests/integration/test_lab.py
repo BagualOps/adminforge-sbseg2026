@@ -37,6 +37,35 @@ CHAVE_ALICE = (
 CHAVE_BOB = (
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE9NK1qj7m9rwGzN9bM4LqXz0Z8c9zN0R1aB9fEdC7Yk bob@laptop"
 )
+CHAVE_CAROL = (
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDcqfHw6TYOiNA4NqAkplI5+ZaNsZcV8LT1pQqRN+BFD carol@laptop"
+)
+
+
+def _run_verify(state_dir: Path, chave_priv: Path) -> tuple[int, str]:
+    """Roda `apply verify` pela CLI contra um state_dir, usando a chave do lab."""
+    import io as _io
+    from contextlib import redirect_stdout
+
+    from adminforge.cli.main import main
+
+    env_keys = ("ADMINFORGE_STATE", "ADMINFORGE_SSH_KEY", "ADMINFORGE_SSH_USER", "ADMINFORGE_SUPERADMIN")
+    saved = {k: os.environ.get(k) for k in env_keys}
+    os.environ["ADMINFORGE_STATE"] = str(state_dir)
+    os.environ["ADMINFORGE_SSH_KEY"] = str(chave_priv)
+    os.environ["ADMINFORGE_SSH_USER"] = "adminforge"
+    os.environ["ADMINFORGE_SUPERADMIN"] = "operador"
+    buf = _io.StringIO()
+    try:
+        with redirect_stdout(buf):
+            rc = main(["apply", "verify"])
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+    return rc, buf.getvalue()
 
 
 def _docker_disponivel() -> bool:
@@ -269,3 +298,49 @@ def test_fluxo_completo_em_containers(lab, tmp_path):
 
     ok, _ = nucleo.auditor.verificar_cadeia()
     assert ok is True
+
+
+def test_reconcile_recria_usuario_deletado_manualmente(lab, tmp_path):
+    state = tmp_path / "state_rc"
+    nucleo = _fazer_nucleo(state, lab["chave_priv"])
+
+    nucleo.cadastrar_user("carol", "Carol", "c@e.com")
+    nucleo.cadastrar_chave("carol", CHAVE_CAROL)
+    nucleo.criar_grupo_user("sres")
+    nucleo.adicionar_membro_grupo_user("sres", "carol")
+    hk = _capturar_host_key(PORTAS["web-01"])
+    nucleo.cadastrar_servidor("web-01", "127.0.0.1", PORTAS["web-01"], hk)
+    nucleo.criar_grupo_servidor("app")
+    nucleo.adicionar_membro_grupo_servidor("app", "web-01")
+    nucleo.conceder("sres", "app", NivelPermissao.SUDO)
+
+    op = nucleo.aplicar()
+    assert op.status == StatusOperacao.SUCESSO, [
+        (s.acao.value, s.status, s.erro) for s in op.subacoes
+    ]
+
+    rc, out = _run_verify(state, lab["chave_priv"])
+    assert "carol" in out and "account missing" not in out, out
+
+    rc, out = _exec_container("adminforge-web-01", "sudo", "cat", "/home/carol/.ssh/authorized_keys")
+    assert "BEGIN adminforge: carol" in out
+
+    rc, _ = _exec_container("adminforge-web-01", "userdel", "carol")
+    assert rc == 0, "userdel carol falhou"
+    rc, _ = _exec_container("adminforge-web-01", "id", "carol")
+    assert rc != 0
+    rc, out = _exec_container("adminforge-web-01", "sudo", "cat", "/home/carol/.ssh/authorized_keys")
+    assert "BEGIN adminforge: carol" in out
+
+    rc, out = _run_verify(state, lab["chave_priv"])
+    assert "carol" in out and "account missing" in out, out
+
+    op = nucleo.aplicar(reconcile=True)
+    assert op.status == StatusOperacao.SUCESSO, [
+        (s.acao.value, s.status, s.erro) for s in op.subacoes
+    ]
+    rc, out = _exec_container("adminforge-web-01", "id", "carol")
+    assert rc == 0 and "uid=" in out
+
+    rc, out = _run_verify(state, lab["chave_priv"])
+    assert "carol" in out and "account missing" not in out, out

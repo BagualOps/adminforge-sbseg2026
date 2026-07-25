@@ -703,6 +703,9 @@ def cmd_apply_verify(args: argparse.Namespace) -> int:
             dados["relatorio"] = nucleo.deployer.inspecionar(servidor)
         except Exception as e:
             dados["relatorio"] = {"erro": str(e)}
+        rel = dados["relatorio"]
+        usuarios = rel.get("usuarios", []) if isinstance(rel, dict) and "erro" not in rel else []
+        dados["real_users"] = {u["nome"] for u in usuarios} if usuarios else None
         return dados
 
     coletados = _mapear_hosts(_coletar, servidores, getattr(args, "jobs", 1))
@@ -719,7 +722,12 @@ def cmd_apply_verify(args: argparse.Namespace) -> int:
                 erros_ssh.append(servidor.hostname)
                 continue
             real_blocks = dados["real_blocks"]
+            real_users = dados["real_users"]
             for ref, username in sorted(esperado_blocks.items()):
+                if real_users is not None and username not in real_users:
+                    ui.fail(_("  {u} {ref} — declared but account missing on server").format(u=f"{username:20}", ref=ref))
+                    total_div += 1
+                    continue
                 real_user = real_blocks.get(ref)
                 if real_user is None:
                     ui.fail(_("  {u} {ref} — declared but not present on server").format(u=f"{username:20}", ref=ref))
@@ -787,7 +795,9 @@ def cmd_apply_verify(args: argparse.Namespace) -> int:
 
 def cmd_apply(args: argparse.Namespace) -> int:
     nucleo = _nucleo(args, com_ssh=not args.dry_run)
-    subacoes = nucleo.preview()
+    force = getattr(args, "force", False)
+    reconcile = getattr(args, "reconcile", False)
+    subacoes = nucleo.preview(force=force, reconcile=reconcile)
     if not subacoes:
         ui.ok(_("nothing to do — state in sync"))
         return 0
@@ -808,7 +818,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
         ui.warn(_("apply cancelled"))
         return 1
 
-    op = nucleo.aplicar(jobs=max(1, getattr(args, "jobs", 1)))
+    op = nucleo.aplicar(jobs=max(1, getattr(args, "jobs", 1)), force=force, reconcile=reconcile, subacoes=subacoes)
     sucessos = sum(1 for s in op.subacoes if s.status == "sucesso")
     falhas = sum(1 for s in op.subacoes if s.status == "falha")
     ui.heading(_("Result"))
@@ -1577,6 +1587,15 @@ def _build_parser() -> argparse.ArgumentParser:
     p_apply.add_argument("--dry-run", action="store_true", help=_("Use the fake Deployer."))
     p_apply.add_argument("--diff", action="store_true", help=_("Show authorized_keys before/after diff per user."))
     p_apply.add_argument("--jobs", type=int, default=1, metavar="N", help=_("Apply to up to N hosts in parallel (default 1, sequential)."))
+    _apply_mode = p_apply.add_mutually_exclusive_group()
+    _apply_mode.add_argument(
+        "--force", action="store_true",
+        help=_("Re-apply every declared key (idempotent); ignores what the Store believes is installed."),
+    )
+    _apply_mode.add_argument(
+        "--reconcile", action="store_true",
+        help=_("Read each server's live state first, then converge: re-create manually-deleted users/keys and remove orphan blocks among declared users."),
+    )
     p_apply.set_defaults(func=cmd_apply)
     s_apply = p_apply.add_subparsers(dest="apply_sub", required=False)
     a = s_apply.add_parser(

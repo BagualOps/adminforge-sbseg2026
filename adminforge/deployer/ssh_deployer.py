@@ -185,17 +185,24 @@ class SSHDeployer(IDeployer):
     ) -> None:
         u = shlex.quote(username)
         b64 = base64.b64encode(conteudo.encode("utf-8")).decode("ascii")
-        # backup do arquivo atual em .bak antes de sobrescrever (rollback manual)
+        # tee+temp+mv (mesmo padrao do _escrever_sudoers): install /dev/stdin
+        # quebra em coreutils minimalistas (busybox).
+        ssh_dir = shlex.quote(f"/home/{username}/.ssh")
+        destino = shlex.quote(f"/home/{username}/.ssh/authorized_keys")
+        tmp = f"/tmp/.adminforge-ak-{username}.{secrets.token_hex(8)}"
         comando = (
-            f"sudo install -d -m 700 -o {u} -g {u} /home/{u}/.ssh && "
-            f"if sudo test -f /home/{u}/.ssh/authorized_keys; then "
-            f"sudo install -m 600 -o {u} -g {u} /home/{u}/.ssh/authorized_keys "
-            f"/home/{u}/.ssh/authorized_keys.bak; fi && "
-            f"echo {shlex.quote(b64)} | base64 -d | "
-            f"sudo install -m 600 -o {u} -g {u} /dev/stdin /home/{u}/.ssh/authorized_keys"
+            f"set -e; "
+            f"sudo install -d -m 700 -o {u} -g {u} {ssh_dir} && "
+            f"if sudo test -f {destino}; then "
+            f"sudo install -m 600 -o {u} -g {u} {destino} {destino}.bak; fi && "
+            f"echo {shlex.quote(b64)} | base64 -d | sudo tee {tmp} >/dev/null && "
+            f"sudo chmod 600 {tmp} && "
+            f"sudo chown {u}:{u} {tmp} && "
+            f"sudo mv {tmp} {destino}"
         )
         rc, _, err = self._executar_ssh(servidor, comando)
         if rc != 0:
+            self._executar_ssh(servidor, f"sudo rm -f {tmp}")
             raise RuntimeError(f"failed to write authorized_keys: {err.strip()}")
 
 
