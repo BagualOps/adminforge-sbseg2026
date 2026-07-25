@@ -109,7 +109,11 @@ class Planner:
                         )
         return desejado
 
-    def calcular_delta(self) -> list[Subacao]:
+    def calcular_delta(
+        self,
+        force: bool = False,
+        atual_override: dict[str, dict[str, "ChaveInstalada"]] | None = None,
+    ) -> list[Subacao]:
         desejado = self.estado_desejado()
         subacoes: list[Subacao] = []
 
@@ -138,19 +142,23 @@ class Planner:
             return comandos
 
         for servidor in self.store.list_servidores():
-            atual = {}
-            for item in servidor.chaves_instaladas:
-                if isinstance(item, str):
-                    ch = ChaveInstalada(
-                        ref=item,
-                        username=item.split(":", 1)[0],
-                        nivel=NivelPermissao.SHELL,
-                    )
-                else:
-                    ch = ChaveInstalada.de_dict(item)
-                atual[ch.ref] = ch
-
             alvo = desejado.get(servidor.hostname, {})
+            if atual_override is not None and servidor.hostname in atual_override:
+                atual = dict(atual_override[servidor.hostname])
+            else:
+                atual = {}
+                for item in servidor.chaves_instaladas:
+                    if isinstance(item, str):
+                        ch = ChaveInstalada(
+                            ref=item,
+                            username=item.split(":", 1)[0],
+                            nivel=NivelPermissao.SHELL,
+                        )
+                    else:
+                        ch = ChaveInstalada.de_dict(item)
+                    atual[ch.ref] = ch
+                if force:
+                    atual = {r: c for r, c in atual.items() if r not in alvo}
 
             for ref, esperado in alvo.items():
                 cred = self.store.get_credencial_por_fingerprint(esperado.ref.split(":", 1)[1])

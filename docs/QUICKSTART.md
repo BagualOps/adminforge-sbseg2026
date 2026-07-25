@@ -83,8 +83,9 @@ Bootstrap nos servidores:
   chmod 0440 /etc/sudoers.d/adminforge
   visudo -c
   install -d -m 700 -o adminforge -g adminforge /home/adminforge/.ssh
-  echo "$(cat ~/.ssh/adminforge_id.pub)" \
-      | install -m 600 -o adminforge -g adminforge /dev/stdin /home/adminforge/.ssh/authorized_keys
+  echo "$(cat ~/.ssh/adminforge_id.pub)" | tee /home/adminforge/.ssh/authorized_keys >/dev/null
+  chown adminforge:adminforge /home/adminforge/.ssh/authorized_keys
+  chmod 600 /home/adminforge/.ssh/authorized_keys
   EOF
   ```
 

@@ -197,7 +197,11 @@ adminforge apply --yes        # sem confirmacao
 adminforge apply --dry-run    # simula com DryRunDeployer
 adminforge apply --diff       # mostra unified diff do authorized_keys antes da confirmacao
 adminforge apply verify       # nao aplica nada — confere declarado vs real (authorized_keys + sudoers; rc=2 se houver drift)
+adminforge apply --force      # re-aplica toda chave declarada (idempotente), ignorando o que o Store marca como instalado
+adminforge apply --reconcile  # le o estado vivo de cada servidor antes do delta e reconverge
 ```
+
+`--force` e `--reconcile` resolvem o cenário em que o servidor divergiu do Store (ex.: conta/chave apagada manualmente): o `apply` comum entende "nada a fazer" porque confia no Store. `--reconcile` recria usuários/chaves deletados manualmente e remove blocos órfãos entre os usuários declarados; `--force` re-aplica tudo sem ler o servidor. `apply verify` agora também confere a existência da conta Unix — um bloco deixado por `userdel` sem `-r` não vira OK falso.
 
 Antes de cada edição em `authorized_keys`, o arquivo atual é copiado para `authorized_keys.bak` (mesmo dono, `0600`). Permite rollback manual em caso de erro.
 

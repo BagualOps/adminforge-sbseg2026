@@ -448,14 +448,57 @@ class Nucleo:
         except Exception as e:
             return self._registrar_falha(op, str(e))
 
-    def preview(self) -> list[Subacao]:
-        return self.planner.calcular_delta()
+    def preview(self, force: bool = False, reconcile: bool = False) -> list[Subacao]:
+        if reconcile:
+            return self.planner.calcular_delta(atual_override=self._atual_vivo())
+        return self.planner.calcular_delta(force=force)
 
-    def aplicar(self, jobs: int = 1) -> Operacao:
+    def _atual_vivo(self) -> dict[str, dict]:
+        """Estado real por servidor ({host: {ref: ChaveInstalada}}) via SSH, para o
+        planner usar como 'atual' no --reconcile."""
+        from adminforge import authorized_keys as ak
+        from adminforge.planner.planner import ChaveInstalada
+
+        prefixo = "adminforge-"
+        desejado = self.planner.estado_desejado()
+        out: dict[str, dict[str, ChaveInstalada]] = {}
+        for servidor in self.store.list_servidores():
+            alvo = desejado.get(servidor.hostname, {})
+            if not alvo:
+                continue
+            rel = self.deployer.inspecionar(servidor)
+            ok_rel = isinstance(rel, dict) and "erro" not in rel
+            real_users = {u["nome"] for u in rel.get("usuarios", [])} if ok_rel else set()
+            sudo_users = {a["nome"][len(prefixo):] for a in rel.get("sudoers_arquivos", [])
+                          if a.get("adminforge") and a.get("nome", "").startswith(prefixo)}
+            atual: dict[str, ChaveInstalada] = {}
+            for username in sorted({ci.username for ci in alvo.values()}):
+                if username not in real_users:
+                    continue
+                conteudo, ok = self.deployer.ler_authorized_keys(servidor, username)
+                if not ok:
+                    continue
+                nivel = NivelPermissao.SUDO if username in sudo_users else NivelPermissao.SHELL
+                for ref in ak.parse_blocos(conteudo):
+                    atual[ref] = ChaveInstalada(ref=ref, username=username, nivel=nivel)
+            out[servidor.hostname] = atual
+        return out
+
+    def aplicar(
+        self,
+        jobs: int = 1,
+        force: bool = False,
+        reconcile: bool = False,
+        subacoes: list[Subacao] | None = None,
+    ) -> Operacao:
         op = self._nova_op("apply")
         try:
             with self.store:
-                subacoes = self.planner.calcular_delta()
+                if subacoes is None:
+                    if reconcile:
+                        subacoes = self.planner.calcular_delta(atual_override=self._atual_vivo())
+                    else:
+                        subacoes = self.planner.calcular_delta(force=force)
                 if not subacoes:
                     return self._registrar(op, StatusOperacao.SUCESSO)
 

@@ -359,6 +359,8 @@ _CATALOGS: dict[str, dict[str, str]] = {
             "  ssh: nao foi possivel ler authorized_keys de {u} (sudo bloqueado?)",
         "  {u} {ref} — declared but not present on server":
             "  {u} {ref} — declarado mas ausente no servidor",
+        "  {u} {ref} — declared but account missing on server":
+            "  {u} {ref} — declarado mas a conta nao existe no servidor",
         "  {u} {ref} — declared under {decl} but found under {real}":
             "  {u} {ref} — declarado sob {decl} mas encontrado sob {real}",
         "  {u} {ref} — block on server but not in state":

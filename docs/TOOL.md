@@ -45,6 +45,9 @@ Detalhes em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#zero-deps).
 | 9 | Sudoers configurável por comando via `sudo-profile` (alternativa a `NOPASSWD:ALL`) | ✅ |
 | 10 | `apply verify` — confere `chaves_instaladas` declaradas vs reais | ✅ |
 | 11 | `apply --diff` mostra antes/depois do `authorized_keys` | ✅ |
+| 12 | `apply verify` também confere existência da conta Unix — bloco deixado por `userdel` sem `-r` não vira OK falso | ✅ |
+| 13 | `apply --reconcile` lê o estado vivo do servidor e reconverge (recria usuário/chave deletados manualmente, remove órfãos entre os declarados); `apply --force` re-aplica toda chave declarada | ✅ |
+| 14 | Escrita do `authorized_keys` via `tee`+temp+`mv` (não `install /dev/stdin`) — portável em coreutils minimalistas (busybox) | ✅ |
 
 ## Princípios
 
@@ -149,7 +152,7 @@ Receitário completo por caso de uso: [`docs/USAGE.md`](docs/USAGE.md).
 | UC-5  | `adminforge server-group ...`                          | Cria/edita grupo de servidores (aceita N membros). |
 | UC-6  | `adminforge permission grant/revoke/list/show`         | Liga grupos com nível `shell` ou `sudo`. Tudo sob o menu `permission`. |
 | UC-7  | `adminforge preview`                                   | Mostra o delta sem tocar em servidores. |
-| UC-8  | `adminforge apply` (`--diff`, `verify`)                | Propaga o delta via SSH (sequencial). `--diff` mostra antes/depois; `apply verify` confere declarado vs real. |
+| UC-8  | `adminforge apply` (`--diff`, `--force`, `--reconcile`, `verify`) | Propaga o delta via SSH (sequencial). `--diff` mostra antes/depois; `--force` re-aplica toda chave declarada (idempotente); `--reconcile` lê o estado real de cada servidor antes do delta e reconverge (recria usuário/chave deletados manualmente, remove órfãos entre os declarados); `apply verify` confere declarado vs real, inclusive a existência da conta Unix. |
 | UC-9  | `adminforge history list/show/failed/verify`           | Auditoria do que o Superadmin fez. |
 | UC-10 | `adminforge audit server`                              | Inspeção read-only: usuários classificados, grupos, mapa user×grupos, sudoers (com drift), serviços. |
 | —     | `adminforge status`                                    | Overview tipo `git status`: contagens, pendências do próximo `apply`, última operação, integridade do histórico. |

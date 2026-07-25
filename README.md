@@ -178,7 +178,7 @@ The full 5-repetition ladder up to N=50, all Ansible configurations, and the att
 ══════════════════════════════════════════════════════════════
   Reivindicação #3: attack surface of the base install
 ══════════════════════════════════════════════════════════════
-  Own code (adminforge/**.py)   : 3916 lines of code (claim: < 4,000)
+  Own code (adminforge/**.py)   : 3993 lines of code (claim: < 4,000)
   Third-party runtime imports   : 0   (claim: 0)
 
   Expected: code < 4,000 and 0 third-party imports  →  OK
