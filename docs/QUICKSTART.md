@@ -24,15 +24,18 @@ Se preferir o comando `adminforge` instalado de verdade, qualquer uma das opçõ
 
 ```bash
 pipx install .                       # isolado, recomendado
-pip install --user .                 # no PATH do usuario
-pip install -e . --break-system-packages   # ultimo recurso em distros estritas
 ```
 
-Para rodar a suíte de testes (depende de pytest):
+`pipx` instala num ambiente próprio e não esbarra no PEP 668. Não use
+`pip install --break-system-packages`: ele escreve no Python do sistema, que as
+distribuições atuais protegem por um motivo. A avaliação do artefato não precisa de
+nenhuma instalação, como diz o README.
+
+Para rodar a suíte de testes, use o pytest que a distribuição empacota
+(`sudo apt update && sudo apt install -y python3-pytest`):
 
 ```bash
-pip install -e .[dev]
-pytest -q
+python3 -m pytest tests/ -q
 ```
 
 ## 2. Configurar diretório de estado

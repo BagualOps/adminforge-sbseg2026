@@ -105,7 +105,7 @@ adminforge history verify
 Pra instalar como comando do sistema (opcional):
 
 ```bash
-pipx install .            # ou: pip install --user .
+pipx install .            # ambiente proprio, nao esbarra no PEP 668
 ```
 
 ### Autocomplete (bash/zsh)
@@ -122,7 +122,7 @@ grupos, hostnames, fingerprints lidos do `state/`).
 Habilitar:
 
 ```bash
-pipx install '.[completion]'                    # ou: pip install '.[completion]'
+pipx install '.[completion]'
 activate-global-python-argcomplete              # registra eval em /etc/bash_completion.d
 ```
 

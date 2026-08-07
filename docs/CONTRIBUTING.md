@@ -3,8 +3,8 @@
 ## Setup
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -e .[dev]
+python3 -m venv .venv && . .venv/bin/activate
+python3 -m pip install -e .[dev]
 ```
 
 ## Rodando testes

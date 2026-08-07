@@ -51,11 +51,11 @@ cleanup.sh           removes everything a run created
   the paper uses is committed here: the study responses, the questionnaire, the performance
   harness and the reference results. Nothing is fetched from a private location.
 - **Functional (SeloF):** `./minimal_test.sh` registers a user, adds an SSH key and verifies
-  the hash chain over both operations in about 15 seconds, with no Docker and no network.
+  the hash chain over both operations in a fraction of a second, with no Docker and no network.
 - **Sustainable (SeloS):** the tool is 3,993 lines of Python with **zero third-party runtime
   imports**, split one package per architecture module (`cli`, `store`, `planner`,
   `deployer`, `auditor`) over a single `domain.py`, so each concern is replaceable on its
-  own. 120 unit tests run offline in under three seconds; [`docs/TOOL.md`](docs/TOOL.md) documents every
+  own. 120 unit tests run offline in about four seconds; [`docs/TOOL.md`](docs/TOOL.md) documents every
   command; and Claim #3 measures both properties rather than asserting them. Because there
   are no dependencies, the artifact cannot rot through one: any Python 3.11 or newer runs it.
 - **Reproducible (SeloR):** Claims #2 and #3 are deterministic and offline, and reproduce the
@@ -76,17 +76,17 @@ Paper experiments ran on: AMD Ryzen 5 8600G (6 cores), 32 GB RAM, Linux kernel 6
 
 ### Reproduction time (and why it depends on your hardware)
 
-The claim scripts **measure live on your machine**, so wall-clock times scale with CPU speed, disk, and (first run only) how long Docker takes to build the fleet images and pull base images. The table below is a full clean-clone run on the reference machine above (a fast desktop). **On a slower CPU, a laptop, or a cold Docker cache, expect noticeably longer, especially for Claim #1.** What is *not* hardware-dependent, and is what each claim actually asserts, is the printed **`→ OK`** verdict and the ratios/counts behind it (per-host flatness, the no-op speedup over Ansible, the SLOC and import counts, the recomputed study statistics).
+The claim scripts **measure live on your machine**, so wall-clock times scale with CPU speed, disk, and (first run only) how long Docker takes to build the fleet images and pull base images. The table below was measured on an AMD Ryzen 7 9700X (16 threads, 59 GB RAM, Ubuntu 26.04), which is not the machine the paper used. **On a slower CPU, a laptop, or a cold Docker cache, expect noticeably longer, especially for Claim #1.** What is *not* hardware-dependent, and is what each claim actually asserts, is the printed **`→ OK`** verdict and the ratios/counts behind it (per-host flatness, the no-op speedup over Ansible, the SLOC and import counts, the recomputed study statistics).
 
-| Step | Command | Reference machine (Ryzen 5 8600G) |
+| Step | Command | Measured (Ryzen 7 9700X, warm Docker cache) |
 |---|---|---|
 | Install | none | 0 s |
-| Minimal test | `./minimal_test.sh` | ~15 s |
-| **Claim #1** | `./run_claim1.sh` | **~3.5 min** (Docker build + a live N=1/5 ladder and an N=10 Ansible run) |
-| **Claim #2** | `./run_claim2.sh` | **~1 s** |
-| **Claim #3** | `./run_claim3.sh` | **~0.1 s** |
+| Minimal test | `./minimal_test.sh` | 0.13 s |
+| **Claim #1** | `./run_claim1.sh` | **3m23s** (a live N=1/5 ladder and an N=10 Ansible run; the first run also builds the images) |
+| **Claim #2** | `./run_claim2.sh` | **0.02 s** |
+| **Claim #3** | `./run_claim3.sh` | **0.05 s** |
 
-> Times are the reference machine's; your numbers will differ. Only Claim #1 uses Docker; the first run also builds the fleet and Ansible-controller images (add build time on a cold cache). If you reproduce on other hardware, please open a PR/issue adding a row here.
+> These are one machine's numbers; yours will differ. Only Claim #1 uses Docker; the first run also builds the fleet and Ansible-controller images (add build time on a cold cache). If you reproduce on other hardware, please open a PR/issue adding a row here.
 
 # Dependencies
 
@@ -118,7 +118,7 @@ test and the three claims already run.
 
 # Minimal test
 
-One command, about 15 seconds, no Docker and no network. It registers a user, adds an SSH
+One command, well under a second, no Docker and no network. It registers a user, adds an SSH
 key and verifies the hash chain over the two operations:
 
 ```bash
@@ -135,7 +135,7 @@ MINIMAL TEST: PASSED
 ```
 
 With `pytest` installed, `python3 -m pytest tests/ -q` runs the offline suite as well:
-`120 passed, 2 skipped` in about 3 seconds.
+`120 passed, 2 skipped` in about 4 seconds.
 
 # Experiments
 
@@ -148,11 +148,18 @@ The paper makes three claims. Each is one command and prints a result box ending
 - **(a) Scalability:** a reduced ladder (N=1 and N=5, 1 repetition) via `infra/perf/run_e1.py`; checks the per-host cold-apply cost is flat (< 40% difference) and the no-op stays under 2 s.
 - **(b) Comparison with Ansible:** N=10 via `infra/perf/run_e2.py`; the Ansible control node runs as a container (no Ansible on the host), applies the equivalent playbook to the same fleet, and the script checks AdminForge's no-change apply is at least 5x faster than Ansible's equivalent re-run.
 
-**Execution:** one command (needs Docker + internet on first run).
+**Execution:** one command (needs Docker, and internet on the first run).
 
 ```bash
 ./run_claim1.sh
 ```
+
+- **Flags:** none.
+- **Expected time:** 3m23s measured with the images already built; the first run adds the
+  Docker build of the fleet and Ansible-controller images.
+- **Expected resources:** ~410 MB of Docker images (measured: the fleet image, the Ansible
+  fleet image and the controller), under 1 GB of RAM, and 11 local containers at the N=10
+  step. Docker required; no GPU.
 
 **Expected result** (numbers are from the reference machine; **your absolute seconds will differ**: what the claim asserts is the final `-> OK` and the hardware-independent quantities: per-host flatness, the tens-to-hundreds-x no-op speedup over Ansible, and 78 lines of YAML vs 29 commands):
 
@@ -184,13 +191,16 @@ The full 5-repetition ladder up to N=50, all Ansible configurations, and the att
 
 **What the paper asserts.**  All 39 numbers reported in the paper's per-task table and construct-aggregate table (medians, means, IQRs, standard deviations, top-box percentages). The evaluator recomputes them from the raw data without repeating the study; the annotation was performed by the paper authors and is not expected to be reproduced.
 
-**Execution:** one command (~2 s, no Docker, nothing installed).
+**Execution:** one command.
 
 ```bash
 ./run_claim2.sh
 ```
 
-
+- **Flags:** none.
+- **Expected time:** 0.02 s measured. It reads one committed CSV and recomputes.
+- **Expected resources:** ~13 MB peak RAM, no disk written. No Docker, no network, nothing
+  installed.
 
 **Expected result:**
 
@@ -227,11 +237,15 @@ The full 5-repetition ladder up to N=50, all Ansible configurations, and the att
 
 **What the paper asserts.** The tool's own source is under 4,000 lines of code (blank lines and comments excluded) and the base install imports nothing beyond the Python standard library at run time.
 
-**Execution:** one command (< 5 s, no Docker, no network).
+**Execution:** one command.
 
 ```bash
 ./run_claim3.sh
 ```
+
+- **Flags:** none.
+- **Expected time:** 0.05 s measured.
+- **Expected resources:** ~20 MB peak RAM. No Docker, no network.
 
 **Expected result (deterministic; the numbers below are exact, not hardware-dependent):**
 
