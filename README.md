@@ -5,24 +5,58 @@ This repository is the artifact of the paper *"AdminForge: Declarative Privilege
 <p align="center"><img src="docs/img/architecture.png" alt="AdminForge architecture: the operator drives the CLI; Planner and Deployer carry changes to the managed hosts over SSH; the Auditor records and inspects; the Store keeps the declared state and history in local JSON files" width="72%"></p>
 <p align="center"><img src="docs/img/use-cases.png" alt="Use cases: the superadmin registers admins, SSH keys and servers, manages groups, grants or revokes access, previews and applies changes, audits users and services, and views the history" width="46%"></p>
 
-# Estrutura do readme.md
+# README structure
 
-1. [Considered Seals](#considered-seals)
-2. [Basic information](#basic-information)
-3. [Dependencies](#dependencies)
-4. [Security concerns](#security-concerns)
-5. [Installation](#installation)
-6. [Minimal test](#minimal-test)
-7. [Experiments](#experiments) (Claims #1–#3)
-8. [Cleaning up](#cleaning-up)
-9. [How to cite](#how-to-cite)
-10. [LICENSE](#license)
+| Section | Description |
+|---|---|
+| [Considered seals](#considered-seals) | The four seals and why each one holds |
+| [Basic information](#basic-information) | OS, runtime, hardware and measured times |
+| [Dependencies](#dependencies) | What is required, and what is deliberately not |
+| [Security concerns](#security-concerns) | What runs where, network use, credentials |
+| [Installation](#installation) | Clone; nothing is installed |
+| [Minimal test](#minimal-test) | One command, one real registration, chain verified |
+| [Experiments](#experiments) | Claims #1 to #3, one command each |
+| [How to cite](#how-to-cite) | Paper reference, BibTeX and `CITATION.cff` |
+| [LICENSE](#license) | AGPL-3.0-or-later |
 
-Repository layout: `adminforge/` (the tool: one package per architecture module: `cli/`, `store/`, `planner/`, `deployer/`, `auditor/`, plus `domain.py`); `tests/` (offline unit tests); `infra/perf/` (performance-experiment harness and results); `docs/` (full tool documentation in `docs/TOOL.md`, usage guides, conceptual model, and the usability-study replication package under `docs/usability-study/`); `paper_data/AVAILABILITY.md` (index of every paper artefact).
+The repository is organized as follows:
 
-# Considered Seals
+```
+adminforge/          the tool, one package per architecture module
+  cli/               command-line entry points
+  store/             declared state and the append-only history
+  planner/           diffs the declared state against what the hosts have
+  deployer/          applies a plan over SSH
+  auditor/           reads back what is installed and reports drift
+  domain.py          the entities: users, keys, servers, groups, grants
+tests/               offline unit tests (120 passed, 2 skipped)
+infra/perf/          the Claim #1 harness: fleet builder, Ansible controller, timings
+paper_data/          the study responses, the questionnaire and AVAILABILITY.md
+docs/                TOOL.md, the conceptual model, and the usability-study package
+run_claim1.sh        Claim #1: per-host cost and the no-change apply against Ansible
+run_claim2.sh        Claim #2: the usability-study statistics
+run_claim3.sh        Claim #3: executed code surface and third-party imports
+minimal_test.sh      the minimal test
+cleanup.sh           removes everything a run created
+```
 
-The considered seals are: **Available (SeloD), Functional (SeloF), Sustainable (SeloS), and Reproducible (SeloR)**.
+# Considered seals
+
+- **Available (SeloD):** this repository is public under AGPL-3.0-or-later, and every input
+  the paper uses is committed here: the study responses, the questionnaire, the performance
+  harness and the reference results. Nothing is fetched from a private location.
+- **Functional (SeloF):** `./minimal_test.sh` registers a user, adds an SSH key and verifies
+  the hash chain over both operations in about 15 seconds, with no Docker and no network.
+- **Sustainable (SeloS):** the tool is 3,993 lines of Python with **zero third-party runtime
+  imports**, split one package per architecture module (`cli`, `store`, `planner`,
+  `deployer`, `auditor`) over a single `domain.py`, so each concern is replaceable on its
+  own. 120 unit tests run offline in under three seconds; `docs/TOOL.md` documents every
+  command; and Claim #3 measures both properties rather than asserting them. Because there
+  are no dependencies, the artifact cannot rot through one: any Python 3.11 or newer runs it.
+- **Reproducible (SeloR):** Claims #2 and #3 are deterministic and offline, and reproduce the
+  paper's numbers exactly. Claim #1 measures live on the reviewer's machine and gates on the
+  quantities that survive a change of hardware, per-host flatness and the ratio against
+  Ansible, never on absolute seconds.
 
 # Basic information
 
@@ -51,7 +85,7 @@ The claim scripts **measure live on your machine**, so wall-clock times scale wi
 
 # Dependencies
 
-The tool has **zero third-party Python dependencies at run time** (`dependencies = []` in `pyproject.toml`; only the standard library is imported). Optional extras: `completion` (argcomplete, shell autocompletion) and `dev` (pytest ≥ 8.0, for the test suite). Host tools needed are only **git, docker, python3, ssh, and ssh-keygen** (all standard on a Linux dev box). The experiment fleet uses the `debian:12-slim` Docker image with `openssh-server` and `sudo` (built locally by the claim scripts). **Ansible is never installed on the host:** Claim #1 builds an Ansible control-node container (`python:3.12-slim` + `ansible-core` + `openssh-client`) and runs the playbook from it, on the fleet's Docker network. Claim #1's first run therefore needs **internet** to pull the base images and install `ansible-core` into the controller image (Claims #2 and #3 are fully offline).
+The tool has **zero third-party Python dependencies at run time** (`dependencies = []` in `pyproject.toml`; only the standard library is imported). Optional extras: `completion` (argcomplete, shell autocompletion) and `dev` (pytest >= 8.0, for the test suite). Claim #2 reads the study responses from the committed CSV with the standard library, so it needs nothing installed either. Host tools needed are only **git, docker, python3, ssh, and ssh-keygen** (all standard on a Linux dev box). The experiment fleet uses the `debian:12-slim` Docker image with `openssh-server` and `sudo` (built locally by the claim scripts). **Ansible is never installed on the host:** Claim #1 builds an Ansible control-node container (`python:3.12-slim` + `ansible-core` + `openssh-client`) and runs the playbook from it, on the fleet's Docker network. Claim #1's first run therefore needs **internet** to pull the base images and install `ansible-core` into the controller image (Claims #2 and #3 are fully offline).
 
 # Security concerns
 
@@ -59,25 +93,35 @@ Everything runs locally: no telemetry, no external API calls, no credentials lea
 
 # Installation
 
+None. AdminForge has no third-party runtime dependencies, so it runs from the clone with
+the system Python:
+
 ```bash
 git clone https://github.com/BagualOps/adminforge-sbseg2026
 cd adminforge-sbseg2026
-python3 -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"        # < 1 min; installs the tool + pytest only
 ```
 
-After this, the `af` command (alias of `adminforge`) is available.
+Everything below is run as `python3 -m adminforge.cli.main` from this directory. `af` is
+the installed alias of the same entry point; installing is optional and only adds the
+shorter name:
+
+```bash
+pip install -e .        # optional; needs pip >= 21.3
+```
+
+Only the unit tests need a package that is not in the standard library:
+
+```bash
+pip install pytest      # optional, for the test suite alone
+```
 
 # Minimal test
 
-Offline unit tests, then one real registration observed end to end with the hash chain verified (~30 s, no Docker needed):
+One command, about 15 seconds, no Docker and no network. It registers a user, adds an SSH
+key and verifies the hash chain over the two operations:
 
 ```bash
-python3 -m pytest tests/ -q     # expected: "120 passed, 2 skipped" (~3 s, no network)
-export ADMINFORGE_STATE=$(mktemp -d)
-ssh-keygen -q -t ed25519 -N "" -f /tmp/alice_key
-af user add --username alice --name "Alice Souza" --email alice@example.com --key-file /tmp/alice_key.pub
-af history verify
+./minimal_test.sh
 ```
 
 Expected final lines:
@@ -86,7 +130,11 @@ Expected final lines:
   OK  user add alice  (OP-0001)
   OK  user key add alice  (OP-0002)
   OK  chain intact (last hash: <64 hex digits>)
+MINIMAL TEST: PASSED
 ```
+
+With `pytest` installed, `python3 -m pytest tests/ -q` runs the offline suite as well:
+`120 passed, 2 skipped` in about 3 seconds.
 
 # Experiments
 
@@ -112,13 +160,13 @@ The paper makes three claims. Each is one command and prints a result box ending
   Claim #1: linear per-host cost, and instant "is anything pending?"
 ======================================================================
   (a) Scalability (base image, measured live)
-      N=1  cold apply :   13.0 s     no-op apply : 0.05 s
-      N=5  cold apply :   64.9 s     no-op apply : 0.07 s
-      Per-host cold   : N=1 13.0 s/host   N=5 13.0 s/host   (diff 0.0%)
+      N=1  cold apply :  XXX.X s     no-op apply : X.XX s
+      N=5  cold apply :  XXX.X s     no-op apply : X.XX s
+      Per-host cold   : N=1 XX.X s/host   N=5 XX.X s/host   (diff X.X%)
 
   (b) Comparison with Ansible at N=10 (python3 image, measured live)
-      First apply     : AdminForge   14.1 s (parallel)   Ansible   23.6 s
-      No-op re-run    : AdminForge   0.09 s (local)      Ansible  20.81 s   (240x faster)
+      First apply     : AdminForge  XXX.X s (parallel)   Ansible  XXX.X s
+      No-op re-run    : AdminForge  X.XX s (local)      Ansible  XXX.X s   (XXXx faster)
       Write effort    : AdminForge 29 commands    Ansible 78 lines of YAML
 
   Assertions (hardware-independent):
@@ -135,23 +183,33 @@ The full 5-repetition ladder up to N=50, all Ansible configurations, and the att
 
 **What the paper asserts.**  All 39 numbers reported in the paper's per-task table and construct-aggregate table (medians, means, IQRs, standard deviations, top-box percentages).  The evaluator recomputes them from the raw data without repeating the study; the annotation was performed by the paper authors and is not expected to be reproduced.
 
-**Execution:** one command (~2 s, no Docker).
+**Execution:** one command (~2 s, no Docker, nothing installed).
 
 ```bash
 ./run_claim2.sh
 ```
 
+
+
 **Expected result:**
 
-```
-═══════════════════════════════════════════════════════════════════════════════════
-  Claim #2: Usability-study statistics recomputed from the
+```text
+================================================================================
+  Claim #2 — Usability study: paper statistics recomputed from the
   anonymized response data  (5 participants, no re-run of the study)
-═══════════════════════════════════════════════════════════════════════════════════
+================================================================================
   Task                               Confidence               Ease
   ──────────────────────────  ─────────────────  ─────────────────
   Register user and SSH key   7 (6.6)           6 (6.0)
-  ... (all 9 tasks) ...
+  Register servers            7 (6.6)           6 (6.2)
+  Organize groups             7 (6.4)           7 (6.6)
+  Grant access                7 (6.6)           6 (6.4)
+  Apply changes               6 (5.8)           6 (6.0)
+  Configure restricted sudo   7 (6.2)           5 (4.6)
+  Revoke access               7 (6.4)           6 (5.8)
+  Run audit                   5 (5.0)           6 (5.0)
+  Inspect history             7 (6.6)           6 (6.4)
+
   Construct                         Med       IQR   Top%    Mean     SD
   Perceived usefulness (PU)           6   3.8–7.0     60%   5.40   1.76
   Perceived ease of use (PEOU)        6   4.5–7.0     70%   5.55   1.61
@@ -159,10 +217,10 @@ The full 5-repetition ladder up to N=50, all Ansible configurations, and the att
   Security and confidence (SC)        6   3.0–7.0     65%   5.30   1.81
 
   All 39 study numbers match the paper  →  OK
-═══════════════════════════════════════════════════════════════════════════════════
+================================================================================
 ```
 
-**Reference data in the repository:** anonymized spreadsheet `paper_data/study-responses.xlsx` (timestamps removed, no names, no emails) and the questionnaire instrument `paper_data/study-questionnaire.pdf`.
+**Reference data in the repository:** anonymized responses `paper_data/study-responses.csv` (and the original `study-responses.xlsx`) (timestamps removed, no names, no emails) and the questionnaire instrument `paper_data/study-questionnaire.pdf`.
 
 ## Claim #3: Executed code surface under 4,000 lines with zero third-party runtime imports
 
@@ -189,7 +247,7 @@ The full 5-repetition ladder up to N=50, all Ansible configurations, and the att
 
 The line count excludes blank lines and comments (`grep -vhE '^[[:space:]]*(#|$)'`); the import check loads every runtime module and asserts none resolves to `site-packages`. The full measurement harness behind the paper's performance section (5-repetition ladders up to N=50 hosts, the Ansible comparison, and the attack-surface audit) lives in `infra/perf/`. Claim #2's reference data is in `paper_data/`.
 
-# Cleaning up
+## Cleaning up
 
 One command removes everything a run created: the environment, the caches, the state
 directory and any container left by Claim #1. It never touches anything tracked by git.

@@ -4,14 +4,21 @@
 # Deterministic; ~2 s; no Docker; requires only the Python standard library + openpyxl.
 set -euo pipefail; cd "$(dirname "$0")"
 exec python3 - <<'PYEOF'
-import subprocess, sys, statistics, json
-try: import openpyxl
-except ImportError:
-    subprocess.check_call([sys.executable,"-m","pip","install","-q","openpyxl"])
-    import openpyxl
+import csv, statistics, json
 
-wb=openpyxl.load_workbook("paper_data/study-responses.xlsx")
-ws=wb.active; rows=list(ws.iter_rows(min_row=2,values_only=True)); n=5
+# The responses are read from the CSV export, not from the .xlsx: reading the spreadsheet
+# needed openpyxl, which this artifact would then have to install at run time, breaking
+# both the "standard library only" property the paper measures and the promise that this
+# claim runs offline. The .xlsx ships beside it, unchanged, as the original export.
+def _num(v):
+    try: return int(v)
+    except (TypeError, ValueError):
+        try: return float(v)
+        except (TypeError, ValueError): return v or None
+
+with open("paper_data/study-responses.csv", newline="", encoding="utf-8") as f:
+    rows = [tuple(_num(c) for c in r) for r in list(csv.reader(f))[1:]]
+n=5
 
 def med(v): return statistics.median(v)
 def msd(v): m=statistics.mean(v); return m,statistics.stdev(v) if len(v)>1 else (m,0)

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Reivindicacao #3: executed code surface under 4,000 lines of code, zero
+# Claim #3: executed code surface under 4,000 lines of code, zero
 # third-party runtime imports in the base install. Deterministic; no Docker; ~5 s.
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -28,7 +28,7 @@ if [ "$LINES" -lt 4000 ] && [ "$NTHIRD" -eq 0 ]; then VERDICT="OK"; else VERDICT
 
 cat <<EOF
 ══════════════════════════════════════════════════════════════
-  Reivindicação #3: attack surface of the base install
+  Claim #3: attack surface of the base install
 ══════════════════════════════════════════════════════════════
   Own code (adminforge/**.py)   : ${LINES} lines of code (claim: < 4,000)
   Third-party runtime imports   : ${NTHIRD}${THIRD:+  ($THIRD)}   (claim: 0)

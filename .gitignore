@@ -42,3 +42,6 @@ teste/
 # of the throwaway keypair that run creates, so a committed copy would be stale and every
 # run would show the clone as modified.
 infra/perf/ansible/users.yml
+
+# uv is not part of this artifact: it has no runtime dependencies and installs nothing.
+uv.lock
