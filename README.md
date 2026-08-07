@@ -189,7 +189,7 @@ The full 5-repetition ladder up to N=50, all Ansible configurations, and the att
 
 ## Claim #2: Usability-study statistics recomputed from the anonymized response data
 
-**What the paper asserts.**  All 39 numbers reported in the paper's per-task table and construct-aggregate table (medians, means, IQRs, standard deviations, top-box percentages). The evaluator recomputes them from the raw data without repeating the study; the annotation was performed by the paper authors and is not expected to be reproduced.
+**What the paper asserts.** All 39 numbers reported in the paper's per-task table and construct-aggregate table (medians, means, IQRs, standard deviations, top-box percentages). The evaluator recomputes them from the raw data without repeating the study; the annotation was performed by the paper authors and is not expected to be reproduced.
 
 **Execution:** one command.
 
