@@ -75,8 +75,8 @@ The claim scripts **measure live on your machine**, so wall-clock times scale wi
 
 | Step | Command | Reference machine (Ryzen 5 8600G) |
 |---|---|---|
-| Install | `pip install -e ".[dev]"` | ~5 s |
-| Minimal test | `pytest` + the `af` commands | ~3 s |
+| Install | none | 0 s |
+| Minimal test | `./minimal_test.sh` | ~15 s |
 | **Claim #1** | `./run_claim1.sh` | **~3.5 min** (Docker build + a live N=1/5 ladder and an N=10 Ansible run) |
 | **Claim #2** | `./run_claim2.sh` | **~1 s** |
 | **Claim #3** | `./run_claim3.sh` | **~0.1 s** |
@@ -93,27 +93,23 @@ Everything runs locally: no telemetry, no external API calls, no credentials lea
 
 # Installation
 
-None. AdminForge has no third-party runtime dependencies, so it runs from the clone with
-the system Python:
+None. AdminForge imports nothing outside the Python standard library, so it runs from the
+clone with the system Python:
 
 ```bash
 git clone https://github.com/BagualOps/adminforge-sbseg2026
 cd adminforge-sbseg2026
 ```
 
-Everything below is run as `python3 -m adminforge.cli.main` from this directory. `af` is
-the installed alias of the same entry point; installing is optional and only adds the
-shorter name:
+Every command below is `python3 -m adminforge.cli.main` run from this directory, and the
+claim scripts call it that way themselves. There is nothing to install and nothing to
+activate. On a current Debian or Ubuntu, installing into the system Python is refused by
+PEP 668; this artifact never needs it.
 
-```bash
-pip install -e .        # optional; needs pip >= 21.3
-```
-
-Only the unit tests need a package that is not in the standard library:
-
-```bash
-pip install pytest      # optional, for the test suite alone
-```
+The one optional extra is `pytest`, and only to run the unit suite. If your system does not
+already provide it (`apt install python3-pytest` on Debian and Ubuntu, `dnf install
+python3-pytest` on Fedora), the suite can be skipped: it exercises the same code the minimal
+test and the three claims already run.
 
 # Minimal test
 
