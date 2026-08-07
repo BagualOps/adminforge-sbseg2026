@@ -1,6 +1,6 @@
 # AdminForge: Declarative Privileged-Identity Management for Linux Server Fleets
 
-This repository is the artifact of the paper *"AdminForge: Declarative Privileged-Identity Management for Linux Server Fleets"* (SBSeg 2026, Salão de Ferramentas, Código Aberto). AdminForge is an open-source command-line tool that manages users, SSH keys, and access permissions on Linux server fleets: the operator declares the desired access state, previews the resulting changes, and applies them over SSH, with every operation appended to a local, hash-chained operation history and no resident service installed on managed hosts. The paper reports an exploratory usability evaluation (five experienced Linux administrators completed the full nine-task workflow without prior training, median ratings 6/7) and a performance evaluation on a local Docker fleet. A demonstration video explaining installation and features is available at https://youtu.be/6rs2qtIuMvs.
+This repository is the artifact of the paper *"AdminForge: Declarative Privileged-Identity Management for Linux Server Fleets"* (SBSeg 2026, Salão de Ferramentas, Código Aberto). AdminForge is an open-source command-line tool that manages users, SSH keys, and access permissions on Linux server fleets: the operator declares the desired access state, previews the resulting changes, and applies them over SSH, with every operation appended to a local, hash-chained operation history and no resident service installed on managed hosts. The paper reports an exploratory usability evaluation (five experienced Linux administrators completed the full nine-task workflow without prior training, median ratings 6/7) and a performance evaluation on a local Docker fleet. A [demonstration video](https://youtu.be/6rs2qtIuMvs) explains installation and features.
 
 <p align="center"><img src="docs/img/architecture.png" alt="AdminForge architecture: the operator drives the CLI; Planner and Deployer carry changes to the managed hosts over SSH; the Auditor records and inspects; the Store keeps the declared state and history in local JSON files" width="72%"></p>
 <p align="center"><img src="docs/img/use-cases.png" alt="Use cases: the superadmin registers admins, SSH keys and servers, manages groups, grants or revokes access, previews and applies changes, audits users and services, and views the history" width="46%"></p>
@@ -145,8 +145,8 @@ The paper makes three claims. Each is one command and prints a result box ending
 
 **What the paper asserts.** Cold `apply` costs a roughly constant time per host (so it scales linearly with the fleet), and a no-change `apply` is answered from local state without touching any host, far faster than an Ansible re-run that must reconnect to every host. The script measures both **live on your machine**, into a throwaway directory (it never reuses the committed reference numbers):
 
-- **(a) Scalability:** a reduced ladder (N=1 and N=5, 1 repetition) via `infra/perf/run_e1.py`; checks the per-host cold-apply cost is flat (< 40% difference) and the no-op stays under 2 s.
-- **(b) Comparison with Ansible:** N=10 via `infra/perf/run_e2.py`; the Ansible control node runs as a container (no Ansible on the host), applies the equivalent playbook to the same fleet, and the script checks AdminForge's no-change apply is at least 5x faster than Ansible's equivalent re-run.
+- **(a) Scalability:** a reduced ladder (N=1 and N=5, 1 repetition) via [`infra/perf/run_e1.py`](infra/perf/run_e1.py); checks the per-host cold-apply cost is flat (< 40% difference) and the no-op stays under 2 s.
+- **(b) Comparison with Ansible:** N=10 via [`infra/perf/run_e2.py`](infra/perf/run_e2.py); the Ansible control node runs as a container (no Ansible on the host), applies the equivalent playbook to the same fleet, and the script checks AdminForge's no-change apply is at least 5x faster than Ansible's equivalent re-run.
 
 **Execution:** one command (needs Docker, and internet on the first run).
 
@@ -161,7 +161,7 @@ The paper makes three claims. Each is one command and prints a result box ending
   fleet image and the controller), under 1 GB of RAM, and 11 local containers at the N=10
   step. Docker required; no GPU.
 
-**Expected result** (numbers are from the reference machine; **your absolute seconds will differ**: what the claim asserts is the final `-> OK` and the hardware-independent quantities: per-host flatness, the tens-to-hundreds-x no-op speedup over Ansible, and 78 lines of YAML vs 29 commands):
+**Expected result** (`XXX` marks every value that is yours, not ours: **your absolute seconds will differ**, and what the claim asserts is the final `-> OK` and the hardware-independent quantities: per-host flatness, the tens-to-hundreds-x no-op speedup over Ansible, and 78 lines of YAML vs 29 commands):
 
 ```
 ======================================================================
