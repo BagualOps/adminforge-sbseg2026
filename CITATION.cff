@@ -1,0 +1,49 @@
+cff-version: 1.2.0
+message: "If you use this artifact, please cite the paper below."
+title: "AdminForge: Declarative Privileged-Identity Management for Linux Server Fleets"
+abstract: >-
+  An open-source command-line tool that manages accounts, SSH keys and permissions on Linux
+  server fleets from one operator machine: the operator edits the declared state, previews
+  the changes, and applies them over SSH, recording every action in a local history and
+  installing nothing on the hosts.
+type: software
+license: AGPL-3.0-or-later
+repository-code: "https://github.com/BagualOps/adminforge-sbseg2026"
+keywords:
+  - privileged-identity-management
+  - ssh
+  - linux
+  - declarative-configuration
+  - reproducibility
+authors:
+  - family-names: Ribeiro
+    given-names: Rui de Quadros
+    orcid: "https://orcid.org/0000-0003-0287-9007"
+    affiliation: "AI Horizon Labs / PPGES, Universidade Federal do Pampa (UNIPAMPA); CPD, Universidade Federal do Rio Grande do Sul (UFRGS)"
+  - family-names: Kapelinski
+    given-names: Cristhian
+    orcid: "https://orcid.org/0009-0005-5750-022X"
+    affiliation: "AI Horizon Labs, Universidade Federal do Pampa (UNIPAMPA)"
+  - family-names: Kreutz
+    given-names: Diego
+    orcid: "https://orcid.org/0000-0003-0830-0238"
+    affiliation: "AI Horizon Labs, Universidade Federal do Pampa (UNIPAMPA)"
+preferred-citation:
+  type: conference-paper
+  title: "AdminForge: Declarative Privileged-Identity Management for Linux Server Fleets"
+  year: 2026
+  collection-title: "Anais do XXVI Simpósio Brasileiro de Segurança da Informação e de Sistemas Computacionais (SBSeg 2026)"
+  conference:
+    name: "Simpósio Brasileiro de Segurança da Informação e de Sistemas Computacionais (SBSeg 2026), Salão de Ferramentas"
+  publisher:
+    name: "Sociedade Brasileira de Computação (SBC)"
+  authors:
+    - family-names: Ribeiro
+      given-names: Rui de Quadros
+      orcid: "https://orcid.org/0000-0003-0287-9007"
+    - family-names: Kapelinski
+      given-names: Cristhian
+      orcid: "https://orcid.org/0009-0005-5750-022X"
+    - family-names: Kreutz
+      given-names: Diego
+      orcid: "https://orcid.org/0000-0003-0830-0238"

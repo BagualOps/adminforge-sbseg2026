@@ -14,7 +14,9 @@ This repository is the artifact of the paper *"AdminForge: Declarative Privilege
 5. [Installation](#installation)
 6. [Minimal test](#minimal-test)
 7. [Experiments](#experiments) (Claims #1–#3)
-8. [LICENSE](#license)
+8. [Cleaning up](#cleaning-up)
+9. [How to cite](#how-to-cite)
+10. [LICENSE](#license)
 
 Repository layout: `adminforge/` (the tool: one package per architecture module: `cli/`, `store/`, `planner/`, `deployer/`, `auditor/`, plus `domain.py`); `tests/` (offline unit tests); `infra/perf/` (performance-experiment harness and results); `docs/` (full tool documentation in `docs/TOOL.md`, usage guides, conceptual model, and the usability-study replication package under `docs/usability-study/`); `paper_data/AVAILABILITY.md` (index of every paper artefact).
 
@@ -71,7 +73,7 @@ After this, the `af` command (alias of `adminforge`) is available.
 Offline unit tests, then one real registration observed end to end with the hash chain verified (~30 s, no Docker needed):
 
 ```bash
-python3 -m pytest tests/ -q     # expected: "112 passed, 1 skipped" (~3 s, no network)
+python3 -m pytest tests/ -q     # expected: "120 passed, 2 skipped" (~3 s, no network)
 export ADMINFORGE_STATE=$(mktemp -d)
 ssh-keygen -q -t ed25519 -N "" -f /tmp/alice_key
 af user add --username alice --name "Alice Souza" --email alice@example.com --key-file /tmp/alice_key.pub
@@ -186,6 +188,39 @@ The full 5-repetition ladder up to N=50, all Ansible configurations, and the att
 ```
 
 The line count excludes blank lines and comments (`grep -vhE '^[[:space:]]*(#|$)'`); the import check loads every runtime module and asserts none resolves to `site-packages`. The full measurement harness behind the paper's performance section (5-repetition ladders up to N=50 hosts, the Ansible comparison, and the attack-surface audit) lives in `infra/perf/`. Claim #2's reference data is in `paper_data/`.
+
+# Cleaning up
+
+One command removes everything a run created: the environment, the caches, the state
+directory and any container left by Claim #1. It never touches anything tracked by git.
+
+```bash
+./cleanup.sh
+```
+
+Pass `--dry-run` to list what would go without removing it.
+
+# How to cite
+
+If you use this artifact, please cite the paper:
+
+> Ribeiro, R. Q., Kapelinski, C. and Kreutz, D. (2026). AdminForge: Declarative
+> Privileged-Identity Management for Linux Server Fleets. In *Anais do XXVI Simpósio
+> Brasileiro de Segurança da Informação e de Sistemas Computacionais (SBSeg 2026)*, Salão
+> de Ferramentas. Sociedade Brasileira de Computação (SBC).
+
+```bibtex
+@inproceedings{ribeiro2026adminforge,
+  title     = {{AdminForge}: Declarative Privileged-Identity Management for {Linux} Server Fleets},
+  author    = {Ribeiro, Rui de Quadros and Kapelinski, Cristhian and Kreutz, Diego},
+  booktitle = {Anais do XXVI Simp\'osio Brasileiro de Seguran\c{c}a da Informa\c{c}\~ao e de
+               Sistemas Computacionais (SBSeg 2026), Sal\~ao de Ferramentas},
+  year      = {2026},
+  publisher = {Sociedade Brasileira de Computa\c{c}\~ao (SBC)},
+}
+```
+
+[`CITATION.cff`](CITATION.cff) carries the same reference in machine-readable form.
 
 # LICENSE
 
