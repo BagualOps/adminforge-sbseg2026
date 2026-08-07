@@ -5,6 +5,10 @@ This repository is the artifact of the paper *"AdminForge: Declarative Privilege
 <p align="center"><img src="docs/img/architecture.png" alt="AdminForge architecture: the operator drives the CLI; Planner and Deployer carry changes to the managed hosts over SSH; the Auditor records and inspects; the Store keeps the declared state and history in local JSON files" width="72%"></p>
 <p align="center"><img src="docs/img/use-cases.png" alt="Use cases: the superadmin registers admins, SSH keys and servers, manages groups, grants or revokes access, previews and applies changes, audits users and services, and views the history" width="46%"></p>
 
+> **For the artifact evaluation, this README is the only file you need to read.** The other
+> Markdown files in the repository are complementary: [`docs/TOOL.md`](docs/TOOL.md) is the
+> command reference and [`docs/usability-study/`](docs/usability-study/) is the study package.
+
 # README structure
 
 | Section | Description |
@@ -16,6 +20,7 @@ This repository is the artifact of the paper *"AdminForge: Declarative Privilege
 | [Installation](#installation) | Clone; nothing is installed |
 | [Minimal test](#minimal-test) | One command, one real registration, chain verified |
 | [Experiments](#experiments) | Claims #1 to #3, one command each |
+| [Cleaning up](#cleaning-up) | One command removes what a run created |
 | [How to cite](#how-to-cite) | Paper reference, BibTeX and `CITATION.cff` |
 | [LICENSE](#license) | AGPL-3.0-or-later |
 
@@ -50,7 +55,7 @@ cleanup.sh           removes everything a run created
 - **Sustainable (SeloS):** the tool is 3,993 lines of Python with **zero third-party runtime
   imports**, split one package per architecture module (`cli`, `store`, `planner`,
   `deployer`, `auditor`) over a single `domain.py`, so each concern is replaceable on its
-  own. 120 unit tests run offline in under three seconds; `docs/TOOL.md` documents every
+  own. 120 unit tests run offline in under three seconds; [`docs/TOOL.md`](docs/TOOL.md) documents every
   command; and Claim #3 measures both properties rather than asserting them. Because there
   are no dependencies, the artifact cannot rot through one: any Python 3.11 or newer runs it.
 - **Reproducible (SeloR):** Claims #2 and #3 are deterministic and offline, and reproduce the
@@ -71,7 +76,7 @@ Paper experiments ran on: AMD Ryzen 5 8600G (6 cores), 32 GB RAM, Linux kernel 6
 
 ### Reproduction time (and why it depends on your hardware)
 
-The claim scripts **measure live on your machine**, so wall-clock times scale with CPU speed, disk, and (first run only) how long Docker takes to build the fleet images and pull base images. The table below is a full clean-clone run on the reference machine above (a fast desktop). **On a slower CPU, a laptop, or a cold Docker cache, expect noticeably longer, especially for Claim #1.** What is *not* hardware-dependent, and is what each claim actually asserts, is the printed **`→ OK`** verdict and the ratios/counts behind it (per-host flatness, the ~200× no-op speedup over Ansible, the SLOC and import counts, the recomputed study statistics).
+The claim scripts **measure live on your machine**, so wall-clock times scale with CPU speed, disk, and (first run only) how long Docker takes to build the fleet images and pull base images. The table below is a full clean-clone run on the reference machine above (a fast desktop). **On a slower CPU, a laptop, or a cold Docker cache, expect noticeably longer, especially for Claim #1.** What is *not* hardware-dependent, and is what each claim actually asserts, is the printed **`→ OK`** verdict and the ratios/counts behind it (per-host flatness, the no-op speedup over Ansible, the SLOC and import counts, the recomputed study statistics).
 
 | Step | Command | Reference machine (Ryzen 5 8600G) |
 |---|---|---|
@@ -107,8 +112,8 @@ activate. On a current Debian or Ubuntu, installing into the system Python is re
 PEP 668; this artifact never needs it.
 
 The one optional extra is `pytest`, and only to run the unit suite. If your system does not
-already provide it (`apt install python3-pytest` on Debian and Ubuntu, `dnf install
-python3-pytest` on Fedora), the suite can be skipped: it exercises the same code the minimal
+already provide it (`sudo apt update && sudo apt install -y python3-pytest` on Debian and Ubuntu,
+`sudo dnf install -y python3-pytest` on Fedora), the suite can be skipped: it exercises the same code the minimal
 test and the three claims already run.
 
 # Minimal test
@@ -134,7 +139,7 @@ With `pytest` installed, `python3 -m pytest tests/ -q` runs the offline suite as
 
 # Experiments
 
-The paper makes three claims. Each is one command and prints a result box ending in `→ OK` so the evaluator knows it came out right.  Claim #1 needs Docker (the rest do not).  Wall-clock times scale with CPU speed; the assertions are hardware-independent (ratios, counts, recomputed statistics).
+The paper makes three claims. Each is one command and prints a result box ending in `→ OK` so the evaluator knows it came out right. Claim #1 needs Docker (the rest do not). Wall-clock times scale with CPU speed; the assertions are hardware-independent (ratios, counts, recomputed statistics).
 
 ## Claim #1: Linear per-host cost, and an instant "is anything pending?" against Ansible
 
@@ -149,7 +154,7 @@ The paper makes three claims. Each is one command and prints a result box ending
 ./run_claim1.sh
 ```
 
-**Expected result** (numbers are from the reference machine; **your absolute seconds will differ** - what the claim asserts is the final `-> OK` and the hardware-independent quantities: per-host flatness, the tens-to-hundreds-x no-op speedup over Ansible, and 78 lines of YAML vs 29 commands):
+**Expected result** (numbers are from the reference machine; **your absolute seconds will differ**: what the claim asserts is the final `-> OK` and the hardware-independent quantities: per-host flatness, the tens-to-hundreds-x no-op speedup over Ansible, and 78 lines of YAML vs 29 commands):
 
 ```
 ======================================================================
@@ -173,11 +178,11 @@ The paper makes three claims. Each is one command and prints a result box ending
 ======================================================================
 ```
 
-The full 5-repetition ladder up to N=50, all Ansible configurations, and the attack-surface check live in `infra/perf/`, with the paper's committed per-repetition results under `infra/perf/results/`.
+The full 5-repetition ladder up to N=50, all Ansible configurations, and the attack-surface check live in [`infra/perf/`](infra/perf/), with the paper's committed per-repetition results under [`infra/perf/results/`](infra/perf/results/).
 
 ## Claim #2: Usability-study statistics recomputed from the anonymized response data
 
-**What the paper asserts.**  All 39 numbers reported in the paper's per-task table and construct-aggregate table (medians, means, IQRs, standard deviations, top-box percentages).  The evaluator recomputes them from the raw data without repeating the study; the annotation was performed by the paper authors and is not expected to be reproduced.
+**What the paper asserts.**  All 39 numbers reported in the paper's per-task table and construct-aggregate table (medians, means, IQRs, standard deviations, top-box percentages). The evaluator recomputes them from the raw data without repeating the study; the annotation was performed by the paper authors and is not expected to be reproduced.
 
 **Execution:** one command (~2 s, no Docker, nothing installed).
 
@@ -216,7 +221,7 @@ The full 5-repetition ladder up to N=50, all Ansible configurations, and the att
 ================================================================================
 ```
 
-**Reference data in the repository:** anonymized responses `paper_data/study-responses.csv` (and the original `study-responses.xlsx`) (timestamps removed, no names, no emails) and the questionnaire instrument `paper_data/study-questionnaire.pdf`.
+**Reference data in the repository:** anonymized responses [`paper_data/study-responses.csv`](paper_data/study-responses.csv) (and the original [`study-responses.xlsx`](paper_data/study-responses.xlsx)) (timestamps removed, no names, no emails) and the questionnaire instrument [`paper_data/study-questionnaire.pdf`](paper_data/study-questionnaire.pdf).
 
 ## Claim #3: Executed code surface under 4,000 lines with zero third-party runtime imports
 
@@ -232,7 +237,7 @@ The full 5-repetition ladder up to N=50, all Ansible configurations, and the att
 
 ```
 ══════════════════════════════════════════════════════════════
-  Reivindicação #3: attack surface of the base install
+  Claim #3: attack surface of the base install
 ══════════════════════════════════════════════════════════════
   Own code (adminforge/**.py)   : 3993 lines of code (claim: < 4,000)
   Third-party runtime imports   : 0   (claim: 0)
@@ -241,7 +246,7 @@ The full 5-repetition ladder up to N=50, all Ansible configurations, and the att
 ══════════════════════════════════════════════════════════════
 ```
 
-The line count excludes blank lines and comments (`grep -vhE '^[[:space:]]*(#|$)'`); the import check loads every runtime module and asserts none resolves to `site-packages`. The full measurement harness behind the paper's performance section (5-repetition ladders up to N=50 hosts, the Ansible comparison, and the attack-surface audit) lives in `infra/perf/`. Claim #2's reference data is in `paper_data/`.
+The line count excludes blank lines and comments (`grep -vhE '^[[:space:]]*(#|$)'`); the import check loads every runtime module and asserts none resolves to `site-packages`. The full measurement harness behind the paper's performance section (5-repetition ladders up to N=50 hosts, the Ansible comparison, and the attack-surface audit) lives in [`infra/perf/`](infra/perf/). Claim #2's reference data is in [`paper_data/`](paper_data/).
 
 ## Cleaning up
 
