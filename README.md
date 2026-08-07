@@ -191,7 +191,7 @@ what the claim asserts does not move.
 | Machine | Per-host cold apply | Flatness | No-op apply | vs Ansible re-run |
 |---|---|---|---|---|
 | Ryzen 7 9700X, 16 threads | 11.5 / 11.3 s | 1.7% | 0.08 s | 256x |
-| Xeon server (`l01`) | 20.9 / 20.5 s | 2.0% | 0.15 s | 155x |
+| A second, slower host | 20.9 / 20.5 s | 2.0% | 0.15 s | 155x |
 
 The full 5-repetition ladder up to N=50, all Ansible configurations, and the attack-surface check live in [`infra/perf/`](infra/perf/), with the paper's committed per-repetition results under [`infra/perf/results/`](infra/perf/results/).
 
