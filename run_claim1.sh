@@ -11,11 +11,29 @@
 #       control node runs as a container (no ansible on the host), against the
 #       same fleet; checks AdminForge's no-change apply is far below Ansible's
 #       equivalent re-run.
-# Host tools: git, docker, python3, ssh/ssh-keygen. First run pulls the base
+# Host tools: git, docker, python3, ssh/ssh-keygen (checked below; GNU time optional). First run pulls the base
 # image and builds the fleet/ansible images; requires Docker and internet.
 # Wall-clock times scale with CPU speed; the assertions are ratios/thresholds.
 set -euo pipefail
 cd "$(dirname "$0")"
+
+# Every external tool this claim shells out to, checked before anything is built, so a
+# missing one names itself here instead of surfacing as a traceback ten minutes in.
+missing=""
+for t in git docker python3 ssh ssh-keygen; do
+  command -v "$t" >/dev/null 2>&1 || missing="$missing $t"
+done
+if [ -n "$missing" ]; then
+  echo "missing required tool(s):$missing" >&2
+  echo "  Debian/Ubuntu: sudo apt install$missing" >&2
+  exit 1
+fi
+docker info >/dev/null 2>&1 || { echo "docker is installed but not usable by this user." >&2
+  echo "  start it (sudo systemctl start docker) or add yourself: sudo usermod -aG docker \$USER" >&2; exit 1; }
+# GNU time is optional: it only fills the peak-memory column. Without it the run
+# proceeds and that column reads "n/a"; no assertion depends on it.
+command -v time >/dev/null 2>&1 || [ -x /usr/bin/time ] || \
+  echo "note: GNU time not installed, peak-memory column will be blank (apt install time)"
 
 WORK=$(mktemp -d)
 RAW="$WORK/raw"                       # live results, isolated from committed data

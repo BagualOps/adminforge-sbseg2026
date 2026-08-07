@@ -28,6 +28,8 @@ RESULTS_RAW = Path(os.environ.get("PERF_RESULTS_RAW", PERF_DIR / "results" / "ra
 TESTLAB = REPO_ROOT / "infra" / "testlab"
 
 
+_GNU_TIME = shutil.which("time") or shutil.which("gtime")
+
 def key_dir() -> Path:
     """Directory able to hold 0600 private keys.
 
@@ -170,13 +172,17 @@ def af(args: list[str], state_dir: Path, check: bool = True,
        ) -> tuple[subprocess.CompletedProcess, float, int | None]:
     """Run one AdminForge CLI command. Returns (proc, wall_seconds, peak_rss_kib)."""
     base = [sys.executable, "-m", "adminforge.cli.main", "--state", str(state_dir), *args]
-    if time_v:
-        base = ["/usr/bin/time", "-v", *base]
+    # Peak RSS is read from GNU time when it is installed. It is absent on many minimal
+    # systems, and it is not what any claim asserts: the wall clock below is measured here,
+    # and Claim #1 gates on ratios of it. So a missing /usr/bin/time costs the memory column
+    # and nothing else, instead of ending the run in a FileNotFoundError.
+    if time_v and _GNU_TIME:
+        base = [_GNU_TIME, "-v", *base]
     t0 = time.monotonic()
     proc = sh(base, check=check, env=af_env(state_dir), input_text=input_text)
     wall = time.monotonic() - t0
     rss = None
-    if time_v:
+    if time_v and _GNU_TIME:
         m = re.search(r"Maximum resident set size \(kbytes\): (\d+)", proc.stderr)
         if m:
             rss = int(m.group(1))
