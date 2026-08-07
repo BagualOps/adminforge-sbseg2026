@@ -25,7 +25,7 @@ for t in git docker python3 ssh ssh-keygen; do
 done
 if [ -n "$missing" ]; then
   echo "missing required tool(s):$missing" >&2
-  echo "  Debian/Ubuntu: sudo apt install$missing" >&2
+  echo "  Debian/Ubuntu: sudo apt update && sudo apt install -y$missing" >&2
   exit 1
 fi
 docker info >/dev/null 2>&1 || { echo "docker is installed but not usable by this user." >&2
@@ -33,7 +33,7 @@ docker info >/dev/null 2>&1 || { echo "docker is installed but not usable by thi
 # GNU time is optional: it only fills the peak-memory column. Without it the run
 # proceeds and that column reads "n/a"; no assertion depends on it.
 command -v time >/dev/null 2>&1 || [ -x /usr/bin/time ] || \
-  echo "note: GNU time not installed, peak-memory column will be blank (apt install time)"
+  echo "note: GNU time not installed, peak-memory column will be blank (sudo apt update && sudo apt install -y time)"
 
 WORK=$(mktemp -d)
 RAW="$WORK/raw"                       # live results, isolated from committed data
