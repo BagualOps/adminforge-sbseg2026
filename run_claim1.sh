@@ -25,7 +25,30 @@ for t in git docker python3 ssh ssh-keygen; do
 done
 if [ -n "$missing" ]; then
   echo "missing required tool(s):$missing" >&2
-  echo "  Debian/Ubuntu: sudo apt update && sudo apt install -y$missing" >&2
+  # A tool name is not a package name -- ssh-keygen ships inside openssh-client, so
+  # echoing the tool list back as an apt line hands the evaluator a command that
+  # cannot succeed. Map each tool to the package of the manager actually present.
+  if   command -v apt-get >/dev/null 2>&1; then mgr="sudo apt-get update && sudo apt-get install -y"; d=apt
+  elif command -v dnf     >/dev/null 2>&1; then mgr="sudo dnf install -y";                            d=dnf
+  elif command -v pacman  >/dev/null 2>&1; then mgr="sudo pacman -Sy --needed";                       d=pacman
+  elif command -v zypper  >/dev/null 2>&1; then mgr="sudo zypper install -y";                         d=zypper
+  else mgr=""; d=other; fi
+  pkgs=""
+  for t in $missing; do
+    case "$t/$d" in
+      docker/apt)                  p=docker.io ;;
+      docker/*)                    p=docker ;;
+      python3/pacman)              p=python ;;
+      python3/*)                   p=python3 ;;
+      ssh/apt|ssh-keygen/apt)      p=openssh-client ;;
+      ssh/pacman|ssh-keygen/pacman) p=openssh ;;
+      ssh/*|ssh-keygen/*)          p=openssh-clients ;;
+      *)                           p=$t ;;
+    esac
+    case " $pkgs " in *" $p "*) ;; *) pkgs="$pkgs $p" ;; esac
+  done
+  if [ -n "$mgr" ]; then echo "  $mgr$pkgs" >&2
+  else echo "  install the equivalent of:$pkgs" >&2; fi
   exit 1
 fi
 docker info >/dev/null 2>&1 || { echo "docker is installed but not usable by this user." >&2

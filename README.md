@@ -90,7 +90,17 @@ The claim scripts **measure live on your machine**, so wall-clock times scale wi
 
 # Dependencies
 
-The tool has **zero third-party Python dependencies at run time** (`dependencies = []` in `pyproject.toml`; only the standard library is imported). Optional extras: `completion` (argcomplete, shell autocompletion) and `dev` (pytest >= 8.0, for the test suite). Claim #2 reads the study responses from the committed CSV with the standard library, so it needs nothing installed either. Host tools needed are only **git, docker, python3, ssh, and ssh-keygen** (all standard on a Linux dev box). The experiment fleet uses the `debian:12-slim` Docker image with `openssh-server` and `sudo` (built locally by the claim scripts). **Ansible is never installed on the host:** Claim #1 builds an Ansible control-node container (`python:3.12-slim` + `ansible-core` + `openssh-client`) and runs the playbook from it, on the fleet's Docker network. Claim #1's first run therefore needs **internet** to pull the base images and install `ansible-core` into the controller image (Claims #2 and #3 are fully offline).
+The tool has **zero third-party Python dependencies at run time** (`dependencies = []` in `pyproject.toml`; only the standard library is imported). Optional extras: `completion` (argcomplete, shell autocompletion) and `dev` (pytest >= 8.0, for the test suite). Claim #2 reads the study responses from the committed CSV with the standard library, so it needs nothing installed either. Host tools needed are only **git, docker, python3, ssh, and ssh-keygen**, plus a Docker daemon running and usable by your user without `sudo`. `run_claim1.sh` checks all of them before building anything and prints the install command for the package manager it finds. Note that `ssh` and `ssh-keygen` come from one package, whose name is not the tool name:
+
+```bash
+sudo apt-get update && sudo apt-get install -y git docker.io python3 openssh-client   # Debian, Ubuntu
+sudo dnf install -y git docker python3 openssh-clients                                # Fedora, RHEL
+sudo pacman -Sy --needed git docker python openssh                                    # Arch
+sudo zypper install -y git docker python3 openssh-clients                             # openSUSE
+sudo usermod -aG docker "$USER" && newgrp docker                                      # use docker without sudo
+```
+
+Claims #2 and #3 need only git and python3. The experiment fleet uses the `debian:12-slim` Docker image with `openssh-server` and `sudo` (built locally by the claim scripts). **Ansible is never installed on the host:** Claim #1 builds an Ansible control-node container (`python:3.12-slim` + `ansible-core` + `openssh-client`) and runs the playbook from it, on the fleet's Docker network. Claim #1's first run therefore needs **internet** to pull the base images and install `ansible-core` into the controller image (Claims #2 and #3 are fully offline).
 
 # Security concerns
 
