@@ -1,3 +1,17 @@
+"""Compute the SSH-key/permission delta between declared state and installed state.
+
+`Planner` is where the paper's declared-vs-real state comparison and the
+linear-per-host apply cost originate. `estado_desejado` expands users, groups
+and permissions into a per-host, per-key desired state purely from `IStore`
+reads (no network I/O). `calcular_delta` then diffs that desired state
+against either the state already persisted on each `Servidor` (the default,
+and the fast "is anything pending?" path, since it touches no host) or an
+`atual_override` supplied by the caller (used by `Nucleo` with
+`--reconcile` to diff against state fetched live over SSH instead). The
+per-host loop inside `calcular_delta` is independent across hosts, which is
+what lets `Nucleo.aplicar` parallelize the subsequent apply step.
+"""
+
 from __future__ import annotations
 
 from collections import defaultdict
@@ -18,6 +32,7 @@ _PRIORIDADE = {NivelPermissao.SHELL: 1, NivelPermissao.SUDO: 2}
 
 
 def _maior(a: NivelPermissao, b: NivelPermissao) -> NivelPermissao:
+    """Return whichever of `a`/`b` outranks the other (`SUDO` beats `SHELL`); ties keep `a`."""
     return a if _PRIORIDADE[a] >= _PRIORIDADE[b] else b
 
 
@@ -52,6 +67,16 @@ def _merge_profile(
 
 @dataclass(frozen=True)
 class ChaveInstalada:
+    """One SSH credential installed for one user, at one permission level, on one host.
+
+    Used both for the desired state built by `Planner.estado_desejado` and the
+    installed state read from `Servidor.chaves_instaladas` or a live
+    inspection (`Nucleo._atual_vivo`); `calcular_delta` compares instances of
+    the two by field equality to detect drift. Frozen because instances are
+    used as dict values keyed by `ref` and are expected to be replaced, not
+    mutated in place, whenever their level or profile changes.
+    """
+
     ref: str
     username: str
     nivel: NivelPermissao
@@ -59,6 +84,12 @@ class ChaveInstalada:
 
     @classmethod
     def de_dict(cls, d: dict) -> "ChaveInstalada":
+        """Reconstruct a `ChaveInstalada` from the dict form persisted in `Servidor.chaves_instaladas`.
+
+        `username` and `nivel` fall back to being derived from `ref` and to
+        `NivelPermissao.SHELL` respectively when the dict omits them, which
+        happens for records written before those fields existed.
+        """
         return cls(
             ref=d["ref"],
             username=d.get("username") or d["ref"].split(":", 1)[0],
@@ -67,6 +98,7 @@ class ChaveInstalada:
         )
 
     def para_dict(self) -> dict:
+        """Serialize back to the dict form persisted in `Servidor.chaves_instaladas`, omitting `profile` entirely instead of writing a null when it is `None`."""
         out = {"ref": self.ref, "username": self.username, "nivel": self.nivel.value}
         if self.profile is not None:
             out["profile"] = self.profile
@@ -74,10 +106,34 @@ class ChaveInstalada:
 
 
 class Planner:
+    """Diffs the store's declared access state against installed state, on behalf of `Nucleo`.
+
+    Holds only the `IStore` needed to read users, groups, permissions,
+    credentials and servers; has no knowledge of SSH or the deployer, which
+    keeps `estado_desejado` and the default path of `calcular_delta` free of
+    network I/O and therefore fast regardless of fleet size.
+    """
+
     def __init__(self, store: IStore):
+        """Store the `IStore` used to read users, groups, permissions, credentials and servers."""
         self.store = store
 
     def estado_desejado(self) -> dict[str, dict[str, ChaveInstalada]]:
+        """Expand every active permission into the desired `ChaveInstalada` for each (host, credential) pair, from store reads alone.
+
+        For each permission, walks every active member of its user-group,
+        every active credential of each such user, and every server in its
+        server-group. When the same (host, ref) pair is reachable through
+        more than one granted permission — e.g. two groups both giving a user
+        access to the same host — the levels are merged upward via `_maior`
+        (`SUDO` wins over `SHELL`) and the resulting sudo profile is resolved
+        by `_merge_profile`, rather than one permission's result simply
+        overwriting the other's. A dangling reference (a permission naming a
+        deleted group, a group member who is inactive or no longer exists, a
+        server no longer registered) is silently skipped rather than treated
+        as an error: the store is the source of truth, so a stale reference
+        just yields less desired state, not a failure.
+        """
         users = {u.username: u for u in self.store.list_users() if u.status == StatusUser.ATIVO}
         creds_por_user = {
             u: [c for c in self.store.list_credenciais(u) if c.status == StatusCredencial.ATIVA]
@@ -114,6 +170,27 @@ class Planner:
         force: bool = False,
         atual_override: dict[str, dict[str, "ChaveInstalada"]] | None = None,
     ) -> list[Subacao]:
+        """Diff desired state against installed state and return the `Subacao` list needed to reconcile them, sorted deterministically.
+
+        This is the check the paper calls "is anything pending?": by default
+        (no `atual_override`), the installed side is read entirely from
+        `Servidor.chaves_instaladas` already in the store, so the whole
+        computation is local and touches no host. `atual_override` lets the
+        caller substitute state fetched live over SSH instead (used for
+        `--reconcile`). `force=True` discards, per host, any
+        currently-installed key that is also desired, so every desired key is
+        re-emitted as an add even if the store believes it is already
+        installed — used to repair state that has drifted without a live
+        `--reconcile`. A key is judged divergent if it is missing, installed
+        at the wrong permission level, or installed with the wrong sudo
+        profile. Profile command lists are resolved once per profile name via
+        a local cache and raise `EstadoInvalido` if the referenced profile is
+        missing or has no commands, so a dangling or emptied profile can
+        never silently degrade into unrestricted sudo. The result is sorted
+        by (host, action, credential) so `Nucleo.aplicar` groups it by host
+        deterministically and repeated runs against the same state produce
+        identical subaction ordering.
+        """
         desejado = self.estado_desejado()
         subacoes: list[Subacao] = []
 

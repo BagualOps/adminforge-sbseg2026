@@ -60,6 +60,14 @@ PREFIX = os.environ.get("PERF_PREFIX", "afperf")
 
 def sh(cmd: list[str], check: bool = True, env: dict | None = None,
        cwd: Path | None = None, input_text: str | None = None) -> subprocess.CompletedProcess:
+    """Run a subprocess and capture its output.
+
+    `env` is merged on top of the current environment rather than replacing
+    it, so callers only need to pass the variables they add or override.
+    When `check` is true (the default) a non-zero exit raises with the
+    tail of stdout/stderr attached, so a failing experiment step names
+    itself instead of surfacing as an opaque non-zero return code upstream.
+    """
     full_env = dict(os.environ)
     if env:
         full_env.update(env)
@@ -105,12 +113,18 @@ def operator_key() -> Path:
 # Docker fleet
 # ---------------------------------------------------------------------------
 def build_image() -> None:
+    """Build the base fleet image (sshd only) with the operator public key baked in.
+
+    Idempotent from Docker's own layer cache: re-running after the first
+    build is a no-op cost-wise unless `infra/testlab/Dockerfile` changed.
+    """
     pubkey = operator_key().with_suffix(".pub").read_text().strip()
     sh(["docker", "build", "-t", IMAGE,
         "--build-arg", f"ADMINFORGE_PUBKEY={pubkey}", str(TESTLAB)])
 
 
 def ensure_network() -> None:
+    """Create the bridge network the fleet and controller containers share, if missing."""
     proc = sh(["docker", "network", "inspect", NETWORK], check=False)
     if proc.returncode != 0:
         sh(["docker", "network", "create", "--driver", "bridge", NETWORK])
@@ -135,6 +149,12 @@ def fleet_up(n: int, image: str = IMAGE) -> list[dict]:
 
 
 def wait_ssh(ip: str, port: int = 22, timeout: float = 60.0) -> None:
+    """Block until the SSH banner is readable at ip:port, or raise after `timeout` seconds.
+
+    Polled rather than a fixed sleep, so it does not pad the measured
+    timings with container-startup jitter and does not undercount slow
+    starts on loaded hardware.
+    """
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:
@@ -149,6 +169,11 @@ def wait_ssh(ip: str, port: int = 22, timeout: float = 60.0) -> None:
 
 
 def fleet_down() -> None:
+    """Force-remove every container whose name starts with PREFIX, ignoring errors.
+
+    Called before and after (in a `finally`) every experiment repetition,
+    so a crashed prior run never leaks containers into the next fleet size.
+    """
     proc = sh(["docker", "ps", "-aq", "--filter", f"name=^{PREFIX}-"], check=False)
     ids = proc.stdout.split()
     if ids:
@@ -159,6 +184,7 @@ def fleet_down() -> None:
 # AdminForge invocation
 # ---------------------------------------------------------------------------
 def af_env(state_dir: Path) -> dict:
+    """Build the environment `af()` runs the AdminForge CLI under for one state dir."""
     return {
         "ADMINFORGE_STATE": str(state_dir),
         "ADMINFORGE_SSH_KEY": str(operator_key()),
@@ -220,6 +246,7 @@ def declare_state(state_dir: Path, hosts: list[dict], keys: dict[str, Path]) -> 
     cmds = 0
 
     def run(args: list[str], input_text: str | None = None) -> None:
+        """Run one untimed AdminForge CLI command and count it towards `cmds`."""
         nonlocal cmds
         af(args, state_dir, input_text=input_text)
         cmds += 1
@@ -261,6 +288,12 @@ def declare_state(state_dir: Path, hosts: list[dict], keys: dict[str, Path]) -> 
 # Results
 # ---------------------------------------------------------------------------
 def save_raw(name: str, payload: dict) -> Path:
+    """Write one repetition's result dict as pretty-printed JSON under RESULTS_RAW.
+
+    The caller's out-file existence check (skip if already present) is what
+    makes every run_eN.py script resumable, so this write must be the last
+    step of a repetition, after nothing about it can still fail.
+    """
     RESULTS_RAW.mkdir(parents=True, exist_ok=True)
     path = RESULTS_RAW / f"{name}.json"
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
@@ -268,6 +301,14 @@ def save_raw(name: str, payload: dict) -> Path:
 
 
 def hardware_info() -> dict:
+    """Collect the host CPU model, RAM and OS/Docker versions for the results report.
+
+    Recorded so the paper's numbers can be attributed to the machine they
+    were measured on: everything a claim script prints is either this
+    hardware-dependent wall-clock context or the hardware-independent
+    ratios/counts the claim actually asserts, and this function is only
+    ever the former.
+    """
     cpu = ""
     for line in Path("/proc/cpuinfo").read_text().splitlines():
         if line.startswith("model name"):

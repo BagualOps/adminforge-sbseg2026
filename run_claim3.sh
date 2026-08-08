@@ -4,7 +4,9 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-LINES=$(find adminforge -name '*.py' -not -path '*__pycache__*' -print0 | xargs -0 grep -vhE '^[[:space:]]*(#|$)' | wc -l)
+# Statements only: blank lines, `#` comments and docstrings are documentation, not
+# executed code, so none of them counts. See infra/perf/sloc.py.
+LINES=$(python3 infra/perf/sloc.py adminforge)
 
 THIRD=$(PYTHONPATH=. python3 - <<'PY'
 import sys

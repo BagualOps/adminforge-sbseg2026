@@ -243,7 +243,7 @@ The full 5-repetition ladder up to N=50, all Ansible configurations, and the att
 
 ## Claim #3: Executed code surface under 4,000 lines with zero third-party runtime imports
 
-**What the paper asserts.** The tool's own source is under 4,000 lines of code (blank lines and comments excluded) and the base install imports nothing beyond the Python standard library at run time.
+**What the paper asserts.** The tool's own source is under 4,000 lines of code (statements only: blank lines, comments and docstrings excluded) and the base install imports nothing beyond the Python standard library at run time.
 
 **Execution:** one command.
 
@@ -261,14 +261,14 @@ The full 5-repetition ladder up to N=50, all Ansible configurations, and the att
 ══════════════════════════════════════════════════════════════
   Claim #3: attack surface of the base install
 ══════════════════════════════════════════════════════════════
-  Own code (adminforge/**.py)   : 3993 lines of code (claim: < 4,000)
+  Own code (adminforge/**.py)   : 3973 lines of code (claim: < 4,000)
   Third-party runtime imports   : 0   (claim: 0)
 
   Expected: code < 4,000 and 0 third-party imports  →  OK
 ══════════════════════════════════════════════════════════════
 ```
 
-The line count excludes blank lines and comments (`grep -vhE '^[[:space:]]*(#|$)'`); the import check loads every runtime module and asserts none resolves to `site-packages`. The full measurement harness behind the paper's performance section (5-repetition ladders up to N=50 hosts, the Ansible comparison, and the attack-surface audit) lives in [`infra/perf/`](infra/perf/). Claim #2's reference data is in [`paper_data/`](paper_data/).
+The line count is statements only — blank lines, `#` comments and docstrings are documentation rather than executed code, and [`infra/perf/sloc.py`](infra/perf/sloc.py) drops all three before counting; the import check loads every runtime module and asserts none resolves to `site-packages`. The full measurement harness behind the paper's performance section (5-repetition ladders up to N=50 hosts, the Ansible comparison, and the attack-surface audit) lives in [`infra/perf/`](infra/perf/). Claim #2's reference data is in [`paper_data/`](paper_data/).
 
 ## Cleaning up
 

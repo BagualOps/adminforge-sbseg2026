@@ -6,6 +6,11 @@ MARCADOR_FIM = "# END adminforge: "
 
 
 def bloco(ref: str, chave: str) -> str:
+    """Build one managed BEGIN/END block for `chave`, tagged with `ref`.
+
+    `chave` is stripped but not otherwise validated or re-encoded; it is
+    written verbatim between the markers.
+    """
     return f"{MARCADOR_INICIO}{ref}\n{chave.strip()}\n{MARCADOR_FIM}{ref}"
 
 

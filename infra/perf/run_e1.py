@@ -28,6 +28,11 @@ import perflib as P
 
 
 def one_rep(n: int, rep: int, keys: dict, extra_key: Path) -> dict:
+    """Run one E1 repetition at fleet size n: tear down, bring up n fresh hosts,
+    declare and apply the reference state, then time every cell listed in the
+    module docstring in sequence on that same fleet. Returns the raw payload
+    later summarized by aggregate.py into results.json's "e1_scalability".
+    """
     P.fleet_down()
     hosts = P.fleet_up(n)
     state = P.WORK_DIR / f"state-e1-n{n:02d}-rep{rep}"
@@ -71,6 +76,15 @@ def one_rep(n: int, rep: int, keys: dict, extra_key: Path) -> dict:
 
 
 def main() -> int:
+    """Run the E1 ladder over --sizes x --reps, skipping repetitions already on disk.
+
+    The full campaign (N in {1,5,10,25,50}, 5 reps) is what the paper's
+    performance section and claims.py's scalability/delta-cost paragraphs
+    read. `run_claim1.sh` instead calls this with a reduced ladder
+    (--sizes 1,5 --reps 1) to reproduce paper Claim #1(a) — the per-host
+    flatness and no-op-under-2s checks in the README's Experiments
+    section — live and quickly on the evaluator's machine.
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--sizes", default="1,5,10,25,50")
     ap.add_argument("--reps", type=int, default=5)

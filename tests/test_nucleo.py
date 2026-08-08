@@ -1,3 +1,5 @@
+"""Tests for the orchestration core: registration, grants, revocation, and apply/preview."""
+
 from adminforge.core.nucleo import Nucleo
 from adminforge.domain import NivelPermissao, StatusCredencial, StatusOperacao, StatusUser
 

@@ -1,5 +1,14 @@
 #!/usr/bin/env python
 # PYTHON_ARGCOMPLETE_OK
+"""AdminForge CLI: argparse tree, one `cmd_*` handler per subcommand, and the `main()` entry point.
+
+Commands only ever mutate two things: the local declared state under
+`--state` (add/edit/delete/grant/... — always local, never touches a server)
+and, for `apply`/`apply verify`/`audit server`, the remote servers over SSH.
+Every command's own module docstring in the parser (`_build_parser`) has the
+full `--help` text; this module documents the side effects that are not
+obvious from `--help` alone.
+"""
 from __future__ import annotations
 
 import argparse
@@ -38,10 +47,17 @@ EPILOG_GERAL = (
 
 
 def _state_dir(args: argparse.Namespace) -> Path:
+    """Return the state directory the current command should act on, from the parsed --state flag."""
     return Path(args.state)
 
 
 def _superadmin() -> str:
+    """Resolve who is running the command, for the history/audit log.
+
+    Prefers $ADMINFORGE_SUPERADMIN, then falls back to $USER, then the
+    literal string "unknown" — it never prompts or fails, so audit entries
+    are always written even in unusual environments (e.g. cron, containers).
+    """
     return os.environ.get("ADMINFORGE_SUPERADMIN") or os.environ.get("USER") or "unknown"
 
 
@@ -74,6 +90,17 @@ def _emit_listagem(
 
 
 def _nucleo(args: argparse.Namespace, com_ssh: bool = False) -> Nucleo:
+    """Build the Nucleo (core domain object) that every command runs against.
+
+    With `com_ssh=True`, also wires a real SSHDeployer so the command can
+    reach remote servers — needed only by `apply`, `apply verify` and
+    `audit server`. The SSH private key path, remote service username and
+    whether to auto-create the Unix account are read from environment
+    variables (ADMINFORGE_SSH_KEY, ADMINFORGE_SSH_USER,
+    ADMINFORGE_CREATE_UNIX_USER), not from any CLI flag. With
+    `com_ssh=False` (the default), the returned Nucleo can only read/write
+    local declared state — it never touches the network.
+    """
     deployer = None
     if com_ssh:
         from adminforge.deployer.ssh_deployer import SSHDeployer
@@ -95,6 +122,13 @@ def _nucleo(args: argparse.Namespace, com_ssh: bool = False) -> Nucleo:
 # UC-1: user
 # ---------------------------------------------------------------------------
 def cmd_user_add(args: argparse.Namespace) -> int:
+    """Register a new user in local declared state, optionally with an initial SSH key.
+
+    Local only — does not touch any server; the key only reaches servers on
+    the next `apply`. If both `--key-file` and `--key-string` are omitted the
+    user is created with no key. Returns 2 if `--key-file` cannot be read
+    (after the user record has already been created).
+    """
     nucleo = _nucleo(args)
     rc = ui.imprimir_resultado(nucleo.cadastrar_user(args.username, args.name, args.email))
     if rc != 0:
@@ -112,6 +146,7 @@ def cmd_user_add(args: argparse.Namespace) -> int:
 
 
 def cmd_user_list(args: argparse.Namespace) -> int:
+    """List all users in local declared state (username, name, email, status)."""
     nucleo = _nucleo(args)
     users = nucleo.store.list_users()
     linhas = [[u.username, u.nome, u.email, u.status.value] for u in users]
@@ -123,6 +158,10 @@ def cmd_user_list(args: argparse.Namespace) -> int:
 
 
 def cmd_user_show(args: argparse.Namespace) -> int:
+    """Print one user's details, all of their credentials and the user-groups they belong to.
+
+    Returns 2 if the username does not exist in local declared state.
+    """
     nucleo = _nucleo(args)
     u = nucleo.store.get_user(args.username)
     if not u:
@@ -146,6 +185,13 @@ def cmd_user_show(args: argparse.Namespace) -> int:
 
 
 def cmd_user_disable(args: argparse.Namespace) -> int:
+    """Disable a user and revoke all of their keys in local declared state.
+
+    Prompts for confirmation unless `--yes`. This only marks the change
+    locally — the keys are not actually removed from any server's
+    authorized_keys until the next `apply`. Returns 1 if the user cancels
+    the prompt.
+    """
     if not args.yes and not ui.confirmar(
         _("Disable {u} and revoke their keys? (apply removes them from servers)").format(u=args.username)
     ):
@@ -156,6 +202,10 @@ def cmd_user_disable(args: argparse.Namespace) -> int:
 
 
 def cmd_user_edit(args: argparse.Namespace) -> int:
+    """Update a user's name and/or e-mail in local declared state (does not touch keys or servers).
+
+    Requires at least one of `--name`/`--email`; returns 2 if both are omitted.
+    """
     if args.name is None and args.email is None:
         ui.fail(_("provide --name and/or --email"))
         return 2
@@ -164,6 +214,7 @@ def cmd_user_edit(args: argparse.Namespace) -> int:
 
 
 def cmd_user_rename(args: argparse.Namespace) -> int:
+    """Rename a user in local declared state, cascading the rename into every user-group membership."""
     op = _nucleo(args).renomear_user(args.de, args.para)
     return ui.imprimir_resultado(op)
 
@@ -172,6 +223,12 @@ def cmd_user_rename(args: argparse.Namespace) -> int:
 # UC-2: user key
 # ---------------------------------------------------------------------------
 def cmd_user_key_add(args: argparse.Namespace) -> int:
+    """Register an SSH key for a user, from `--file` or `--string` (mutually exclusive).
+
+    Local only; the key is pushed to servers on the next `apply`. Returns 2
+    if both or neither of `--file`/`--string` is given, or if `--file`
+    cannot be read.
+    """
     if args.file and args.string:
         ui.fail(_("use --file OR --string, not both"))
         return 2
@@ -190,11 +247,17 @@ def cmd_user_key_add(args: argparse.Namespace) -> int:
 
 
 def cmd_user_key_revoke(args: argparse.Namespace) -> int:
+    """Revoke an SSH key by fingerprint in local declared state.
+
+    Local only — the key is not removed from any server's authorized_keys
+    until the next `apply`.
+    """
     op = _nucleo(args).revogar_chave(args.fingerprint)
     return ui.imprimir_resultado(op)
 
 
 def cmd_user_key_list(args: argparse.Namespace) -> int:
+    """List a user's SSH keys (fingerprint and status) from local declared state."""
     nucleo = _nucleo(args)
     creds = nucleo.store.list_credenciais(args.username)
     linhas = [[c.fingerprint, c.status.value] for c in creds]
@@ -206,26 +269,40 @@ def cmd_user_key_list(args: argparse.Namespace) -> int:
 # UC-3: user-group
 # ---------------------------------------------------------------------------
 def cmd_ug_create(args: argparse.Namespace) -> int:
+    """Create an empty user-group in local declared state."""
     return ui.imprimir_resultado(_nucleo(args).criar_grupo_user(args.name))
 
 
 def cmd_ug_add_member(args: argparse.Namespace) -> int:
+    """Add one or more users (space- or comma-separated) to a user-group.
+
+    Local only — membership changes only reach servers through the
+    permissions the group holds, on the next `apply`.
+    """
     return ui.imprimir_resultado(_nucleo(args).adicionar_membros_grupo_user(args.group, _split_tokens(args.username)))
 
 
 def cmd_ug_remove_member(args: argparse.Namespace) -> int:
+    """Remove one or more users (space- or comma-separated) from a user-group.
+
+    Local only; affected keys are only revoked from servers on the next
+    `apply`.
+    """
     return ui.imprimir_resultado(_nucleo(args).remover_membros_grupo_user(args.group, _split_tokens(args.username)))
 
 
 def cmd_ug_delete(args: argparse.Namespace) -> int:
+    """Delete a user-group from local declared state."""
     return ui.imprimir_resultado(_nucleo(args).excluir_grupo_user(args.name))
 
 
 def cmd_ug_rename(args: argparse.Namespace) -> int:
+    """Rename a user-group, cascading the rename into every permission that references it."""
     return ui.imprimir_resultado(_nucleo(args).renomear_grupo_user(args.de, args.para))
 
 
 def cmd_ug_list(args: argparse.Namespace) -> int:
+    """List all user-groups and their members from local declared state."""
     nucleo = _nucleo(args)
     grupos = nucleo.store.list_grupos_user()
     linhas = [[g.nome, ", ".join(g.membros) or "-"] for g in grupos]
@@ -237,6 +314,16 @@ def cmd_ug_list(args: argparse.Namespace) -> int:
 # UC-4: server
 # ---------------------------------------------------------------------------
 def cmd_server_add(args: argparse.Namespace) -> int:
+    """Register a server with a trust-on-first-use (TOFU) host key.
+
+    With `--auto` and no `--host-key`, this connects to the server over SSH
+    right away (before any confirmation) to capture its host key — unlike
+    every other `cmd_*` in this section, it is not purely local. The
+    captured fingerprint is then shown for confirmation before the server is
+    actually registered. Returns 2 if capture fails, or if neither
+    `--host-key` nor `--auto` is given. Returns 1 if the captured fingerprint
+    is not confirmed.
+    """
     host_key = args.host_key
     if args.auto and not host_key:
         from adminforge.deployer.ssh_deployer import SSHDeployer
@@ -262,6 +349,7 @@ def cmd_server_add(args: argparse.Namespace) -> int:
 
 
 def cmd_server_list(args: argparse.Namespace) -> int:
+    """List all registered servers (hostname, IPv4, port, number of installed keys)."""
     nucleo = _nucleo(args)
     servidores = nucleo.store.list_servidores()
     linhas = [
@@ -277,6 +365,12 @@ def cmd_server_list(args: argparse.Namespace) -> int:
 
 
 def cmd_server_show(args: argparse.Namespace) -> int:
+    """Print one server's details and the keys declared as installed on it (per local state, not verified live).
+
+    Returns 2 if the hostname does not exist in local declared state. Use
+    `apply verify` or `audit server` to check what is actually on the
+    server.
+    """
     nucleo = _nucleo(args)
     s = nucleo.store.get_servidor(args.hostname)
     if not s:
@@ -299,6 +393,10 @@ def cmd_server_show(args: argparse.Namespace) -> int:
 
 
 def cmd_server_remove(args: argparse.Namespace) -> int:
+    """Remove a server from local declared state only — does NOT clean its keys or sudoers on the server itself.
+
+    Prompts for confirmation unless `--yes`; returns 1 if the user cancels.
+    """
     if not args.yes and not ui.confirmar(
         _("Remove {h} from AdminForge? (does not clean keys on the server)").format(h=args.hostname)
     ):
@@ -308,6 +406,13 @@ def cmd_server_remove(args: argparse.Namespace) -> int:
 
 
 def cmd_server_edit(args: argparse.Namespace) -> int:
+    """Update a server's IP, port and/or host_key in local declared state.
+
+    Requires at least one of `--ip`/`--port`/`--host-key`; returns 2 if none
+    is given. Rotating `--host-key` changes the key AdminForge trusts for
+    this host without re-verifying it (no TOFU capture like `server add
+    --auto`) — use with care.
+    """
     if args.ip is None and args.port is None and args.host_key is None:
         ui.fail(_("provide --ip, --port and/or --host-key"))
         return 2
@@ -318,6 +423,7 @@ def cmd_server_edit(args: argparse.Namespace) -> int:
 
 
 def cmd_server_rename(args: argparse.Namespace) -> int:
+    """Rename a server, cascading the rename into every server-group membership."""
     op = _nucleo(args).renomear_servidor(args.de, args.para)
     return ui.imprimir_resultado(op)
 
@@ -326,26 +432,40 @@ def cmd_server_rename(args: argparse.Namespace) -> int:
 # UC-5: server-group
 # ---------------------------------------------------------------------------
 def cmd_sg_create(args: argparse.Namespace) -> int:
+    """Create an empty server-group in local declared state."""
     return ui.imprimir_resultado(_nucleo(args).criar_grupo_servidor(args.name))
 
 
 def cmd_sg_add(args: argparse.Namespace) -> int:
+    """Add one or more hostnames (space- or comma-separated) to a server-group.
+
+    Local only — reaches servers only through the permissions this group is
+    granted, on the next `apply`.
+    """
     return ui.imprimir_resultado(_nucleo(args).adicionar_membros_grupo_servidor(args.group, _split_tokens(args.hostname)))
 
 
 def cmd_sg_rm(args: argparse.Namespace) -> int:
+    """Remove one or more hostnames (space- or comma-separated) from a server-group.
+
+    Local only; affected keys are only revoked from the removed server on
+    the next `apply`.
+    """
     return ui.imprimir_resultado(_nucleo(args).remover_membros_grupo_servidor(args.group, _split_tokens(args.hostname)))
 
 
 def cmd_sg_delete(args: argparse.Namespace) -> int:
+    """Delete a server-group from local declared state."""
     return ui.imprimir_resultado(_nucleo(args).excluir_grupo_servidor(args.name))
 
 
 def cmd_sg_rename(args: argparse.Namespace) -> int:
+    """Rename a server-group, cascading the rename into every permission that references it."""
     return ui.imprimir_resultado(_nucleo(args).renomear_grupo_servidor(args.de, args.para))
 
 
 def cmd_sg_list(args: argparse.Namespace) -> int:
+    """List all server-groups and their members from local declared state."""
     nucleo = _nucleo(args)
     grupos = nucleo.store.list_grupos_servidor()
     linhas = [[g.nome, ", ".join(g.membros) or "-"] for g in grupos]
@@ -485,6 +605,7 @@ def cmd_permission_show(args: argparse.Namespace) -> int:
 
 
 def cmd_permission_list(args: argparse.Namespace) -> int:
+    """List all permission grants (user-group -> server-group, level, profile) from local declared state."""
     nucleo = _nucleo(args)
     perms = nucleo.store.list_permissoes()
     linhas = [
@@ -501,6 +622,12 @@ def cmd_permission_list(args: argparse.Namespace) -> int:
 
 
 def cmd_permission_grant(args: argparse.Namespace) -> int:
+    """Grant access from a user-group to a server-group at `--level` (shell or sudo).
+
+    Local only — new keys/sudoers only land on servers on the next `apply`.
+    `--profile` is only meaningful with `--level sudo`; without it, sudo
+    grants full NOPASSWD:ALL rather than a restricted command set.
+    """
     return ui.imprimir_resultado(
         _nucleo(args).conceder(
             args.user_group, args.server_group, NivelPermissao(args.level),
@@ -513,10 +640,16 @@ def cmd_permission_grant(args: argparse.Namespace) -> int:
 # sudo-profile
 # ---------------------------------------------------------------------------
 def cmd_sudo_profile_create(args: argparse.Namespace) -> int:
+    """Create a named sudo profile from one or more absolute `--command` paths (repeatable flag).
+
+    Local only; profiles do nothing until granted via `permission grant
+    --level sudo --profile <name>` and then applied.
+    """
     return ui.imprimir_resultado(_nucleo(args).criar_sudo_profile(args.name, args.command))
 
 
 def cmd_sudo_profile_list(args: argparse.Namespace) -> int:
+    """List sudo profiles with their command count and a truncated preview of the commands."""
     nucleo = _nucleo(args)
     profiles = nucleo.store.list_sudo_profiles()
     linhas = []
@@ -530,6 +663,7 @@ def cmd_sudo_profile_list(args: argparse.Namespace) -> int:
 
 
 def cmd_sudo_profile_show(args: argparse.Namespace) -> int:
+    """Print every command allowed by a sudo profile, one per line. Returns 2 if the profile does not exist."""
     nucleo = _nucleo(args)
     p = nucleo.store.get_sudo_profile(args.name)
     if not p:
@@ -542,14 +676,21 @@ def cmd_sudo_profile_show(args: argparse.Namespace) -> int:
 
 
 def cmd_sudo_profile_delete(args: argparse.Namespace) -> int:
+    """Delete a sudo profile. Fails (non-zero, via imprimir_resultado) if any permission still references it."""
     return ui.imprimir_resultado(_nucleo(args).excluir_sudo_profile(args.name))
 
 
 def cmd_sudo_profile_rename(args: argparse.Namespace) -> int:
+    """Rename a sudo profile, cascading the rename into every permission that references it."""
     return ui.imprimir_resultado(_nucleo(args).renomear_sudo_profile(args.de, args.para))
 
 
 def cmd_permission_revoke(args: argparse.Namespace) -> int:
+    """Revoke access between a user-group and a server-group in local declared state.
+
+    Prompts for confirmation unless `--yes`; the actual keys are only
+    removed from servers on the next `apply`. Returns 1 if the user cancels.
+    """
     if not args.yes and not ui.confirmar(
         _("Revoke {ug} -> {sg}? (apply removes keys)").format(ug=args.user_group, sg=args.server_group)
     ):
@@ -562,6 +703,12 @@ def cmd_permission_revoke(args: argparse.Namespace) -> int:
 # UC-7 / UC-8: preview / apply
 # ---------------------------------------------------------------------------
 def cmd_preview(args: argparse.Namespace) -> int:
+    """Compute and print the delta between local declared state and what was last applied.
+
+    Read-only: does not touch any server (does not even open an SSH
+    connection) and does not ask for confirmation. Grouped by server, with
+    "+" for keys/sudoers to add and "-" for ones to remove. Always returns 0.
+    """
     nucleo = _nucleo(args)
     subacoes = nucleo.preview()
     if not subacoes:
@@ -681,6 +828,12 @@ def cmd_apply_verify(args: argparse.Namespace) -> int:
     servidores = nucleo.store.list_servidores()
 
     def _coletar(servidor):
+        """Gather one server's expected vs. real authorized_keys/sudoers state over SSH.
+
+        Pure data collection with no printing, so it is safe to run
+        concurrently via `_mapear_hosts`; all rendering happens later in the
+        (necessarily sequential) loop below.
+        """
         # SSH-only gathering for one host (no printing, safe to run concurrently).
         esperado_blocks, esperado_sudo = _esperado_do_servidor(servidor)
         dados = {"esperado_blocks": esperado_blocks, "esperado_sudo": esperado_sudo,
@@ -794,6 +947,22 @@ def cmd_apply_verify(args: argparse.Namespace) -> int:
 
 
 def cmd_apply(args: argparse.Namespace) -> int:
+    """Push the pending delta (declared vs. last-applied state) to servers over real SSH.
+
+    Prints the planned changes (and, with `--diff`, a per-user
+    authorized_keys unified diff) and asks for confirmation before doing
+    anything, unless `--yes`. Not idempotent by default — it only pushes
+    what the Store believes has changed; `--force` re-applies every declared
+    key/sudoers entry regardless, and `--reconcile` additionally reads each
+    server's live state first and converges onto it (re-creating
+    manually-deleted users/keys, removing orphan blocks among declared
+    users). `--dry-run` uses a fake deployer instead of real SSH.
+    `--jobs N` applies to up to N hosts concurrently. Every apply is written
+    to the history log regardless of outcome. Returns 0 if every sub-action
+    succeeded, 1 if some succeeded and some failed (re-running `apply`
+    retries only the failed ones), 2 if all failed or there was nothing to
+    retry.
+    """
     nucleo = _nucleo(args, com_ssh=not args.dry_run)
     force = getattr(args, "force", False)
     reconcile = getattr(args, "reconcile", False)
@@ -843,6 +1012,12 @@ def cmd_apply(args: argparse.Namespace) -> int:
 # UC-9: history
 # ---------------------------------------------------------------------------
 def _historico_linhas_e_json(ops: list) -> tuple[list[list[str]], list[dict]]:
+    """Render a list of Operacao records into (table rows, JSON dicts) for --format.
+
+    Shared by `history list` and `history failed` so both commands render
+    identically. The command in the table row is truncated to 40 characters;
+    the JSON form keeps the full command string.
+    """
     linhas = [
         [
             op.id,
@@ -868,6 +1043,7 @@ def _historico_linhas_e_json(ops: list) -> tuple[list[list[str]], list[dict]]:
 
 
 def cmd_history_list(args: argparse.Namespace) -> int:
+    """List the most recent operations from the local audit log (default: last 50, newest first)."""
     nucleo = _nucleo(args)
     ops = nucleo.auditor.listar(args.limit)
     linhas, json_data = _historico_linhas_e_json(ops)
@@ -877,6 +1053,10 @@ def cmd_history_list(args: argparse.Namespace) -> int:
 
 
 def cmd_history_show(args: argparse.Namespace) -> int:
+    """Print full detail of one operation by `--id`: metadata, hash chain links, and every sub-action.
+
+    Returns 2 if the operation id does not exist in the audit log.
+    """
     nucleo = _nucleo(args)
     op = nucleo.auditor.buscar(args.op_id)
     if not op:
@@ -906,6 +1086,7 @@ def cmd_history_show(args: argparse.Namespace) -> int:
 
 
 def cmd_history_failed(args: argparse.Namespace) -> int:
+    """List only the operations that failed or partially failed, most recent first."""
     nucleo = _nucleo(args)
     ops = nucleo.auditor.listar_falhas(args.limit)
     linhas, json_data = _historico_linhas_e_json(ops)
@@ -915,6 +1096,11 @@ def cmd_history_failed(args: argparse.Namespace) -> int:
 
 
 def cmd_history_verify(args: argparse.Namespace) -> int:
+    """Verify the tamper-evidence hash chain of the local audit log is intact end to end.
+
+    Read-only. Returns 2 (and prints the exception message) if any link in
+    the chain does not match; returns 0 and prints the last hash otherwise.
+    """
     nucleo = _nucleo(args)
     try:
         _ok, ultimo = nucleo.auditor.verificar_cadeia()
@@ -929,6 +1115,11 @@ def cmd_history_verify(args: argparse.Namespace) -> int:
 # Dump global
 # ---------------------------------------------------------------------------
 def _coletar_estado(nucleo: Nucleo) -> dict:
+    """Gather the full local declared state (users, groups, servers, permissions, sudo-profiles) into one dict.
+
+    Read-only, local only. Used by `cmd_dump` for both the JSON and table
+    renderings, so the two stay consistent.
+    """
     return {
         "users": [
             {
@@ -1067,6 +1258,12 @@ def cmd_status(args: argparse.Namespace) -> int:
 
 
 def cmd_dump(args: argparse.Namespace) -> int:
+    """Print the entire local declared state: users, user-groups, servers, server-groups, permissions and sudo-profiles.
+
+    Read-only. Unlike most other list commands here, `--format` has no
+    "table" default fallback via `_emit_listagem` — `table` prints one table
+    per section instead of a single flat table.
+    """
     estado = _coletar_estado(_nucleo(args))
     if args.format == "json":
         print(json.dumps(estado, indent=2, ensure_ascii=False))
@@ -1137,6 +1334,15 @@ def _hosts_para_auditar(nucleo: Nucleo, args: argparse.Namespace) -> list[str] |
 
 
 def cmd_audit_server(args: argparse.Namespace) -> int:
+    """Inspect one or more real servers over SSH: users, groups, sudoers files/rules and running services.
+
+    Read-only on the server — never modifies anything, local or remote.
+    Target is one of `--hostname` (one or more), `--server-group` or `--all`
+    (mutually exclusive). With `--jobs N`, inspects up to N hosts
+    concurrently. Returns 2 if the target server-group does not exist, if no
+    servers resolve, or if any host fails to respond over SSH (other hosts'
+    results are still printed).
+    """
     nucleo = _nucleo(args, com_ssh=True)
     hostnames = _hosts_para_auditar(nucleo, args)
     if hostnames is None:
@@ -1160,6 +1366,13 @@ def cmd_audit_server(args: argparse.Namespace) -> int:
 
 
 def _imprimir_audit_relatorio(args: argparse.Namespace, hostname: str, op, relatorio: dict) -> None:
+    """Pretty-print one server's audit report: users, groups, sudoers, services and heuristic alerts.
+
+    With `--humans`, only users with UID >= 1000 are listed. `--user`,
+    `--group` and `--service` each highlight/filter matching rows on their
+    respective section. Alerts include sudoers files found under
+    /etc/sudoers.d/ that were not written by AdminForge.
+    """
     usuarios = relatorio.get("usuarios", [])
     grupos = relatorio.get("grupos", [])
     servicos = relatorio.get("servicos", [])
@@ -1255,6 +1468,14 @@ def _imprimir_audit_relatorio(args: argparse.Namespace, hostname: str, op, relat
 # Parser
 # ---------------------------------------------------------------------------
 def _build_parser() -> argparse.ArgumentParser:
+    """Build the full argparse CLI tree: one subparser (and nested sub-subparsers) per top-level command.
+
+    Wires the `func` default on every leaf parser to the `cmd_*` handler
+    that runs it, plus argcomplete `.completer` attributes on arguments that
+    reference existing state (usernames, hostnames, group names, sudo
+    profiles, fingerprints). Called once per process from `main()`; builds a
+    fresh parser every time rather than caching one at import time.
+    """
     parser = argparse.ArgumentParser(
         prog="adminforge",
         description=_(
@@ -1657,6 +1878,15 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """CLI entry point: parse `argv` (or sys.argv when None) and dispatch to the matching `cmd_*` handler.
+
+    Enables shell tab-completion via `argcomplete` when that package is
+    installed, silently skipping it otherwise (the `# PYTHON_ARGCOMPLETE_OK`
+    marker at the top of this file is what lets `register-python-argcomplete`
+    find this hook). Converts a `LockOcupado` exception — raised when another
+    AdminForge process holds the state directory's lock — into a clean error
+    message and exit code 3 instead of a traceback.
+    """
     parser = _build_parser()
     try:
         import argcomplete

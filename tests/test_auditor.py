@@ -1,3 +1,5 @@
+"""Tests for the append-only audit log: hash-chain integrity, id allocation, and failure listing."""
+
 from datetime import datetime
 from pathlib import Path
 

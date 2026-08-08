@@ -1,3 +1,22 @@
+"""Real-execution ``IDeployer`` implementation: applies changes over SSH.
+
+This is the module where dry-run stops and side effects on remote hosts
+begin — everything here shells out to ``ssh``/``ssh-keyscan`` and mutates
+files on the target server (``authorized_keys``, ``/etc/sudoers.d/*``,
+optionally creating the unix account). ``adminforge.deployer.dry_run`` is
+the simulated counterpart with the same ``IDeployer`` shape but no network
+or filesystem effects on any remote host; callers choose between the two,
+this class never checks a "dry run" flag internally.
+
+Failure handling is per-subaction, not per-host or per-run: ``aplicar``
+processes every ``Subacao`` for one server and marks each one
+``"sucesso"``/``"falha"`` independently, so one server (or one credential
+within a server) failing does not stop or roll back the others already
+applied. There is no distributed transaction across hosts or across
+sub-actions on the same host; state changes made before a failure are not
+undone.
+"""
+
 from __future__ import annotations
 
 import base64
@@ -16,6 +35,16 @@ from adminforge.interfaces.deployer import IDeployer
 
 
 class SSHDeployer(IDeployer):
+    """Applies and inspects state on remote servers over SSH using a service account key.
+
+    Every remote operation goes through ``_executar_ssh``, which enforces
+    strict host-key checking (no TOFU, no ``StrictHostKeyChecking=no``) and
+    public-key-only auth — a server's ``chave_host`` must already be known
+    (see ``capturar_host_key``) before any command can run against it.
+    Writes to remote files (``authorized_keys``, sudoers) are done via
+    temp-file-then-``mv`` shell pipelines so a failed remote write does not
+    leave a half-written destination file.
+    """
 
     def __init__(
         self,
@@ -25,6 +54,12 @@ class SSHDeployer(IDeployer):
         timeout: int = 30,
         criar_conta_unix: bool = True,
     ):
+        """Configure SSH credentials/options and ensure the known_hosts file exists with mode 0600.
+
+        ``criar_conta_unix`` controls whether ``_garantir_usuario_unix`` is
+        allowed to run ``useradd`` for a missing account or must instead
+        fail (mirrors ``ADMINFORGE_CREATE_UNIX_USER``).
+        """
         self.chave_privada_path = Path(chave_privada_path)
         self.known_hosts_path = Path(known_hosts_path)
         self.usuario_servico = usuario_servico
@@ -36,6 +71,13 @@ class SSHDeployer(IDeployer):
         self._garantir_known_hosts()
 
     def _garantir_known_hosts(self) -> None:
+        """Create the known_hosts file (mode 0600) if missing, and re-assert that mode either way.
+
+        A ``PermissionError`` from ``chmod`` is swallowed rather than
+        raised (same rationale as elsewhere in the store/deployer layers:
+        some filesystems won't honor the mode, and that alone shouldn't be
+        fatal).
+        """
         self.known_hosts_path.parent.mkdir(parents=True, exist_ok=True)
         if not self.known_hosts_path.exists():
             self.known_hosts_path.touch(mode=0o600)
@@ -45,6 +87,17 @@ class SSHDeployer(IDeployer):
             pass
 
     def _opcoes_ssh(self, servidor: Servidor) -> list[str]:
+        """Build the shared ``ssh`` CLI options for talking to ``servidor``.
+
+        Raises ``HostKeyDivergente`` if the server has no registered
+        ``chave_host`` yet — this is the gate that prevents ever connecting
+        to a host AdminForge hasn't explicitly pinned. As a side effect,
+        also ensures that pinned key is present in ``known_hosts`` (via
+        ``_sincronizar_host_key``) before returning the option list, since
+        ``StrictHostKeyChecking=yes`` below requires it to already be
+        there. ``GlobalKnownHostsFile=/dev/null`` means only AdminForge's
+        own known_hosts file is trusted, not the system-wide one.
+        """
         if not servidor.chave_host:
             raise HostKeyDivergente(f"server {servidor.hostname} has no registered host_key")
         self._sincronizar_host_key(servidor)
@@ -61,6 +114,18 @@ class SSHDeployer(IDeployer):
         ]
 
     def _sincronizar_host_key(self, servidor: Servidor) -> None:
+        """Ensure ``servidor.chave_host`` is present (and any stale entry for the same host replaced) in known_hosts.
+
+        Read-modify-write of the whole file is protected by ``_kh_lock``
+        since multiple servers may be deployed to concurrently
+        (``apply --jobs N``) and all share this one file; without the lock
+        two threads racing here could each read the file before the other's
+        write, and one entry would be lost. If the exact entry is already
+        present this is a no-op; otherwise any existing line for the same
+        host (and port, for non-default ports) is dropped before appending
+        the current one, so a server's rotated host key replaces its old
+        entry rather than accumulating duplicates.
+        """
         host = servidor.ipv4 or servidor.hostname
         if servidor.porta_ssh != 22:
             entrada = f"[{host}]:{servidor.porta_ssh} {servidor.chave_host}\n"
@@ -77,6 +142,15 @@ class SSHDeployer(IDeployer):
             os.chmod(self.known_hosts_path, 0o600)
 
     def _executar_ssh(self, servidor: Servidor, comando: str) -> tuple[int, str, str]:
+        """Run ``comando`` on ``servidor`` over SSH and return ``(returncode, stdout, stderr)``.
+
+        Blocks stdin explicitly (``subprocess.DEVNULL``) so this never
+        consumes or waits on the caller's own stdin. Uses a timeout of
+        twice ``self.timeout`` (the connect timeout), giving the remote
+        command roughly that much time to actually execute after the
+        connection itself is established; a ``subprocess.TimeoutExpired``
+        propagates uncaught to the caller.
+        """
         host = servidor.ipv4 or servidor.hostname
         cmd = ["ssh", *self._opcoes_ssh(servidor), f"{self.usuario_servico}@{host}", comando]
         proc = subprocess.run(
@@ -89,6 +163,17 @@ class SSHDeployer(IDeployer):
         return proc.returncode, proc.stdout, proc.stderr
 
     def capturar_host_key(self, hostname: str, ipv4: str, porta: int) -> tuple[str, str]:
+        """Run ``ssh-keyscan`` against the host and return ``(key_line, sha256_fingerprint)``.
+
+        Prefers an ``ssh-ed25519`` key if the host offers one, otherwise
+        takes the first key line returned. This is how a server's
+        ``chave_host`` gets pinned in the first place (out of band from
+        ``_opcoes_ssh``'s strict checking) and should be treated as
+        trust-on-first-use: the caller is responsible for having the
+        operator confirm the fingerprint before it's persisted. Raises
+        ``HostKeyDivergente`` if ``ssh-keyscan`` fails outright or returns
+        no usable key line.
+        """
         host = ipv4 or hostname
         cmd = ["ssh-keyscan", "-T", str(self.timeout), "-t", "ed25519,rsa,ecdsa", "-p", str(porta), host]
         proc = subprocess.run(
@@ -122,6 +207,20 @@ class SSHDeployer(IDeployer):
         return preferida, fp
 
     def aplicar(self, servidor: Servidor, subacoes: list[Subacao]) -> list[Subacao]:
+        """Apply every sub-action to ``servidor``, mutating each ``Subacao``'s status/erro in place.
+
+        This is the real (non-dry-run) entry point: it actually connects
+        and mutates remote state. Two connectivity failures fail *all*
+        sub-actions in bulk without attempting any of them (no host_key /
+        ``_opcoes_ssh`` raising, or the ``true`` connectivity probe
+        returning non-zero) — in that case none of ``subacoes`` was ever
+        attempted, so it is safe to retry the whole batch. Past that point,
+        each sub-action is tried independently: one raising an exception
+        marks only that sub-action ``"falha"`` and the loop continues to
+        the next one, so a partial failure on this host does not roll back
+        or skip sub-actions already applied earlier in the same call. The
+        input list is both mutated and returned.
+        """
         try:
             self._opcoes_ssh(servidor)
         except Exception as e:
@@ -150,6 +249,15 @@ class SSHDeployer(IDeployer):
         return subacoes
 
     def _garantir_usuario_unix(self, servidor: Servidor, username: str) -> None:
+        """Ensure the unix account ``username`` exists on ``servidor``, creating it if allowed.
+
+        If the account is missing and ``self.criar_conta_unix`` is
+        ``False``, raises ``RuntimeError`` instead of creating it — this is
+        the enforcement point for the "don't auto-provision unix accounts"
+        policy (``ADMINFORGE_CREATE_UNIX_USER=false``). Account creation
+        uses ``sudo useradd -m -s /bin/bash``, so it also fails loudly if
+        sudo on the remote side isn't configured for this.
+        """
         u = shlex.quote(username)
         rc, _, _ = self._executar_ssh(servidor, f"id -u {u} >/dev/null 2>&1")
         if rc == 0:
@@ -164,6 +272,19 @@ class SSHDeployer(IDeployer):
             raise RuntimeError(f"failed to create unix user '{username}': {err.strip()}")
 
     def ler_authorized_keys(self, servidor: Servidor, username: str) -> tuple[str, bool]:
+        """Read ``username``'s authorized_keys via sudo, returning ``(content, ok)``.
+
+        ``ok`` is ``False`` whenever the read cannot be trusted — either
+        the ``sudo -n true`` preflight fails (no passwordless sudo) or the
+        remote command itself fails. This distinction matters because a
+        missing authorized_keys file is a legitimate case that also
+        produces empty output with ``rc == 0``: without the preflight,
+        "sudo silently blocked" and "file genuinely doesn't exist yet"
+        would be indistinguishable, and callers use ``ok`` to decide
+        whether it is safe to overwrite the file (see ``_adicionar_chave``/
+        ``_remover_chave``, which both refuse to proceed when ``ok`` is
+        ``False`` to avoid clobbering content they couldn't actually read).
+        """
         # Primeiro valida que sudo funciona com NOPASSWD; sem isso nao da
         # para distinguir 'arquivo nao existe' (output vazio legitimo) de
         # 'sudo bloqueou' (output vazio mascarando erro).
@@ -183,6 +304,22 @@ class SSHDeployer(IDeployer):
     def _escrever_authorized_keys(
         self, servidor: Servidor, username: str, conteudo: str
     ) -> None:
+        """Write ``conteudo`` as ``username``'s authorized_keys via a base64 pipe + temp-file + atomic move.
+
+        Content is base64-encoded before being embedded in the remote shell
+        command so arbitrary key material can't break out of the command
+        line. The remote-side sequence backs up the existing file to
+        ``.bak`` (if present), writes to a per-invocation temp path under
+        ``/tmp`` (random suffix via ``secrets.token_hex`` to avoid
+        collisions between concurrent deploys), then ``sudo mv``s it into
+        place — the rename is the only step that can make the change
+        visible, so a failure earlier in the pipeline never leaves a
+        partially written authorized_keys file. On any remote failure the
+        temp file is best-effort cleaned up and ``RuntimeError`` is raised.
+        A ``tee``+temp+``mv`` pattern is used instead of
+        ``install /dev/stdin`` because the latter isn't available on
+        minimal/busybox coreutils some targets may run.
+        """
         u = shlex.quote(username)
         b64 = base64.b64encode(conteudo.encode("utf-8")).decode("ascii")
         # tee+temp+mv (mesmo padrao do _escrever_sudoers): install /dev/stdin
@@ -207,6 +344,18 @@ class SSHDeployer(IDeployer):
 
 
     def _adicionar_chave(self, servidor: Servidor, sub: Subacao) -> None:
+        """Install/replace one credential's block in authorized_keys, and sync its sudoers entry.
+
+        Requires the unix account to exist first (creating it if allowed).
+        Refuses to proceed — raising rather than silently starting from an
+        empty file — if the existing authorized_keys content couldn't be
+        read reliably (see ``ler_authorized_keys``), since writing from an
+        empty/unknown base could delete other AdminForge-managed blocks
+        that happen to already be there. Also (re)writes or removes this
+        user's ``/etc/sudoers.d/adminforge-<username>`` file to match
+        ``sub.nivel`` — sudo access tracks the credential's own level, not
+        a separate step the caller must remember to trigger.
+        """
         if not sub.chave_publica or not sub.username or not sub.credencial:
             raise ValueError("sub-action missing chave_publica, username or credencial")
         self._garantir_usuario_unix(servidor, sub.username)
@@ -234,6 +383,22 @@ class SSHDeployer(IDeployer):
         destino: str,
         comandos: list[str] | None,
     ) -> None:
+        """Render and install a sudoers drop-in for ``username``, validated remotely with ``visudo -cf``.
+
+        ``comandos`` is a three-way switch, not just an optional list:
+        ``None`` means unrestricted (``NOPASSWD:ALL``, intentional full
+        sudo); an empty list is treated as an error rather than "no
+        commands", because silently writing a rule that grants nothing
+        would look successful while actually leaving the user with no sudo
+        access the caller likely expected; a non-empty list is validated
+        item-by-item (must be an absolute path, no newline/CR/NUL) as
+        defense-in-depth against hand-edited state files that bypassed the
+        Nucleo's own validation. The rendered file is written to a random
+        temp path, syntax-checked with ``visudo -cf`` *before* being moved
+        into ``/etc/sudoers.d/``, so a malformed rule never reaches the
+        live sudoers directory; on any failure the temp file is best-effort
+        removed and ``RuntimeError`` is raised.
+        """
         # Diferencia explicitamente None (full sudo) de [] (profile invalido):
         #   None         -> NOPASSWD:ALL (intencional)
         #   lista vazia  -> erro (profile resolveu para nada; nao escala silenciosamente)
@@ -276,6 +441,15 @@ class SSHDeployer(IDeployer):
             raise RuntimeError(f"failed to write sudoers: {err.strip()}")
 
     def _remover_chave(self, servidor: Servidor, sub: Subacao) -> None:
+        """Strip one credential's block from authorized_keys and delete its sudoers drop-in.
+
+        Same read-before-write safety as ``_adicionar_chave``: refuses to
+        proceed if the current authorized_keys content couldn't be read
+        reliably, to avoid overwriting it with an incomplete/empty base.
+        The sudoers removal (``rm -f``) is unconditional and best-effort —
+        its result is not checked, so this method does not fail just
+        because the sudoers file was already absent.
+        """
         if not sub.username or not sub.credencial:
             raise ValueError("sub-action missing username or credencial")
         atual, ok = self.ler_authorized_keys(servidor, sub.username)
@@ -309,6 +483,7 @@ class SSHDeployer(IDeployer):
 
     @staticmethod
     def _classificar_uid(uid: int) -> str:
+        """Classify a unix uid as ``"system"`` (<100), ``"service"`` (<1000), or ``"human"`` (otherwise)."""
         if uid < 100:
             return "system"
         if uid < 1000:
@@ -316,6 +491,22 @@ class SSHDeployer(IDeployer):
         return "human"
 
     def inspecionar(self, servidor: Servidor) -> dict:
+        """Run a single read-only remote script and return a structured snapshot of server state.
+
+        Executes ``_SCRIPT_INSPECAO`` once (one round trip covers users,
+        groups, running services, and sudoers), then parses its
+        section-delimited plain-text output locally. All sudo-gated parts
+        of the script fall back to a non-sudo attempt (e.g.
+        ``sudo -n cat ... || cat ...``) so inspection degrades gracefully
+        instead of failing outright when the service account lacks
+        passwordless sudo — it just won't see privileged data it isn't
+        allowed to read. On any SSH-level failure returns ``{"erro": ...}``
+        instead of raising, unlike ``aplicar``'s per-sub-action exceptions.
+        Sudo rules are attributed to users heuristically by taking the
+        first whitespace-separated token of each non-comment,
+        non-``Defaults`` line as the username; group rules (lines starting
+        with ``%``) are recognized and skipped, not attributed to anyone.
+        """
         try:
             self._opcoes_ssh(servidor)
         except Exception as e:

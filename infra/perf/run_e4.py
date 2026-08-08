@@ -27,6 +27,10 @@ JOBS = 25
 
 
 def one_rep(n: int, rep: int, keys: dict) -> dict:
+    """Run one E4 repetition at fleet size n: fresh fleet, declare the reference state,
+    then time the four --jobs 25 cells listed in the module docstring. Returns the raw
+    payload later summarized by aggregate.py into results.json's "e4_parallelism".
+    """
     P.fleet_down()
     hosts = P.fleet_up(n)
     state = P.WORK_DIR / f"state-e4-n{n:02d}-rep{rep}"
@@ -50,6 +54,15 @@ def one_rep(n: int, rep: int, keys: dict) -> dict:
 
 
 def main() -> int:
+    """Run the E4 parallelism ladder over --sizes x --reps, skipping repetitions on disk.
+
+    Unlike E1/E2/E3, this experiment's output ("e4_parallelism" in
+    results.json) is not read by claims.py and is not reproduced by any
+    of the run_claim1/2/3.sh scripts, nor cited by name anywhere in the
+    top-level README: no numbered paper claim currently consumes it. (The
+    unrelated "(parallel)" figure in run_claim1.sh's own result box comes
+    from run_e2.py's af_sanity(), not from here.)
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--sizes", default="5,10,25,50")
     ap.add_argument("--reps", type=int, default=5)

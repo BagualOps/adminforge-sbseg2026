@@ -16,6 +16,16 @@ import perflib as P
 
 
 def main() -> int:
+    """Render the four paper performance-section paragraphs from results.json and verify them.
+
+    These are the harness's own "CLAIM 1..4" prose (scalability, delta-cost
+    plus peak RSS, zero new listening sockets, and the Ansible comparison),
+    a different numbering from the top-level README's reproducibility
+    Claim #1/#2/#3: run_claim1.sh covers CLAIM 1 and CLAIM 4 here (as its
+    (a) and (b)), and run_claim3.sh's SLOC/import claim is not among these
+    four at all. Exit status is nonzero if any assertion behind a printed
+    paragraph fails against the recorded numbers.
+    """
     path = P.PERF_DIR / "results" / "results.json"
     data = json.loads(path.read_text())
 
@@ -52,6 +62,11 @@ def main() -> int:
     v = e3["verdict"]
 
     def non_loopback_tcp(entries: list[str]) -> set[str]:
+        """Return the TCP ports of `entries` that are reachable from outside the host.
+
+        Loopback binds (127.0.0.0/8 and ::1) are excluded because they are not part
+        of the attack surface an external peer sees; UDP entries are ignored.
+        """
         out = set()
         for e in entries:
             proto, addr, port = e.rsplit(" ", 2)

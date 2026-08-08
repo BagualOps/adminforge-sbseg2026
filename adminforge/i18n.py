@@ -45,6 +45,13 @@ def set_lang(code: str | None) -> None:
 
 
 def t(msg: str) -> str:
+    """Translate `msg` (the English source string, used as the catalog key).
+
+    Falls back to `msg` itself, unchanged, when the resolved language is
+    "en" or when `msg` has no entry in that language's catalog — a
+    missing translation degrades to English instead of raising or
+    returning an empty string.
+    """
     lang = _resolve_lang()
     if lang == "en":
         return msg

@@ -1,3 +1,5 @@
+"""Tests for the planner: desired state, delta against the observed state, and the resulting subactions."""
+
 import pytest
 
 from adminforge.core.nucleo import Nucleo

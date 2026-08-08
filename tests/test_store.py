@@ -1,3 +1,5 @@
+"""Tests for the JSON store: atomic writes, natural-key lookups, and locking."""
+
 from pathlib import Path
 
 import pytest

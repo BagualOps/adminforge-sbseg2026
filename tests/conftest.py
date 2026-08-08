@@ -1,3 +1,9 @@
+"""Shared pytest fixtures for the unit test suite.
+
+Every fixture here wires the fake (in-memory-on-disk) collaborators —
+DryRunDeployer, JsonStore, JsonlAuditor — so unit tests exercise Nucleo's
+logic without SSH or real servers.
+"""
 from __future__ import annotations
 
 from pathlib import Path
@@ -20,6 +26,7 @@ HOST_KEY_FAKE = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBO4cGUzZxDpHxEyz1F4vLeXyv7
 
 @pytest.fixture
 def state_dir(tmp_path: Path) -> Path:
+    """A fresh, empty state directory under pytest's per-test tmp_path."""
     d = tmp_path / "state"
     d.mkdir()
     return d
@@ -27,11 +34,13 @@ def state_dir(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def deployer() -> DryRunDeployer:
+    """A Deployer that records intended SSH actions without ever opening a connection."""
     return DryRunDeployer()
 
 
 @pytest.fixture
 def nucleo(state_dir: Path, deployer: DryRunDeployer) -> Nucleo:
+    """A Nucleo wired to a fresh JsonStore/JsonlAuditor over `state_dir` and the dry-run deployer."""
     store = JsonStore(state_dir)
     auditor = JsonlAuditor(state_dir / "history.jsonl")
     return Nucleo(store, auditor, deployer, superadmin="operador")

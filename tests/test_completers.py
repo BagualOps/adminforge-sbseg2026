@@ -1,3 +1,5 @@
+"""Tests for the argcomplete completers that read the state directory and offer candidates."""
+
 from argparse import Namespace
 from pathlib import Path
 

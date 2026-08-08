@@ -1,3 +1,5 @@
+"""Tests for SSH key parsing, fingerprinting, and validation."""
+
 import pytest
 
 from adminforge import ssh_keys

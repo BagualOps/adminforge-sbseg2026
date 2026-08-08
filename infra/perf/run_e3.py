@@ -63,6 +63,11 @@ def parse_proc_net(text: str, proto: str) -> set[str]:
 
 
 def container_sockets(name: str) -> set[str]:
+    """Return the union of parse_proc_net() over tcp/tcp6/udp/udp6 inside container `name`.
+
+    Reads through `docker exec cat /proc/net/...`, so no extra tooling
+    (netstat/ss) needs to be present in the minimal fleet image.
+    """
     out: set[str] = set()
     for proto in ("tcp", "tcp6", "udp", "udp6"):
         proc = P.sh(["docker", "exec", name, "cat", f"/proc/net/{proto}"], check=False)
@@ -72,6 +77,12 @@ def container_sockets(name: str) -> set[str]:
 
 
 def host_listen_inodes() -> set[str]:
+    """Return the socket inode numbers of every listening TCP socket on the operator host.
+
+    Read from /proc/net/{tcp,tcp6} rather than the container's, since this
+    checks the AdminForge *process*, which runs on the host/operator side,
+    not inside the fleet.
+    """
     inodes = set()
     for proto in ("tcp", "tcp6"):
         for line in Path(f"/proc/net/{proto}").read_text().splitlines()[1:]:
@@ -82,6 +93,11 @@ def host_listen_inodes() -> set[str]:
 
 
 def proc_tree(pid: int) -> list[int]:
+    """Return `pid` and all of its descendant PIDs, walked via /proc/*/task/*/children.
+
+    AdminForge's `apply` may fork ssh subprocesses, so checking only the
+    top-level PID for listening sockets would miss one opened by a child.
+    """
     pids, todo = [], [pid]
     while todo:
         p = todo.pop()
@@ -95,6 +111,13 @@ def proc_tree(pid: int) -> list[int]:
 
 
 def tree_socket_inodes(pid: int) -> set[str]:
+    """Return the inode numbers of every socket fd open across `pid`'s process tree.
+
+    Parsed from each process's /proc/<pid>/fd/* symlink targets
+    ("socket:[<inode>]"); intersecting this against host_listen_inodes()
+    is what monitored_apply() uses to catch a listening socket, not just
+    an outbound one (every ssh connection is itself a socket fd here).
+    """
     inodes = set()
     for p in proc_tree(pid):
         fd_dir = Path(f"/proc/{p}/fd")
@@ -135,6 +158,15 @@ def monitored_apply(state: Path) -> dict:
 
 
 def main() -> int:
+    """Run the single E3 attack-surface repetition and write results/raw/e3_attack_surface.json.
+
+    None of the three run_claim1/2/3.sh scripts in the top-level README
+    call this script. Its "zero new listening sockets" and "AdminForge
+    never holds a listening socket" verdicts instead feed claims.py's
+    CLAIM 3 paragraph for the paper's performance section, and are only
+    reproduced by running this script directly (the committed reference
+    output is results/raw/e3_attack_surface.json).
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--fleet", type=int, default=10)
     ap.add_argument("--sample", type=int, default=3)

@@ -1,3 +1,19 @@
+"""Core orchestration layer: validate input, mutate persisted state, and audit every operation.
+
+`Nucleo` is the single write path for all AdminForge entities (users, SSH
+keys, user-groups, servers, server-groups, permissions, sudo-profiles) and
+hosts the plan/apply/reconcile pipeline built on `planner.Planner`. Every
+mutating method follows the same shape: allocate an `Operacao`, validate and
+mutate `JsonStore` state inside `with self.store:`, and register the
+resulting status through `JsonlAuditor` so the audit log always reflects what
+was actually persisted. `preview`/`aplicar` are where the paper's central
+claim is implemented: without `--reconcile` they answer "is anything
+pending?" purely from the locally persisted desired-vs-installed state (no
+network I/O), and `aplicar` applies per host independently so its cost scales
+linearly with fleet size; passing `reconcile=True` swaps in the real state
+fetched over SSH (`_atual_vivo`) for the comparison instead.
+"""
+
 from __future__ import annotations
 
 import re
@@ -42,6 +58,7 @@ _RE_IPV4 = re.compile(r"^(?:\d{1,3}\.){3}\d{1,3}$")
 
 
 def _ipv4_valido(ip: str) -> bool:
+    """Return whether `ip` is a syntactically valid dotted-quad IPv4 address (each octet 0-255)."""
     if not _RE_IPV4.match(ip):
         return False
     return all(0 <= int(octeto) <= 255 for octeto in ip.split("."))
@@ -65,6 +82,17 @@ def _msg_permissoes_associadas(tipo: str, nome: str, perms: list[Permissao]) -> 
 
 
 class Nucleo:
+    """Facade over `JsonStore`, `JsonlAuditor` and `Planner` that implements every AdminForge command.
+
+    Holds the single `JsonStore` instance (state of record), the
+    `JsonlAuditor` (append-only history) and a `Planner` built on the same
+    store; `deployer` is the only collaborator that touches real hosts and
+    defaults to `DryRunDeployer`, so constructing a `Nucleo` never risks
+    reaching the network. Callers are the CLI subcommands; each public method
+    maps to one CLI verb and returns the `Operacao` that was appended to the
+    audit log, success or failure alike.
+    """
+
     def __init__(
         self,
         store: JsonStore,
@@ -72,6 +100,7 @@ class Nucleo:
         deployer: IDeployer | None = None,
         superadmin: str = "unknown",
     ):
+        """Store the collaborators and build a `Planner` bound to the same `store`."""
         self.store = store
         self.auditor = auditor
         self.deployer = deployer or DryRunDeployer()
@@ -85,11 +114,24 @@ class Nucleo:
         deployer: IDeployer | None = None,
         superadmin: str = "unknown",
     ) -> "Nucleo":
+        """Build a `Nucleo` wired to a `JsonStore`/`JsonlAuditor` pair rooted at `state_dir`.
+
+        Convenience constructor for the CLI entry point: derives
+        `history.jsonl` from `state_dir` so callers only need to know the
+        state directory, not the on-disk layout of the store and the audit
+        log.
+        """
         store = JsonStore(state_dir)
         auditor = JsonlAuditor(state_dir / "history.jsonl")
         return cls(store, auditor, deployer, superadmin)
 
     def _nova_op(self, comando: str) -> Operacao:
+        """Allocate a new `Operacao` in `EM_ANDAMENTO` status with a fresh id and timestamp.
+
+        Called at the top of every command before any validation or
+        mutation, so a record already exists to attach a failure to even if
+        the command raises before doing any work.
+        """
         return Operacao(
             id=self.auditor.proximo_id(),
             momento=datetime.now().astimezone(),
@@ -99,17 +141,36 @@ class Nucleo:
         )
 
     def _registrar(self, op: Operacao, status: StatusOperacao) -> Operacao:
+        """Set `op.status` and persist it via `self.auditor.registrar`, then return `op`.
+
+        Centralizes the "write the outcome to the audit log" step so every
+        command method ends the same way regardless of which status it
+        reached.
+        """
         op.status = status
         self.auditor.registrar(op)
         return op
 
     def _registrar_falha(self, op: Operacao, mensagem: str) -> Operacao:
+        """Attach a synthetic failed `Subacao` carrying `mensagem` to `op` and register it as `FALHA`.
+
+        Used by the `except Exception` handler at the end of every command
+        method, so a validation error or store exception still produces a
+        `Subacao` an operator can read from the audit log instead of just a
+        bare failure status with no detail.
+        """
         op.subacoes.append(
             Subacao(servidor="", acao=TipoAcao.LEITURA, status="falha", erro=mensagem)
         )
         return self._registrar(op, StatusOperacao.FALHA)
 
     def cadastrar_user(self, username: str, nome: str, email: str) -> Operacao:
+        """Validate and persist a new active user, failing if the username or email is malformed or the username is already taken.
+
+        Runs entirely inside a `JsonStore` transaction; any raised exception
+        is caught and turned into a `FALHA` `Operacao` rather than
+        propagating, so the CLI never crashes on invalid input.
+        """
         op = self._nova_op(f"user add {username}")
         try:
             with self.store:
@@ -127,6 +188,12 @@ class Nucleo:
             return self._registrar_falha(op, str(e))
 
     def desabilitar_user(self, username: str) -> Operacao:
+        """Mark `username` as `INATIVO` and revoke all of its currently active SSH credentials.
+
+        Revoking the credentials here, rather than leaving that to the next
+        `apply`, means a disabled user shows up as revoked in the store
+        immediately, before any `preview`/`apply` runs against the fleet.
+        """
         op = self._nova_op(f"user disable {username}")
         try:
             with self.store:
@@ -144,6 +211,13 @@ class Nucleo:
             return self._registrar_falha(op, str(e))
 
     def cadastrar_chave(self, username: str, chave_raw: str) -> Operacao:
+        """Register a new SSH public key for `username`, rejecting it if its fingerprint is already on file for that user.
+
+        Keys are stored canonicalized (`ssh_keys.chave_canonica`) and
+        deduplicated by fingerprint, not by raw text, so re-submitting the
+        same key with different whitespace or a different comment is still
+        caught as a duplicate.
+        """
         op = self._nova_op(f"user key add {username}")
         try:
             with self.store:
@@ -165,6 +239,11 @@ class Nucleo:
             return self._registrar_falha(op, str(e))
 
     def revogar_chave(self, fingerprint: str) -> Operacao:
+        """Mark the credential identified by `fingerprint` as `REVOGADA`.
+
+        Looks the credential up across all users by fingerprint alone; the
+        caller does not need to know which user it belongs to.
+        """
         op = self._nova_op(f"user key revoke {fingerprint}")
         try:
             with self.store:
@@ -178,6 +257,7 @@ class Nucleo:
             return self._registrar_falha(op, str(e))
 
     def criar_grupo_user(self, nome: str) -> Operacao:
+        """Validate and persist a new, empty user-group, failing if the name is malformed or already exists."""
         op = self._nova_op(f"user-group create {nome}")
         try:
             with self.store:
@@ -191,9 +271,17 @@ class Nucleo:
             return self._registrar_falha(op, str(e))
 
     def adicionar_membro_grupo_user(self, grupo: str, username: str) -> Operacao:
+        """Add a single user to `grupo`; delegates to `adicionar_membros_grupo_user` with a one-element list."""
         return self.adicionar_membros_grupo_user(grupo, [username])
 
     def adicionar_membros_grupo_user(self, grupo: str, usernames: list[str]) -> Operacao:
+        """Add `usernames` to `grupo`, failing if the group or any of the users does not exist.
+
+        Idempotent: reports success without changing anything if every
+        requested member is already in the group. Membership is stored
+        sorted, so re-running with an overlapping set never changes the
+        persisted member order.
+        """
         op = self._nova_op(f"user-group add-member {grupo} {' '.join(usernames)}")
         try:
             with self.store:
@@ -214,9 +302,18 @@ class Nucleo:
             return self._registrar_falha(op, str(e))
 
     def remover_membro_grupo_user(self, grupo: str, username: str) -> Operacao:
+        """Remove a single user from `grupo`; delegates to `remover_membros_grupo_user` with a one-element list."""
         return self.remover_membros_grupo_user(grupo, [username])
 
     def remover_membros_grupo_user(self, grupo: str, usernames: list[str]) -> Operacao:
+        """Remove `usernames` from `grupo`, failing only if the group itself does not exist.
+
+        Silently ignores names not currently in the group (removal is
+        idempotent) and, unlike the add path, does not check that the names
+        are known users: membership can only reference users that already
+        existed when added, and a name may have since been deleted from the
+        store.
+        """
         op = self._nova_op(f"user-group remove-member {grupo} {' '.join(usernames)}")
         try:
             with self.store:
@@ -234,6 +331,13 @@ class Nucleo:
             return self._registrar_falha(op, str(e))
 
     def excluir_grupo_user(self, nome: str) -> Operacao:
+        """Delete `nome`, failing if it does not exist or still has permissions granted to it.
+
+        The permission check exists so deleting a group can never silently
+        orphan a `Permissao` that references it; the error message lists
+        every blocking permission and the `revoke` command needed to clear
+        it (`_msg_permissoes_associadas`).
+        """
         op = self._nova_op(f"user-group delete {nome}")
         try:
             with self.store:
@@ -254,6 +358,7 @@ class Nucleo:
         porta: int,
         host_key: str,
     ) -> Operacao:
+        """Validate and persist a new server, failing if the hostname/IPv4/port/host key is malformed or the hostname is already registered."""
         op = self._nova_op(f"server add {hostname}")
         try:
             with self.store:
@@ -280,6 +385,13 @@ class Nucleo:
             return self._registrar_falha(op, str(e))
 
     def excluir_servidor(self, hostname: str) -> Operacao:
+        """Delete `hostname` and remove it from every server-group that lists it as a member.
+
+        Unlike `excluir_grupo_user`/`excluir_grupo_servidor`, this does not
+        block on associated permissions: permissions reference server-groups,
+        not individual servers, so removing a server just shrinks the groups
+        it belonged to instead of leaving a dangling reference.
+        """
         op = self._nova_op(f"server remove {hostname}")
         try:
             with self.store:
@@ -295,6 +407,7 @@ class Nucleo:
             return self._registrar_falha(op, str(e))
 
     def criar_grupo_servidor(self, nome: str) -> Operacao:
+        """Validate and persist a new, empty server-group, failing if the name is malformed or already exists."""
         op = self._nova_op(f"server-group create {nome}")
         try:
             with self.store:
@@ -308,9 +421,15 @@ class Nucleo:
             return self._registrar_falha(op, str(e))
 
     def adicionar_membro_grupo_servidor(self, grupo: str, hostname: str) -> Operacao:
+        """Add a single server to `grupo`; delegates to `adicionar_membros_grupo_servidor` with a one-element list."""
         return self.adicionar_membros_grupo_servidor(grupo, [hostname])
 
     def adicionar_membros_grupo_servidor(self, grupo: str, hostnames: list[str]) -> Operacao:
+        """Add `hostnames` to `grupo`, failing if the group or any of the servers does not exist.
+
+        Idempotent no-op if every hostname is already a member; membership is
+        stored sorted, mirroring `adicionar_membros_grupo_user`.
+        """
         op = self._nova_op(f"server-group add-member {grupo} {' '.join(hostnames)}")
         try:
             with self.store:
@@ -331,9 +450,11 @@ class Nucleo:
             return self._registrar_falha(op, str(e))
 
     def remover_membro_grupo_servidor(self, grupo: str, hostname: str) -> Operacao:
+        """Remove a single server from `grupo`; delegates to `remover_membros_grupo_servidor` with a one-element list."""
         return self.remover_membros_grupo_servidor(grupo, [hostname])
 
     def remover_membros_grupo_servidor(self, grupo: str, hostnames: list[str]) -> Operacao:
+        """Remove `hostnames` from `grupo`, failing only if the group itself does not exist; mirrors `remover_membros_grupo_user`."""
         op = self._nova_op(f"server-group remove-member {grupo} {' '.join(hostnames)}")
         try:
             with self.store:
@@ -351,6 +472,7 @@ class Nucleo:
             return self._registrar_falha(op, str(e))
 
     def excluir_grupo_servidor(self, nome: str) -> Operacao:
+        """Delete `nome`, failing if it does not exist or still has permissions granted to it; mirrors `excluir_grupo_user`."""
         op = self._nova_op(f"server-group delete {nome}")
         try:
             with self.store:
@@ -371,6 +493,15 @@ class Nucleo:
         nivel: NivelPermissao,
         profile: str | None = None,
     ) -> Operacao:
+        """Grant `nivel` access from `grupo_user` to `grupo_servidor`, optionally scoped to a sudo `profile`.
+
+        Validates that both groups exist, that `profile` is only supplied
+        when `nivel` is `SUDO`, and that a supplied profile actually exists
+        in the store. Overwrites any existing permission for the same
+        (user-group, server-group) pair rather than failing, since a
+        permission is keyed on that pair and re-granting is how it is
+        updated.
+        """
         comando = f"permission grant {grupo_user} {grupo_servidor} --level {nivel.value}"
         if profile:
             comando += f" --profile {profile}"
@@ -399,6 +530,14 @@ class Nucleo:
             return self._registrar_falha(op, str(e))
 
     def criar_sudo_profile(self, nome: str, comandos: list[str]) -> Operacao:
+        """Validate and persist a new sudo command profile, failing on a malformed name, an empty command list, or a non-absolute or control-character-bearing command.
+
+        The control-character check exists specifically to stop sudoers rule
+        injection: `visudo -c` validates syntax but does not distinguish one
+        sudoers line from two, so a command smuggling in an embedded
+        `\\n`/`\\r`/NUL could otherwise add a second, attacker-controlled
+        rule while still passing validation.
+        """
         op = self._nova_op(f"sudo-profile create {nome}")
         try:
             with self.store:
@@ -422,6 +561,12 @@ class Nucleo:
             return self._registrar_falha(op, str(e))
 
     def excluir_sudo_profile(self, nome: str) -> Operacao:
+        """Delete `nome`, failing if it does not exist or is still referenced by a permission.
+
+        Mirrors the group-deletion guards: a profile in use is never deleted
+        by silently nulling out the permissions that reference it, since that
+        would promote them to unrestricted sudo instead of failing loudly.
+        """
         op = self._nova_op(f"sudo-profile delete {nome}")
         try:
             with self.store:
@@ -438,6 +583,12 @@ class Nucleo:
             return self._registrar_falha(op, str(e))
 
     def revogar(self, grupo_user: str, grupo_servidor: str) -> Operacao:
+        """Delete the permission for the (`grupo_user`, `grupo_servidor`) pair, failing with a friendly error if it does not exist.
+
+        Catches `FileNotFoundError` specifically (raised by the store when
+        the pair has no permission) and reports it as a normal `Operacao`
+        failure rather than letting it propagate as an unrelated I/O error.
+        """
         op = self._nova_op(f"permission revoke {grupo_user} {grupo_servidor}")
         try:
             with self.store:
@@ -449,6 +600,16 @@ class Nucleo:
             return self._registrar_falha(op, str(e))
 
     def preview(self, force: bool = False, reconcile: bool = False) -> list[Subacao]:
+        """Compute the pending `Subacao` list without applying it -- the "is anything pending?" check the paper measures.
+
+        With `reconcile=True`, compares desired state against the real state
+        fetched live over SSH (`_atual_vivo`); otherwise the comparison is
+        entirely against the state already persisted in `JsonStore`
+        (`chaves_instaladas`, last written by `aplicar`), so no host is
+        contacted and the check stays fast regardless of fleet size. `force`
+        is passed through to `Planner.calcular_delta` to treat every desired
+        credential as if nothing were installed.
+        """
         if reconcile:
             return self.planner.calcular_delta(atual_override=self._atual_vivo())
         return self.planner.calcular_delta(force=force)
@@ -491,6 +652,21 @@ class Nucleo:
         reconcile: bool = False,
         subacoes: list[Subacao] | None = None,
     ) -> Operacao:
+        """Compute (or accept) the pending subactions and apply them to each host, updating the persisted installed-keys state.
+
+        Computes the delta the same way `preview` does unless `subacoes` is
+        supplied by the caller, so a previously computed preview can be
+        re-applied without recomputing it. Deployment is grouped per host
+        and, when `jobs > 1` and more than one host has work, fanned out over
+        a bounded `ThreadPoolExecutor` -- this is the step whose cost the
+        paper claims is linear per host, since each host's SSH round-trip is
+        independent, and the `Store` update that follows stays serial and
+        deterministic regardless of `jobs`, so the persisted result is
+        identical whether hosts were applied in parallel or not. A host
+        removed from the store between planning and apply is reported as a
+        failed subaction rather than raising, so a partially stale plan
+        degrades to `SUCESSO_PARCIAL` instead of aborting the whole run.
+        """
         op = self._nova_op("apply")
         try:
             with self.store:
@@ -584,6 +760,7 @@ class Nucleo:
     # Edits / renames
     # ---------------------------------------------------------------------------
     def editar_user(self, username: str, nome: str | None = None, email: str | None = None) -> Operacao:
+        """Update `nome` and/or `email` on an existing user, validating whichever fields are supplied; fields left as `None` are unchanged."""
         op = self._nova_op(f"user edit {username}")
         try:
             with self.store:
@@ -604,6 +781,11 @@ class Nucleo:
             return self._registrar_falha(op, str(e))
 
     def renomear_user(self, de: str, para: str) -> Operacao:
+        """Rename a user from `de` to `para` and update their membership in every user-group.
+
+        No-op success if `de == para`. Fails if `para` is invalid or already
+        taken, or if `de` does not exist.
+        """
         op = self._nova_op(f"user rename {de} -> {para}")
         try:
             with self.store:
@@ -631,6 +813,7 @@ class Nucleo:
         porta: int | None = None,
         chave_host: str | None = None,
     ) -> Operacao:
+        """Update `ipv4`, `porta` and/or `chave_host` on an existing server, validating whichever fields are supplied; fields left as `None` are unchanged."""
         op = self._nova_op(f"server edit {hostname}")
         try:
             with self.store:
@@ -655,6 +838,7 @@ class Nucleo:
             return self._registrar_falha(op, str(e))
 
     def renomear_servidor(self, de: str, para: str) -> Operacao:
+        """Rename a server from `de` to `para` and update its membership in every server-group; mirrors `renomear_user`."""
         op = self._nova_op(f"server rename {de} -> {para}")
         try:
             with self.store:
@@ -684,6 +868,16 @@ class Nucleo:
         rename,
         atualizar_permissao,
     ) -> Operacao:
+        """Shared rename implementation for user-groups and server-groups: validate, rename via `rename`, and repoint every `Permissao` that referenced the old name.
+
+        `get`/`rename` are the store accessors for the specific group kind
+        being renamed; `atualizar_permissao` is a callback that mutates a
+        `Permissao` in place if it references `de`, so the same generic pass
+        over `self.store.list_permissoes()` works for both user-groups
+        (matching `grupo_user`) and server-groups (matching
+        `grupo_servidor`). `tipo` is used only for the command string and
+        error messages.
+        """
         op = self._nova_op(f"{tipo} rename {de} -> {para}")
         try:
             with self.store:
@@ -705,7 +899,9 @@ class Nucleo:
             return self._registrar_falha(op, str(e))
 
     def renomear_grupo_user(self, de: str, para: str) -> Operacao:
+        """Rename a user-group from `de` to `para`, repointing permissions via `_renomear_grupo`."""
         def _swap(p, antigo, novo):
+            """Repoint `p.grupo_user` to `novo` in place if it currently references `antigo`."""
             if p.grupo_user == antigo:
                 p.grupo_user = novo
         return self._renomear_grupo(
@@ -714,7 +910,9 @@ class Nucleo:
         )
 
     def renomear_grupo_servidor(self, de: str, para: str) -> Operacao:
+        """Rename a server-group from `de` to `para`, repointing permissions via `_renomear_grupo`."""
         def _swap(p, antigo, novo):
+            """Repoint `p.grupo_servidor` to `novo` in place if it currently references `antigo`."""
             if p.grupo_servidor == antigo:
                 p.grupo_servidor = novo
         return self._renomear_grupo(
@@ -723,6 +921,11 @@ class Nucleo:
         )
 
     def renomear_sudo_profile(self, de: str, para: str) -> Operacao:
+        """Rename a sudo-profile from `de` to `para` and repoint every `Permissao.profile` that referenced the old name.
+
+        Does not reuse `_renomear_grupo` because a sudo-profile is not a
+        group with membership.
+        """
         op = self._nova_op(f"sudo-profile rename {de} -> {para}")
         try:
             with self.store:
@@ -745,6 +948,15 @@ class Nucleo:
             return self._registrar_falha(op, str(e))
 
     def auditar_servidor(self, hostname: str) -> tuple[Operacao, dict]:
+        """Inspect `hostname` live over SSH and return both the resulting `Operacao` and the raw report from `deployer.inspecionar`.
+
+        Unlike the other command methods, this does not open a `JsonStore`
+        transaction (`with self.store:`): it only reads the store via
+        `get_servidor` and never persists anything, so no transaction is
+        needed. On failure it also returns the exception as a dict with an
+        `"erro"` key, not just the failed `Operacao`, since the caller needs
+        a report shape even when inspection could not run.
+        """
         op = self._nova_op(f"audit server {hostname}")
         try:
             servidor = self.store.get_servidor(hostname)

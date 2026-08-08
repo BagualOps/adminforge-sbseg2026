@@ -21,6 +21,12 @@ import perflib as P
 
 
 def summarize(values: list[float]) -> dict:
+    """Reduce one cell's repetition samples to median/min/max seconds plus the rep count.
+
+    Median, not mean, is what claims.py and the claim scripts read back
+    for every assertion, so it is what is hardware-independent across
+    machines even though the underlying seconds are not.
+    """
     return {
         "median_s": round(statistics.median(values), 3),
         "min_s": round(min(values), 3),
@@ -30,6 +36,15 @@ def summarize(values: list[float]) -> dict:
 
 
 def main() -> int:
+    """Fold every raw/*.json repetition into results/results.json, keyed by experiment.
+
+    Groups by filename prefix (e1_/e2_/e3_/e4_) rather than by content, so
+    it stays correct even for experiments whose raw schema differs (E3's
+    single attack-surface verdict has no repetitions to summarize, unlike
+    E1/E2/E4's per-cell wall-clock lists). This is the file claims.py and
+    the paper's performance-section numbers are read from; run_e1..e4.py
+    only ever write to results/raw/.
+    """
     raws = sorted(P.RESULTS_RAW.glob("*.json"))
     if not raws:
         print("no raw results found; run the experiments first", file=sys.stderr)

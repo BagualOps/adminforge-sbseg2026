@@ -45,6 +45,8 @@ CONTROLLER = "adminforge-perf-ansible-controller:latest"
 
 
 def build_image_py3() -> None:
+    """Build the fleet image variant with a Python interpreter, which Ansible requires
+    on every managed host but AdminForge does not."""
     P.build_image()
     P.sh(["docker", "build", "-t", IMAGE_PY3,
           "--build-arg", f"BASE_IMAGE={P.IMAGE}",
@@ -58,6 +60,11 @@ def build_controller() -> None:
 
 
 def controller_info() -> tuple[str, str]:
+    """Return (ansible --version output, the controller's DEFAULT_FORKS config line).
+
+    Recorded per run so the effective forks Ansible used for the "default
+    forks" configs is traceable from the raw JSON, not assumed.
+    """
     proc = P.sh(["docker", "run", "--rm", CONTROLLER, "ansible", "--version"])
     version = proc.stdout.splitlines()[0].strip()
     dump = P.sh(["docker", "run", "--rm", CONTROLLER, "ansible-config", "dump"],
@@ -88,6 +95,12 @@ def write_users_yml(keys: dict[str, Path]) -> Path:
 
 
 def write_inventory(hosts: list[dict], known_hosts: Path) -> Path:
+    """Write an Ansible INI inventory for `hosts`, one line per host, into work/.
+
+    This generated file's line count (one per host) is the "15" that
+    `count_effort()` and the README's Claim #1 add into the 78-line YAML
+    total; it is deliberately not committed since it is regenerated per run.
+    """
     # Paths here are the fixed locations the controller container sees (the key
     # and known_hosts are bind-mounted / copied into the container by run_playbook).
     lines = ["[fleet]"]
@@ -107,6 +120,13 @@ def write_inventory(hosts: list[dict], known_hosts: Path) -> Path:
 
 
 def keyscan(hosts: list[dict]) -> Path:
+    """Pre-populate a known_hosts file for `hosts` via ssh-keyscan, run untimed.
+
+    Runs before the timed cells so Ansible's StrictHostKeyChecking=yes does
+    not pay a first-contact cost AdminForge does not pay either (AdminForge
+    captures host keys at `server add --auto` time, also outside its
+    timed apply) — part of keeping the E2 comparison fair.
+    """
     out = []
     for h in hosts:
         proc = P.sh(["ssh-keyscan", "-t", "ed25519", h["ip"]], check=False)
@@ -169,6 +189,10 @@ def af_sanity(n: int, keys: dict) -> None:
 
 
 def one_rep(n: int, forks: int | None, rep: int, keys: dict) -> dict:
+    """Run one E2 repetition: fresh fleet of size n, then time the Ansible playbook's
+    first apply and an immediate no-op re-run at the given --forks. Returns the raw
+    payload later summarized by aggregate.py into results.json's "e2_ansible_comparison".
+    """
     P.fleet_down()
     hosts = P.fleet_up(n, image=IMAGE_PY3)
     payload = {"n": n, "forks": forks if forks is not None else "default", "rep": rep,
@@ -184,7 +208,15 @@ def one_rep(n: int, forks: int | None, rep: int, keys: dict) -> dict:
 
 
 def count_effort() -> dict:
+    """Count non-empty, non-comment lines of each committed Ansible file, for the
+    "configuration effort" comparison against AdminForge's CLI command count
+    (README Claim #1(b): 78 YAML lines = playbook + generated inventory + users.yml)."""
     def nonempty(path: Path) -> int:
+        """Count the lines of `path` that carry configuration.
+
+        Blank lines and whole-line `#` comments do not count, so the figure
+        reflects what an operator actually had to write.
+        """
         return sum(1 for line in path.read_text().splitlines()
                    if line.strip() and not line.strip().startswith("#"))
 
@@ -196,6 +228,16 @@ def count_effort() -> dict:
 
 
 def main() -> int:
+    """Run the E2 configs (N:forks pairs from --configs) over --reps, skipping
+    repetitions already on disk.
+
+    The full campaign (N=10 and N=50, default forks, plus N=50 forks=25)
+    is what the paper's performance section and claims.py's CLAIM 4
+    paragraph read. `run_claim1.sh` instead calls this with --reps 1
+    --configs 10:default to reproduce paper Claim #1(b) — the >=5x
+    no-op speedup over Ansible in the README's Experiments section —
+    live on the evaluator's machine.
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--reps", type=int, default=5)
     ap.add_argument("--configs", default="10:default,50:default,50:25",
