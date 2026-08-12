@@ -10,10 +10,37 @@ from pathlib import Path
 
 import pytest
 
+from adminforge import i18n
 from adminforge.auditor.jsonl_auditor import JsonlAuditor
 from adminforge.core.nucleo import Nucleo
 from adminforge.deployer.dry_run import DryRunDeployer
 from adminforge.store.json_store import JsonStore
+
+LANG_VARS = ("ADMINFORGE_LANG", "LC_ALL", "LC_MESSAGES", "LANG", "LANGUAGE")
+
+
+@pytest.fixture(autouse=True)
+def english_cli(monkeypatch) -> None:
+    """Pin the CLI language for every test, whatever locale the machine runs.
+
+    The suite asserts on message text, and the CLI translates it: `t()` resolves
+    the language per call from ADMINFORGE_LANG / LC_ALL / LC_MESSAGES / LANG.
+    On a machine set to pt_BR the CLI answered in Portuguese and eleven
+    assertions failed while the code was behaving correctly.
+
+    Clearing the variables is what pins it, rather than setting LANG to an
+    English locale: `_resolve_lang()` falls back to "en" when none is set, so
+    the suite exercises the documented default and does not require any
+    particular locale to be generated on the host. A test that wants another
+    language asks for it explicitly with `i18n.set_lang(...)`, which overrides
+    the environment; the override is reset here so it cannot leak between tests.
+    Subprocesses (the Docker lab) inherit the cleared environment.
+    """
+    for var in LANG_VARS:
+        monkeypatch.delenv(var, raising=False)
+    i18n.set_lang(None)
+    yield
+    i18n.set_lang(None)
 
 CHAVE_ALICE = (
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGZdz3+gT+Md3OSv00ku0Q9j+QUvhU3iRA9eCkP9F1Tc alice@laptop"
