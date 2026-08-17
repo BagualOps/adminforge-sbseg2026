@@ -17,7 +17,7 @@ são containers Docker; o `adminforge` em si roda no host, num venv criado pelo 
 ### Numa máquina nova — uma linha só
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/BagualOps/adminforge-sbseg2026/main/docs/usability-study/lab/bootstrap.sh | bash
+curl -fsSL https://gitlab.com/cristhianavila.aluno/adminforge-sbseg2026/-/raw/main/docs/usability-study/lab/bootstrap.sh | bash
 ```
 
 O `bootstrap.sh` clona o repo em `./adminforge-sbseg2026` (no diretório onde você rodar a one-liner — tudo a
