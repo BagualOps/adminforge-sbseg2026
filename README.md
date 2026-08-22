@@ -326,15 +326,19 @@ If you use this artifact, please cite the paper:
 
 [GNU AGPL-3.0](LICENSE), or any later version.
 
-**What that means for use inside a company.** Running AdminForge to administer your own
-fleet triggers no obligation: the AGPL adds requirements when you *convey* the software or
-when you let third parties interact with a *modified* version over a network, not when you
-run it internally, however many hosts you point it at. Two situations do carry obligations:
-distributing AdminForge, modified or not, to anyone outside your organization, and offering
-a modified version as a network service to users who are not part of your organization. In
-both cases the corresponding source, including your modifications, must be offered to those
-recipients under the same licence. AdminForge is a CLI that acts on hosts over SSH; it
-exposes no network service of its own, so the network clause is reached only if you build
-one around it. Internal modifications that never leave the organization can stay private.
-This paragraph is orientation, not legal advice: the licence text governs, and a legal
-opinion is worth obtaining before redistributing.
+**What that means for use inside a company.** Two clauses decide this, and both are worth
+reading in [LICENSE](LICENSE) rather than taken from here. Section 0 defines *propagate* as
+anything that would make you liable for infringement "except executing it on a computer or
+modifying a private copy", and defines *convey* as propagation "that enables other parties
+to make or receive copies", adding that "mere interaction with a user through a computer
+network, with no transfer of a copy, is not conveying". Running AdminForge on your own
+fleet, and modifying it for your own use, therefore fall outside both. Section 13 is the
+clause the AGPL adds over the GPL: a modified version "must prominently offer all users
+interacting with it remotely through a computer network (if your version supports such
+interaction)" access to the corresponding source. Note *all users*, with no carve-out for
+people inside your organization. What keeps that clause out of scope here is the
+parenthesis: AdminForge is a CLI that acts on hosts over SSH and supports no remote
+interaction of its own, so Section 13 is reached only by someone who wraps it in a network
+service. Conveying it outside your organization, modified or not, does carry the usual
+obligation to offer the corresponding source under the same licence. This is orientation,
+not legal advice; the licence text governs, and redistribution is worth a legal opinion.
