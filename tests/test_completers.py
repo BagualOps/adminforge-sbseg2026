@@ -4,26 +4,26 @@ from argparse import Namespace
 from pathlib import Path
 
 from adminforge.cli import completers
-from adminforge.core.nucleo import Nucleo
+from adminforge.core.core import Core
 from adminforge.deployer.dry_run import DryRunDeployer
 from adminforge.auditor.jsonl_auditor import JsonlAuditor
 from adminforge.store.json_store import JsonStore
 
-from .conftest import CHAVE_ALICE, HOST_KEY_FAKE
+from .conftest import KEY_ALICE, HOST_KEY_FAKE
 
 
-def _seed(state_dir: Path) -> Nucleo:
-    nucleo = Nucleo(JsonStore(state_dir), JsonlAuditor(state_dir / "history.jsonl"), DryRunDeployer(), "op")
-    nucleo.cadastrar_user("alice", "Alice", "a@e.com")
-    nucleo.cadastrar_user("alfred", "Alfred", "alf@e.com")
-    nucleo.cadastrar_user("bob", "Bob", "b@e.com")
-    nucleo.cadastrar_chave("alice", CHAVE_ALICE)
-    nucleo.criar_grupo_user("sysadmins")
-    nucleo.criar_grupo_user("dba")
-    nucleo.cadastrar_servidor("web-01", "10.0.0.10", 22, HOST_KEY_FAKE)
-    nucleo.cadastrar_servidor("web-02", "10.0.0.11", 22, HOST_KEY_FAKE)
-    nucleo.criar_grupo_servidor("producao")
-    return nucleo
+def _seed(state_dir: Path) -> Core:
+    core = Core(JsonStore(state_dir), JsonlAuditor(state_dir / "history.jsonl"), DryRunDeployer(), "op")
+    core.cadastrar_user("alice", "Alice", "a@e.com")
+    core.cadastrar_user("alfred", "Alfred", "alf@e.com")
+    core.cadastrar_user("bob", "Bob", "b@e.com")
+    core.register_key("alice", KEY_ALICE)
+    core.create_user_group("sysadmins")
+    core.create_user_group("dba")
+    core.register_server("web-01", "10.0.0.10", 22, HOST_KEY_FAKE)
+    core.register_server("web-02", "10.0.0.11", 22, HOST_KEY_FAKE)
+    core.create_server_group("producao")
+    return core
 
 
 def test_usernames_completer(state_dir: Path):
@@ -55,9 +55,9 @@ def test_server_groups_completer(state_dir: Path):
 
 
 def test_sudo_profiles_completer(state_dir: Path):
-    nucleo = _seed(state_dir)
-    nucleo.criar_sudo_profile("read-logs", ["/bin/journalctl"])
-    nucleo.criar_sudo_profile("restart-web", ["/bin/systemctl restart nginx"])
+    core = _seed(state_dir)
+    core.create_sudo_profile("read-logs", ["/bin/journalctl"])
+    core.create_sudo_profile("restart-web", ["/bin/systemctl restart nginx"])
     args = Namespace(state=str(state_dir))
     assert completers.sudo_profiles("", args) == ["read-logs", "restart-web"]
     assert completers.sudo_profiles("re", args) == ["read-logs", "restart-web"]

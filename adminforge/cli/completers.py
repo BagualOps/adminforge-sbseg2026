@@ -66,12 +66,12 @@ def fingerprints(prefix="", parsed_args=None, **_):
     users_dir = _state_dir(parsed_args) / "users"
     if not users_dir.is_dir():
         return out
-    for arquivo in users_dir.glob("*.json"):
+    for file in users_dir.glob("*.json"):
         try:
-            data = json.loads(arquivo.read_text(encoding="utf-8"))
+            data = json.loads(file.read_text(encoding="utf-8"))
         except Exception:
             continue
-        for c in data.get("credenciais", []):
+        for c in data.get("credentials", []):
             fp = c.get("fingerprint", "")
             if fp.startswith(prefix):
                 out.append(fp)

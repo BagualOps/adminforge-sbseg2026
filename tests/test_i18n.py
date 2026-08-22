@@ -1,6 +1,6 @@
-"""Localizacao da CLI (pt-br). Garante que: default e ingles; ADMINFORGE_LANG=pt
-traduz help e mensagens; chave sem traducao cai para o ingles; o ingles preserva
-o texto original (para nao quebrar quem faz grep na saida)."""
+"""CLI localization (pt-BR). Checks that: English is the default; ADMINFORGE_LANG=pt
+translates help and messages; a key with no translation falls back to English; and
+English preserves the source text, so grepping the output keeps working."""
 from __future__ import annotations
 
 import io
@@ -47,14 +47,14 @@ def test_t_default_en():
     assert i18n.t("List users.") == "List users."
 
 
-def test_t_pt_traduz():
+def test_t_pt_translates():
     i18n.set_lang("pt")
     assert i18n.t("List users.") == "Lista usuarios."
     i18n.set_lang("pt_BR")
     assert i18n.t("List users.") == "Lista usuarios."
 
 
-def test_t_chave_desconhecida_cai_para_ingles():
+def test_t_unknown_key_falls_back_to_english():
     i18n.set_lang("pt")
     assert i18n.t("this string is not in the catalog") == "this string is not in the catalog"
 

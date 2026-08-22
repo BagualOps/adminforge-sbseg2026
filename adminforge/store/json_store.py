@@ -23,18 +23,18 @@ from pathlib import Path
 from uuid import UUID
 
 from adminforge.domain import (
-    CredencialSSH,
-    GrupoServidor,
-    GrupoUser,
-    NivelPermissao,
-    Permissao,
-    Servidor,
-    StatusCredencial,
-    StatusUser,
+    SshCredential,
+    ServerGroup,
+    UserGroup,
+    PermissionLevel,
+    Permission,
+    Server,
+    CredentialStatus,
+    UserStatus,
     SudoProfile,
     User,
 )
-from adminforge.exceptions import LockOcupado
+from adminforge.exceptions import LockBusy
 from adminforge.interfaces.store import IStore
 from adminforge.store.atomic import write_atomic
 
@@ -95,7 +95,7 @@ class JsonStore(IStore):
     def lock(self) -> None:
         """Acquire an exclusive, non-blocking process lock on ``root``.
 
-        Raises ``LockOcupado`` immediately (without waiting) if another
+        Raises ``LockBusy`` immediately (without waiting) if another
         process already holds the lock, so concurrent AdminForge instances
         fail fast instead of blocking. The lock file itself persists across
         runs; only the in-memory file descriptor tracks whether *this*
@@ -108,7 +108,7 @@ class JsonStore(IStore):
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             os.close(fd)
-            raise LockOcupado("another AdminForge instance is running") from None
+            raise LockBusy("another AdminForge instance is running") from None
         self._lock_fd = fd
 
     def unlock(self) -> None:
@@ -158,17 +158,17 @@ class JsonStore(IStore):
             return None
         return User(
             username=data["username"],
-            nome=data["nome"],
+            name=data["name"],
             email=data["email"],
-            status=StatusUser(data.get("status", "ativo")),
+            status=UserStatus(data.get("status", "active")),
             id=UUID(data["id"]),
         )
 
     def list_users(self) -> list[User]:
         """Return every user, sorted by filename (i.e. by username)."""
         users = []
-        for arquivo in sorted(self.dir_users.glob("*.json")):
-            u = self.get_user(arquivo.stem)
+        for file in sorted(self.dir_users.glob("*.json")):
+            u = self.get_user(file.stem)
             if u is not None:
                 users.append(u)
         return users
@@ -176,7 +176,7 @@ class JsonStore(IStore):
     def save_user(self, user: User) -> None:
         """Atomically write ``user`` to its file, preserving any existing credentials.
 
-        The user's ``credenciais`` list lives in the same JSON file but is
+        The user's ``credentials`` list lives in the same JSON file but is
         not part of the ``User`` domain object passed in here, so this
         method reads the file first to carry the existing credential list
         forward — calling this does not touch or clear credentials.
@@ -184,34 +184,34 @@ class JsonStore(IStore):
         data: dict = {
             "id": str(user.id),
             "username": user.username,
-            "nome": user.nome,
+            "name": user.name,
             "email": user.email,
             "status": user.status.value,
-            "credenciais": [],
+            "credentials": [],
         }
         path = self.dir_users / f"{user.username}.json"
         existente = self._load(path)
-        if "credenciais" in existente:
-            data["credenciais"] = existente["credenciais"]
+        if "credentials" in existente:
+            data["credentials"] = existente["credentials"]
         write_atomic(path, self._dump(data))
 
-    def list_credenciais(self, username: str) -> list[CredencialSSH]:
+    def list_credentials(self, username: str) -> list[SshCredential]:
         """Return the SSH credentials embedded in ``username``'s file (empty list if none/user absent)."""
         data = self._load(self.dir_users / f"{username}.json")
         creds = []
-        for c in data.get("credenciais", []):
+        for c in data.get("credentials", []):
             creds.append(
-                CredencialSSH(
+                SshCredential(
                     id=UUID(c["id"]),
                     username=username,
-                    chave_publica=c["chave_publica"],
+                    public_key=c["public_key"],
                     fingerprint=c["fingerprint"],
-                    status=StatusCredencial(c.get("status", "ativa")),
+                    status=CredentialStatus(c.get("status", "active")),
                 )
             )
         return creds
 
-    def save_credencial(self, cred: CredencialSSH) -> None:
+    def save_credential(self, cred: SshCredential) -> None:
         """Upsert ``cred`` into its owning user's file by credential id, then write atomically.
 
         The whole user file is rewritten (not just the credential), so this
@@ -222,11 +222,11 @@ class JsonStore(IStore):
         data = self._load(path)
         if not data:
             raise FileNotFoundError(f"user '{cred.username}' does not exist")
-        creds = data.setdefault("credenciais", [])
+        creds = data.setdefault("credentials", [])
         encontrou = False
         for c in creds:
             if c["id"] == str(cred.id):
-                c["chave_publica"] = cred.chave_publica
+                c["public_key"] = cred.public_key
                 c["fingerprint"] = cred.fingerprint
                 c["status"] = cred.status.value
                 encontrou = True
@@ -235,14 +235,14 @@ class JsonStore(IStore):
             creds.append(
                 {
                     "id": str(cred.id),
-                    "chave_publica": cred.chave_publica,
+                    "public_key": cred.public_key,
                     "fingerprint": cred.fingerprint,
                     "status": cred.status.value,
                 }
             )
         write_atomic(path, self._dump(data))
 
-    def get_credencial_por_fingerprint(self, fingerprint: str) -> CredencialSSH | None:
+    def get_credential_by_fingerprint(self, fingerprint: str) -> SshCredential | None:
         """Find the credential matching ``fingerprint`` by scanning every user's credentials.
 
         Linear in the number of users times their credential count — there
@@ -250,204 +250,204 @@ class JsonStore(IStore):
         not something to call in a hot loop over many users.
         """
         for user in self.list_users():
-            for c in self.list_credenciais(user.username):
+            for c in self.list_credentials(user.username):
                 if c.fingerprint == fingerprint:
                     return c
         return None
 
-    def get_servidor(self, hostname: str) -> Servidor | None:
+    def get_server(self, hostname: str) -> Server | None:
         """Load a single server by hostname, or ``None`` if no such file exists."""
         data = self._load(self.dir_servers / f"{hostname}.json")
         if not data:
             return None
-        return Servidor(
+        return Server(
             id=UUID(data["id"]),
             hostname=data["hostname"],
             ipv4=data["ipv4"],
-            porta_ssh=data.get("porta_ssh", 22),
-            chave_host=data.get("chave_host", ""),
-            chaves_instaladas=list(data.get("chaves_instaladas", [])),
+            ssh_port=data.get("ssh_port", 22),
+            host_key=data.get("host_key", ""),
+            installed_keys=list(data.get("installed_keys", [])),
         )
 
-    def list_servidores(self) -> list[Servidor]:
+    def list_servers(self) -> list[Server]:
         """Return every server, sorted by filename (i.e. by hostname)."""
         out = []
-        for arquivo in sorted(self.dir_servers.glob("*.json")):
-            s = self.get_servidor(arquivo.stem)
+        for file in sorted(self.dir_servers.glob("*.json")):
+            s = self.get_server(file.stem)
             if s is not None:
                 out.append(s)
         return out
 
-    def save_servidor(self, servidor: Servidor) -> None:
-        """Atomically overwrite the server's file with the full ``servidor`` state."""
+    def save_server(self, server: Server) -> None:
+        """Atomically overwrite the server's file with the full ``server`` state."""
         data = {
-            "id": str(servidor.id),
-            "hostname": servidor.hostname,
-            "ipv4": servidor.ipv4,
-            "porta_ssh": servidor.porta_ssh,
-            "chave_host": servidor.chave_host,
-            "chaves_instaladas": list(servidor.chaves_instaladas),
+            "id": str(server.id),
+            "hostname": server.hostname,
+            "ipv4": server.ipv4,
+            "ssh_port": server.ssh_port,
+            "host_key": server.host_key,
+            "installed_keys": list(server.installed_keys),
         }
-        write_atomic(self.dir_servers / f"{servidor.hostname}.json", self._dump(data))
+        write_atomic(self.dir_servers / f"{server.hostname}.json", self._dump(data))
 
-    def delete_servidor(self, hostname: str) -> None:
+    def delete_server(self, hostname: str) -> None:
         """Remove the server's file; a no-op (no exception) if it does not exist."""
         (self.dir_servers / f"{hostname}.json").unlink(missing_ok=True)
 
-    def get_grupo_user(self, nome: str) -> GrupoUser | None:
+    def get_user_group(self, name: str) -> UserGroup | None:
         """Load a single user group by name, or ``None`` if no such file exists."""
-        data = self._load(self.dir_user_groups / f"{nome}.json")
+        data = self._load(self.dir_user_groups / f"{name}.json")
         if not data:
             return None
-        return GrupoUser(
-            id=UUID(data["id"]), nome=data["nome"], membros=list(data.get("membros", []))
+        return UserGroup(
+            id=UUID(data["id"]), name=data["name"], members=list(data.get("members", []))
         )
 
-    def list_grupos_user(self) -> list[GrupoUser]:
+    def list_user_groups(self) -> list[UserGroup]:
         """Return every user group, sorted by filename (i.e. by group name)."""
         out = []
-        for arquivo in sorted(self.dir_user_groups.glob("*.json")):
-            g = self.get_grupo_user(arquivo.stem)
+        for file in sorted(self.dir_user_groups.glob("*.json")):
+            g = self.get_user_group(file.stem)
             if g is not None:
                 out.append(g)
         return out
 
-    def save_grupo_user(self, grupo: GrupoUser) -> None:
-        """Atomically overwrite the user group's file with the full ``grupo`` state."""
-        data = {"id": str(grupo.id), "nome": grupo.nome, "membros": list(grupo.membros)}
-        write_atomic(self.dir_user_groups / f"{grupo.nome}.json", self._dump(data))
+    def save_user_group(self, group: UserGroup) -> None:
+        """Atomically overwrite the user group's file with the full ``group`` state."""
+        data = {"id": str(group.id), "name": group.name, "members": list(group.members)}
+        write_atomic(self.dir_user_groups / f"{group.name}.json", self._dump(data))
 
-    def delete_grupo_user(self, nome: str) -> None:
+    def delete_user_group(self, name: str) -> None:
         """Remove the user group's file; a no-op (no exception) if it does not exist."""
-        (self.dir_user_groups / f"{nome}.json").unlink(missing_ok=True)
+        (self.dir_user_groups / f"{name}.json").unlink(missing_ok=True)
 
-    def get_grupo_servidor(self, nome: str) -> GrupoServidor | None:
+    def get_server_group(self, name: str) -> ServerGroup | None:
         """Load a single server group by name, or ``None`` if no such file exists."""
-        data = self._load(self.dir_server_groups / f"{nome}.json")
+        data = self._load(self.dir_server_groups / f"{name}.json")
         if not data:
             return None
-        return GrupoServidor(
-            id=UUID(data["id"]), nome=data["nome"], membros=list(data.get("membros", []))
+        return ServerGroup(
+            id=UUID(data["id"]), name=data["name"], members=list(data.get("members", []))
         )
 
-    def list_grupos_servidor(self) -> list[GrupoServidor]:
+    def list_server_groups(self) -> list[ServerGroup]:
         """Return every server group, sorted by filename (i.e. by group name)."""
         out = []
-        for arquivo in sorted(self.dir_server_groups.glob("*.json")):
-            g = self.get_grupo_servidor(arquivo.stem)
+        for file in sorted(self.dir_server_groups.glob("*.json")):
+            g = self.get_server_group(file.stem)
             if g is not None:
                 out.append(g)
         return out
 
-    def save_grupo_servidor(self, grupo: GrupoServidor) -> None:
-        """Atomically overwrite the server group's file with the full ``grupo`` state."""
-        data = {"id": str(grupo.id), "nome": grupo.nome, "membros": list(grupo.membros)}
-        write_atomic(self.dir_server_groups / f"{grupo.nome}.json", self._dump(data))
+    def save_server_group(self, group: ServerGroup) -> None:
+        """Atomically overwrite the server group's file with the full ``group`` state."""
+        data = {"id": str(group.id), "name": group.name, "members": list(group.members)}
+        write_atomic(self.dir_server_groups / f"{group.name}.json", self._dump(data))
 
-    def delete_grupo_servidor(self, nome: str) -> None:
+    def delete_server_group(self, name: str) -> None:
         """Remove the server group's file; a no-op (no exception) if it does not exist."""
-        (self.dir_server_groups / f"{nome}.json").unlink(missing_ok=True)
+        (self.dir_server_groups / f"{name}.json").unlink(missing_ok=True)
 
-    def list_permissoes(self) -> list[Permissao]:
+    def list_permissions(self) -> list[Permission]:
         """Return every permission entry from the shared ``permissions.json`` file."""
         data = self._load(self.file_permissions)
         out = []
-        for p in data.get("permissoes", []):
+        for p in data.get("permissions", []):
             out.append(
-                Permissao(
+                Permission(
                     id=UUID(p["id"]),
-                    grupo_user=p["grupo_user"],
-                    grupo_servidor=p["grupo_servidor"],
-                    nivel=NivelPermissao(p["nivel"]),
+                    user_group=p["user_group"],
+                    server_group=p["server_group"],
+                    level=PermissionLevel(p["level"]),
                     profile=p.get("profile"),
                 )
             )
         return out
 
-    def save_permissao(self, permissao: Permissao) -> None:
-        """Upsert ``permissao`` keyed by the (grupo_user, grupo_servidor) pair, not by id.
+    def save_permission(self, permission: Permission) -> None:
+        """Upsert ``permission`` keyed by the (user_group, server_group) pair, not by id.
 
-        If an entry already exists for the same group pair, its ``nivel``
+        If an entry already exists for the same group pair, its ``level``
         and ``profile`` are updated in place (keeping the original entry's
         id); otherwise a new entry is appended. The whole permissions file
         is rewritten atomically either way.
         """
-        data = self._load(self.file_permissions) or {"permissoes": []}
-        permissoes = data.setdefault("permissoes", [])
+        data = self._load(self.file_permissions) or {"permissions": []}
+        permissions = data.setdefault("permissions", [])
         atualizou = False
-        for p in permissoes:
+        for p in permissions:
             if (
-                p["grupo_user"] == permissao.grupo_user
-                and p["grupo_servidor"] == permissao.grupo_servidor
+                p["user_group"] == permission.user_group
+                and p["server_group"] == permission.server_group
             ):
-                p["nivel"] = permissao.nivel.value
-                p["profile"] = permissao.profile
+                p["level"] = permission.level.value
+                p["profile"] = permission.profile
                 atualizou = True
                 break
         if not atualizou:
-            permissoes.append(
+            permissions.append(
                 {
-                    "id": str(permissao.id),
-                    "grupo_user": permissao.grupo_user,
-                    "grupo_servidor": permissao.grupo_servidor,
-                    "nivel": permissao.nivel.value,
-                    "profile": permissao.profile,
+                    "id": str(permission.id),
+                    "user_group": permission.user_group,
+                    "server_group": permission.server_group,
+                    "level": permission.level.value,
+                    "profile": permission.profile,
                 }
             )
         write_atomic(self.file_permissions, self._dump(data))
 
-    def delete_permissao(self, grupo_user: str, grupo_servidor: str) -> None:
+    def delete_permission(self, user_group: str, server_group: str) -> None:
         """Remove the permission for the given group pair.
 
         Unlike the other ``delete_*`` methods in this class, this raises
         ``FileNotFoundError`` if no matching entry exists, since permissions
         share one file and there is no missing-file signal to fall back on.
         """
-        data = self._load(self.file_permissions) or {"permissoes": []}
-        antes = len(data.get("permissoes", []))
-        data["permissoes"] = [
+        data = self._load(self.file_permissions) or {"permissions": []}
+        antes = len(data.get("permissions", []))
+        data["permissions"] = [
             p
-            for p in data.get("permissoes", [])
-            if not (p["grupo_user"] == grupo_user and p["grupo_servidor"] == grupo_servidor)
+            for p in data.get("permissions", [])
+            if not (p["user_group"] == user_group and p["server_group"] == server_group)
         ]
-        if len(data["permissoes"]) == antes:
+        if len(data["permissions"]) == antes:
             raise FileNotFoundError("permission does not exist")
         write_atomic(self.file_permissions, self._dump(data))
 
-    def get_sudo_profile(self, nome: str) -> SudoProfile | None:
+    def get_sudo_profile(self, name: str) -> SudoProfile | None:
         """Load a single sudo profile by name, or ``None`` if no such file exists."""
-        data = self._load(self.dir_sudo_profiles / f"{nome}.json")
+        data = self._load(self.dir_sudo_profiles / f"{name}.json")
         if not data:
             return None
         return SudoProfile(
             id=UUID(data["id"]),
-            nome=data["nome"],
-            comandos=list(data.get("comandos", [])),
+            name=data["name"],
+            commands=list(data.get("commands", [])),
         )
 
     def list_sudo_profiles(self) -> list[SudoProfile]:
         """Return every sudo profile, sorted by filename (i.e. by profile name)."""
         out = []
-        for arquivo in sorted(self.dir_sudo_profiles.glob("*.json")):
-            p = self.get_sudo_profile(arquivo.stem)
+        for file in sorted(self.dir_sudo_profiles.glob("*.json")):
+            p = self.get_sudo_profile(file.stem)
             if p is not None:
                 out.append(p)
         return out
 
     def save_sudo_profile(self, profile: SudoProfile) -> None:
         """Atomically overwrite the sudo profile's file with the full ``profile`` state."""
-        data = {"id": str(profile.id), "nome": profile.nome, "comandos": list(profile.comandos)}
-        write_atomic(self.dir_sudo_profiles / f"{profile.nome}.json", self._dump(data))
+        data = {"id": str(profile.id), "name": profile.name, "commands": list(profile.commands)}
+        write_atomic(self.dir_sudo_profiles / f"{profile.name}.json", self._dump(data))
 
-    def delete_sudo_profile(self, nome: str) -> None:
+    def delete_sudo_profile(self, name: str) -> None:
         """Remove the sudo profile's file; a no-op (no exception) if it does not exist."""
-        (self.dir_sudo_profiles / f"{nome}.json").unlink(missing_ok=True)
+        (self.dir_sudo_profiles / f"{name}.json").unlink(missing_ok=True)
 
     # ---------------------------------------------------------------------------
     # Batch rename: each one atomically moves the file + updates the name field
-    # inside the JSON. Reference cascade is the Nucleo's responsibility.
+    # inside the JSON. Reference cascade is the Core's responsibility.
     # ---------------------------------------------------------------------------
-    def _renomear_entidade(self, diretorio: Path, de: str, para: str, campo: str) -> None:
+    def _rename_entity(self, diretorio: Path, de: str, para: str, campo: str) -> None:
         """Rename an entity's file from ``de`` to ``para``, updating its name field in place.
 
         Raises ``FileNotFoundError`` if the source is missing and
@@ -457,7 +457,7 @@ class JsonStore(IStore):
         is moved to the new path with ``os.replace`` — a single syscall, so
         there is no window where both the old and new filenames exist (or
         neither does). Updating any other entity that references this name
-        by value is the caller's (Nucleo's) responsibility, not this
+        by value is the caller's (Core's) responsibility, not this
         method's.
         """
         antigo = diretorio / f"{de}.json"
@@ -474,38 +474,38 @@ class JsonStore(IStore):
         os.replace(antigo, novo)
 
     def rename_user(self, de: str, para: str) -> None:
-        """Rename a user's file and its embedded ``username`` field; see ``_renomear_entidade``."""
-        self._renomear_entidade(self.dir_users, de, para, "username")
+        """Rename a user's file and its embedded ``username`` field; see ``_rename_entity``."""
+        self._rename_entity(self.dir_users, de, para, "username")
 
-    def rename_servidor(self, de: str, para: str) -> None:
-        """Rename a server's file and its embedded ``hostname`` field; see ``_renomear_entidade``."""
-        self._renomear_entidade(self.dir_servers, de, para, "hostname")
+    def rename_server(self, de: str, para: str) -> None:
+        """Rename a server's file and its embedded ``hostname`` field; see ``_rename_entity``."""
+        self._rename_entity(self.dir_servers, de, para, "hostname")
 
-    def rename_grupo_user(self, de: str, para: str) -> None:
-        """Rename a user group's file and its embedded ``nome`` field; see ``_renomear_entidade``."""
-        self._renomear_entidade(self.dir_user_groups, de, para, "nome")
+    def rename_user_group(self, de: str, para: str) -> None:
+        """Rename a user group's file and its embedded ``name`` field; see ``_rename_entity``."""
+        self._rename_entity(self.dir_user_groups, de, para, "name")
 
-    def rename_grupo_servidor(self, de: str, para: str) -> None:
-        """Rename a server group's file and its embedded ``nome`` field; see ``_renomear_entidade``."""
-        self._renomear_entidade(self.dir_server_groups, de, para, "nome")
+    def rename_server_group(self, de: str, para: str) -> None:
+        """Rename a server group's file and its embedded ``name`` field; see ``_rename_entity``."""
+        self._rename_entity(self.dir_server_groups, de, para, "name")
 
     def rename_sudo_profile(self, de: str, para: str) -> None:
-        """Rename a sudo profile's file and its embedded ``nome`` field; see ``_renomear_entidade``."""
-        self._renomear_entidade(self.dir_sudo_profiles, de, para, "nome")
+        """Rename a sudo profile's file and its embedded ``name`` field; see ``_rename_entity``."""
+        self._rename_entity(self.dir_sudo_profiles, de, para, "name")
 
-    def replace_permissoes(self, perms: list[Permissao]) -> None:
+    def replace_permissions(self, perms: list[Permission]) -> None:
         """Atomically replace the entire permissions file with exactly ``perms``.
 
         This is a full overwrite, not a merge: any existing permission not
         present in ``perms`` is dropped.
         """
         data = {
-            "permissoes": [
+            "permissions": [
                 {
                     "id": str(p.id),
-                    "grupo_user": p.grupo_user,
-                    "grupo_servidor": p.grupo_servidor,
-                    "nivel": p.nivel.value,
+                    "user_group": p.user_group,
+                    "server_group": p.server_group,
+                    "level": p.level.value,
                     "profile": p.profile,
                 }
                 for p in perms

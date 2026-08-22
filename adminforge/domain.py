@@ -16,39 +16,39 @@ from enum import Enum
 from uuid import UUID, uuid4
 
 
-class StatusUser(str, Enum):
+class UserStatus(str, Enum):
     """Lifecycle state of a `User`.
 
-    Only `ATIVO` users are picked up by the planner for key deployment
-    (see `planner.planner.Planner.estado_desejado`); `INATIVO` and
-    `BLOQUEADO` are both non-active but kept as separate values so audits
+    Only `ACTIVE` users are picked up by the planner for key deployment
+    (see `planner.planner.Planner.desired_state`); `INACTIVE` and
+    `BLOCKED` are both non-active but kept as separate values so audits
     can distinguish a routine pause from a block for cause. Inherits from
     `str` so it serializes to its literal value in JSON/store files.
     """
 
-    ATIVO = "ativo"
-    INATIVO = "inativo"
-    BLOQUEADO = "bloqueado"
+    ACTIVE = "active"
+    INACTIVE = "inactive"
+    BLOCKED = "blocked"
 
 
-class StatusCredencial(str, Enum):
-    """Lifecycle state of a `CredencialSSH`.
+class CredentialStatus(str, Enum):
+    """Lifecycle state of a `SshCredential`.
 
     Revoking a key does not delete its record: the credential is kept and
-    flipped to `REVOGADA` so the audit trail can tell "never granted" apart
-    from "granted, then removed". Only `ATIVA` credentials are considered
+    flipped to `REVOKED` so the audit trail can tell "never granted" apart
+    from "granted, then removed". Only `ACTIVE` credentials are considered
     for deployment.
     """
 
-    ATIVA = "ativa"
-    REVOGADA = "revogada"
+    ACTIVE = "active"
+    REVOKED = "revoked"
 
 
-class NivelPermissao(str, Enum):
-    """Access level a `Permissao` grants: `SHELL` for plain SSH/file
+class PermissionLevel(str, Enum):
+    """Access level a `Permission` grants: `SHELL` for plain SSH/file
     access, `SUDO` for root via sudo.
 
-    `SUDO` alone, with no `SudoProfile` referenced from `Permissao.profile`,
+    `SUDO` alone, with no `SudoProfile` referenced from `Permission.profile`,
     means unrestricted `NOPASSWD:ALL`; a profile narrows it to a whitelist
     of commands. See `planner.planner._merge_profile` for how level and
     profile are combined when a user holds more than one grant to the same
@@ -59,32 +59,32 @@ class NivelPermissao(str, Enum):
     SUDO = "sudo"
 
 
-class StatusOperacao(str, Enum):
-    """Outcome of an `Operacao` once the deployer has run it.
+class OperationStatus(str, Enum):
+    """Outcome of an `Operation` once the deployer has run it.
 
-    `SUCESSO_PARCIAL` exists because one operation can touch several
-    servers/subacoes independently: if some succeed and others fail, the
-    operation is neither a clean `SUCESSO` nor a full `FALHA`, and callers
+    `PARTIAL_SUCCESS` exists because one operation can touch several
+    servers/sub_actions independently: if some succeed and others fail, the
+    operation is neither a clean `SUCCESS` nor a full `FAILURE`, and callers
     (CLI, auditor) need that distinction to decide whether a retry or a
     manual fix-up is required.
     """
 
-    SUCESSO = "sucesso"
-    FALHA = "falha"
-    SUCESSO_PARCIAL = "sucesso_parcial"
-    EM_ANDAMENTO = "em_andamento"
-    ABORTADA = "abortada"
+    SUCCESS = "success"
+    FAILURE = "failure"
+    PARTIAL_SUCCESS = "partial_success"
+    IN_PROGRESS = "in_progress"
+    ABORTED = "aborted"
 
 
-class TipoAcao(str, Enum):
-    """Kind of change a `Subacao` performs against a server's
+class ActionType(str, Enum):
+    """Kind of change a `SubAction` performs against a server's
     `authorized_keys` file: add a key, remove a key, or a read-only
-    inspection (`LEITURA`) that writes nothing.
+    inspection (`READ`) that writes nothing.
     """
 
-    ADICIONAR_CHAVE = "adicionar_chave"
-    REMOVER_CHAVE = "remover_chave"
-    LEITURA = "leitura"
+    ADD_KEY = "add_key"
+    REMOVE_KEY = "remove_key"
+    READ = "read"
 
 
 @dataclass
@@ -98,31 +98,31 @@ class User:
     """
 
     username: str
-    nome: str
+    name: str
     email: str
-    status: StatusUser = StatusUser.ATIVO
+    status: UserStatus = UserStatus.ACTIVE
     id: UUID = field(default_factory=uuid4)
 
 
 @dataclass
-class CredencialSSH:
+class SshCredential:
     """An SSH public key registered for a `User`, plus its lifecycle status.
 
     Looked up by `fingerprint`, not by `id` (see
-    `interfaces.store.IStore.get_credencial_por_fingerprint`): fingerprint
+    `interfaces.store.IStore.get_credential_by_fingerprint`): fingerprint
     is what a user cannot register twice and what operators recognize on
-    the wire. `chave_publica` is expected to already be in canonical form
-    (see `ssh_keys.chave_canonica`); this class does not normalize it.
+    the wire. `public_key` is expected to already be in canonical form
+    (see `ssh_keys.canonical_key`); this class does not normalize it.
     """
 
     username: str
-    chave_publica: str
+    public_key: str
     fingerprint: str
-    status: StatusCredencial = StatusCredencial.ATIVA
+    status: CredentialStatus = CredentialStatus.ACTIVE
     id: UUID = field(default_factory=uuid4)
 
     @property
-    def referencia(self) -> str:
+    def reference(self) -> str:
         """Return the identifier operators actually use for this credential.
 
         Combines `username` and `fingerprint` rather than the UUID `id`,
@@ -134,143 +134,143 @@ class CredencialSSH:
 
 
 @dataclass
-class GrupoUser:
+class UserGroup:
     """A named set of `User.username` values: the "who" side of a
-    `Permissao` grant.
+    `Permission` grant.
 
-    `membros` stores raw usernames, not references to `User.id`; nothing
-    here enforces that a member still exists or is `StatusUser.ATIVO`.
+    `members` stores raw usernames, not references to `User.id`; nothing
+    here enforces that a member still exists or is `UserStatus.ACTIVE`.
     Stale entries are not an error -- the planner silently skips
     membership that no longer resolves to an active user (see
-    `planner.planner.Planner.estado_desejado`).
+    `planner.planner.Planner.desired_state`).
     """
 
-    nome: str
-    membros: list[str] = field(default_factory=list)
+    name: str
+    members: list[str] = field(default_factory=list)
     id: UUID = field(default_factory=uuid4)
 
 
 @dataclass
-class Servidor:
+class Server:
     """A target host that AdminForge manages SSH access on.
 
-    `chave_host` pins the SSH host key expected on the wire; the deployer
+    `host_key` pins the SSH host key expected on the wire; the deployer
     refuses to connect if it is empty or if the key it sees does not match
-    (see `exceptions.HostKeyDivergente`), so this is a trust-on-first-use
-    pin rather than purely informational. `chaves_instaladas` is a cache
+    (see `exceptions.HostKeyMismatch`), so this is a trust-on-first-use
+    pin rather than purely informational. `installed_keys` is a cache
     of what the last successful apply left installed, written by
-    `core.nucleo` and read by the planner as the baseline for the next
+    `core.core` and read by the planner as the baseline for the next
     delta -- it is a snapshot, not necessarily what is on the server right
     now if it changed out of band.
     """
 
     hostname: str
     ipv4: str
-    porta_ssh: int = 22
-    chave_host: str = ""
-    chaves_instaladas: list = field(default_factory=list)
+    ssh_port: int = 22
+    host_key: str = ""
+    installed_keys: list = field(default_factory=list)
     id: UUID = field(default_factory=uuid4)
 
 
 @dataclass
-class GrupoServidor:
-    """A named set of `Servidor.hostname` values: the "where" side of a
-    `Permissao` grant.
+class ServerGroup:
+    """A named set of `Server.hostname` values: the "where" side of a
+    `Permission` grant.
 
-    Mirrors `GrupoUser` in shape and in leniency: a membership entry
+    Mirrors `UserGroup` in shape and in leniency: a membership entry
     referencing a hostname that no longer exists is skipped by the
     planner rather than treated as an error.
     """
 
-    nome: str
-    membros: list[str] = field(default_factory=list)
+    name: str
+    members: list[str] = field(default_factory=list)
     id: UUID = field(default_factory=uuid4)
 
 
 @dataclass
 class SudoProfile:
-    """A named whitelist of shell commands that a `NivelPermissao.SUDO`
-    `Permissao` can reference (via `Permissao.profile`) to restrict what
+    """A named whitelist of shell commands that a `PermissionLevel.SUDO`
+    `Permission` can reference (via `Permission.profile`) to restrict what
     the grant allows on the target servers.
 
-    `comandos` is opaque to this module: entries are copied one per line,
+    `commands` is opaque to this module: entries are copied one per line,
     verbatim, into the remote sudoers file by the deployer (see
-    `deployer.ssh_deployer.SSHDeployer._escrever_sudoers`), so validating
+    `deployer.ssh_deployer.SSHDeployer._write_sudoers`), so validating
     the syntax of each command is the deployer's concern, not this
-    dataclass's. A `Permissao` left without a profile falls back to
+    dataclass's. A `Permission` left without a profile falls back to
     unrestricted `NOPASSWD:ALL`, so no profile is the more permissive
     state, not a safer default.
     """
 
-    nome: str
-    comandos: list[str] = field(default_factory=list)
+    name: str
+    commands: list[str] = field(default_factory=list)
     id: UUID = field(default_factory=uuid4)
 
 
 @dataclass
-class Permissao:
+class Permission:
     """A grant: `SHELL` or `SUDO` access from every member of
-    `grupo_user` to every member of `grupo_servidor`, optionally scoped by
+    `user_group` to every member of `server_group`, optionally scoped by
     a `SudoProfile`.
 
-    Identified in the store by the `(grupo_user, grupo_servidor)` pair,
-    not by `id` (see `interfaces.store.IStore.delete_permissao`): there is
+    Identified in the store by the `(user_group, server_group)` pair,
+    not by `id` (see `interfaces.store.IStore.delete_permission`): there is
     at most one grant between a given pair of groups, and granting again
     for the same pair replaces it rather than adding a second grant.
     """
 
-    grupo_user: str
-    grupo_servidor: str
-    nivel: NivelPermissao
+    user_group: str
+    server_group: str
+    level: PermissionLevel
     profile: str | None = None
     id: UUID = field(default_factory=uuid4)
 
 
 @dataclass
-class Subacao:
+class SubAction:
     """One planned or executed change to a single server, produced by the
     planner and mutated in place by the deployer as it runs.
 
-    `status` is a free-form string (`"pendente"`/`"sucesso"`/`"falha"`),
-    not the `StatusOperacao` enum used by the parent `Operacao` -- the two
+    `status` is a free-form string (`"pending"`/`"success"`/`"failure"`),
+    not the `OperationStatus` enum used by the parent `Operation` -- the two
     are not interchangeable. Most fields are optional because a given
-    `Subacao` only fills in the ones relevant to its `acao` (e.g.
-    `chave_publica`/`credencial` for a key add, `nivel`/`profile`/
-    `profile_comandos` for the sudo side-effect of a grant change).
+    `SubAction` only fills in the ones relevant to its `action` (e.g.
+    `public_key`/`credential` for a key add, `level`/`profile`/
+    `profile_commands` for the sudo side-effect of a grant change).
     """
 
-    servidor: str
-    acao: TipoAcao
-    credencial: str | None = None
-    chave_publica: str | None = None
+    server: str
+    action: ActionType
+    credential: str | None = None
+    public_key: str | None = None
     username: str | None = None
-    nivel: NivelPermissao | None = None
+    level: PermissionLevel | None = None
     profile: str | None = None
-    profile_comandos: list[str] | None = None
-    status: str = "pendente"
-    erro: str | None = None
-    mensagem: str | None = None
+    profile_commands: list[str] | None = None
+    status: str = "pending"
+    error: str | None = None
+    message: str | None = None
 
 
 @dataclass
-class Operacao:
+class Operation:
     """One audited unit of work: a single CLI command and everything it
     did, persisted as one entry in the auditor's log.
 
-    `hash` and `hash_anterior` chain each entry to the one before it (see
+    `hash` and `previous_hash` chain each entry to the one before it (see
     `auditor.jsonl_auditor.JsonlAuditor`), turning the log into an
-    append-only, tamper-evident sequence: `IAuditor.verificar_cadeia`
+    append-only, tamper-evident sequence: `IAuditor.verify_chain`
     recomputes the chain and reports a break if any entry was edited,
     reordered or removed after the fact. `id` is a short sequential
-    string (e.g. `"OP-0001"`, from `IAuditor.proximo_id`), not a UUID like
+    string (e.g. `"OP-0001"`, from `IAuditor.next_id`), not a UUID like
     the other entities in this module.
     """
 
     id: str
-    momento: datetime
+    timestamp: datetime
     superadmin: str
-    comando: str
-    status: StatusOperacao
-    subacoes: list[Subacao] = field(default_factory=list)
-    hash_anterior: str | None = None
+    command: str
+    status: OperationStatus
+    sub_actions: list[SubAction] = field(default_factory=list)
+    previous_hash: str | None = None
     hash: str | None = None

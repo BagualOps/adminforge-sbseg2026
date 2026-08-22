@@ -1,5 +1,5 @@
-"""Port for persisting every domain entity except `Operacao` (that goes
-through `interfaces.auditor.IAuditor` instead). `core.nucleo` depends
+"""Port for persisting every domain entity except `Operation` (that goes
+through `interfaces.auditor.IAuditor` instead). `core.core` depends
 only on this interface; `store.json_store.JsonStore` is the one
 implementation shipped with AdminForge.
 """
@@ -7,11 +7,11 @@ implementation shipped with AdminForge.
 from abc import ABC, abstractmethod
 
 from adminforge.domain import (
-    CredencialSSH,
-    GrupoServidor,
-    GrupoUser,
-    Permissao,
-    Servidor,
+    SshCredential,
+    ServerGroup,
+    UserGroup,
+    Permission,
+    Server,
     SudoProfile,
     User,
 )
@@ -22,9 +22,9 @@ class IStore(ABC):
     sudo profiles, plus the process-level lock that serializes writers.
 
     Entities here are addressed by their natural key (`username`,
-    `hostname`, group/profile `nome`, credential `fingerprint`, or the
-    `(grupo_user, grupo_servidor)` pair for a `Permissao`) rather than by
-    the `id` field each dataclass also carries; `core.nucleo` never looks
+    `hostname`, group/profile `name`, credential `fingerprint`, or the
+    `(user_group, server_group)` pair for a `Permission`) rather than by
+    the `id` field each dataclass also carries; `core.core` never looks
     anything up by `id` through this interface. Every `save_*` method is
     an upsert: it creates the record if the key is new and overwrites it
     in place if not, there is no separate create/update pair.
@@ -47,58 +47,58 @@ class IStore(ABC):
         ...
 
     @abstractmethod
-    def get_servidor(self, hostname: str) -> Servidor | None:
+    def get_server(self, hostname: str) -> Server | None:
         """Return the server with this `hostname`, or `None` if there is none."""
         ...
 
     @abstractmethod
-    def list_servidores(self) -> list[Servidor]:
+    def list_servers(self) -> list[Server]:
         """Return every server."""
         ...
 
     @abstractmethod
-    def save_servidor(self, servidor: Servidor) -> None:
-        """Create or overwrite the server identified by `servidor.hostname`."""
+    def save_server(self, server: Server) -> None:
+        """Create or overwrite the server identified by `server.hostname`."""
         ...
 
     @abstractmethod
-    def delete_servidor(self, hostname: str) -> None:
+    def delete_server(self, hostname: str) -> None:
         """Remove the server identified by `hostname`.
 
-        `core.nucleo` always checks `get_servidor` first and raises
-        `exceptions.NaoExiste` itself before calling this, so
+        `core.core` always checks `get_server` first and raises
+        `exceptions.NotFound` itself before calling this, so
         implementations are free to treat a missing hostname as a no-op
         rather than an error (that is what `JsonStore` does).
         """
         ...
 
     @abstractmethod
-    def list_credenciais(self, username: str) -> list[CredencialSSH]:
+    def list_credentials(self, username: str) -> list[SshCredential]:
         """Return every credential belonging to `username`, active and
         revoked alike -- callers that only want usable ones must filter
-        on `domain.StatusCredencial.ATIVA` themselves (see
-        `planner.planner.Planner.estado_desejado`). Returns an empty list,
+        on `domain.CredentialStatus.ACTIVE` themselves (see
+        `planner.planner.Planner.desired_state`). Returns an empty list,
         not an error, if `username` does not exist.
         """
         ...
 
     @abstractmethod
-    def save_credencial(self, cred: CredencialSSH) -> None:
+    def save_credential(self, cred: SshCredential) -> None:
         """Create or overwrite `cred`, keyed by `cred.id` (not
         `fingerprint`) within its owning user's credentials.
 
         There is no `delete_credencial`: revocation is expressed by
         saving the same credential back with
-        `status=StatusCredencial.REVOGADA` rather than by removing it.
+        `status=CredentialStatus.REVOKED` rather than by removing it.
         """
         ...
 
     @abstractmethod
-    def get_credencial_por_fingerprint(self, fingerprint: str) -> CredencialSSH | None:
+    def get_credential_by_fingerprint(self, fingerprint: str) -> SshCredential | None:
         """Return a credential with this `fingerprint`, searched across
         all users, or `None` if none matches.
 
-        `core.nucleo.cadastrar_chave` only rejects a duplicate fingerprint
+        `core.core.register_key` only rejects a duplicate fingerprint
         within the *same* user, not store-wide, so two different users can
         end up with credentials that share a fingerprint; this method does
         not guarantee which one it returns in that case, only that it
@@ -107,81 +107,81 @@ class IStore(ABC):
         ...
 
     @abstractmethod
-    def get_grupo_user(self, nome: str) -> GrupoUser | None:
-        """Return the user group named `nome`, or `None` if there is none."""
+    def get_user_group(self, name: str) -> UserGroup | None:
+        """Return the user group named `name`, or `None` if there is none."""
         ...
 
     @abstractmethod
-    def list_grupos_user(self) -> list[GrupoUser]:
+    def list_user_groups(self) -> list[UserGroup]:
         """Return every user group."""
         ...
 
     @abstractmethod
-    def save_grupo_user(self, grupo: GrupoUser) -> None:
-        """Create or overwrite the user group identified by `grupo.nome`."""
+    def save_user_group(self, group: UserGroup) -> None:
+        """Create or overwrite the user group identified by `group.name`."""
         ...
 
     @abstractmethod
-    def delete_grupo_user(self, nome: str) -> None:
-        """Remove the user group named `nome`.
+    def delete_user_group(self, name: str) -> None:
+        """Remove the user group named `name`.
 
-        As with `delete_servidor`, `core.nucleo` pre-validates existence
-        (and that no `Permissao` still references the group) before
+        As with `delete_server`, `core.core` pre-validates existence
+        (and that no `Permission` still references the group) before
         calling this, so a missing name need not be treated as an error.
         """
         ...
 
     @abstractmethod
-    def get_grupo_servidor(self, nome: str) -> GrupoServidor | None:
-        """Return the server group named `nome`, or `None` if there is none."""
+    def get_server_group(self, name: str) -> ServerGroup | None:
+        """Return the server group named `name`, or `None` if there is none."""
         ...
 
     @abstractmethod
-    def list_grupos_servidor(self) -> list[GrupoServidor]:
+    def list_server_groups(self) -> list[ServerGroup]:
         """Return every server group."""
         ...
 
     @abstractmethod
-    def save_grupo_servidor(self, grupo: GrupoServidor) -> None:
-        """Create or overwrite the server group identified by `grupo.nome`."""
+    def save_server_group(self, group: ServerGroup) -> None:
+        """Create or overwrite the server group identified by `group.name`."""
         ...
 
     @abstractmethod
-    def delete_grupo_servidor(self, nome: str) -> None:
-        """Remove the server group named `nome`; see `delete_grupo_user`
+    def delete_server_group(self, name: str) -> None:
+        """Remove the server group named `name`; see `delete_user_group`
         for the same pre-validated-by-the-caller expectation."""
         ...
 
     @abstractmethod
-    def list_permissoes(self) -> list[Permissao]:
+    def list_permissions(self) -> list[Permission]:
         """Return every permission grant."""
         ...
 
     @abstractmethod
-    def save_permissao(self, permissao: Permissao) -> None:
+    def save_permission(self, permission: Permission) -> None:
         """Create or overwrite the grant identified by the
-        `(grupo_user, grupo_servidor)` pair -- not by `permissao.id`.
+        `(user_group, server_group)` pair -- not by `permission.id`.
 
         Granting again for the same pair (e.g. at a different
-        `NivelPermissao`) replaces the existing entry rather than adding a
+        `PermissionLevel`) replaces the existing entry rather than adding a
         second one.
         """
         ...
 
     @abstractmethod
-    def delete_permissao(self, grupo_user: str, grupo_servidor: str) -> None:
-        """Remove the grant for this `(grupo_user, grupo_servidor)` pair.
+    def delete_permission(self, user_group: str, server_group: str) -> None:
+        """Remove the grant for this `(user_group, server_group)` pair.
 
         Unlike the other `delete_*` methods here, `JsonStore` raises
         `FileNotFoundError` when there is no matching entry rather than
-        treating it as a no-op, since `core.nucleo.revogar` does not
+        treating it as a no-op, since `core.core.revoke` does not
         pre-check existence the way it does for the other entities.
         """
         ...
 
     @abstractmethod
-    def get_sudo_profile(self, nome: str) -> SudoProfile | None:
-        """Return the sudo profile named `nome`, or `None` if there is none."""
+    def get_sudo_profile(self, name: str) -> SudoProfile | None:
+        """Return the sudo profile named `name`, or `None` if there is none."""
         ...
 
     @abstractmethod
@@ -191,15 +191,15 @@ class IStore(ABC):
 
     @abstractmethod
     def save_sudo_profile(self, profile: SudoProfile) -> None:
-        """Create or overwrite the sudo profile identified by `profile.nome`."""
+        """Create or overwrite the sudo profile identified by `profile.name`."""
         ...
 
     @abstractmethod
-    def delete_sudo_profile(self, nome: str) -> None:
-        """Remove the sudo profile named `nome`.
+    def delete_sudo_profile(self, name: str) -> None:
+        """Remove the sudo profile named `name`.
 
-        `core.nucleo.excluir_sudo_profile` checks first that no
-        `Permissao` still references it, so this does not need to guard
+        `core.core.delete_sudo_profile` checks first that no
+        `Permission` still references it, so this does not need to guard
         against deleting a profile that is in active use.
         """
         ...
@@ -207,12 +207,12 @@ class IStore(ABC):
     @abstractmethod
     def lock(self) -> None:
         """Acquire an exclusive, store-wide lock, raising
-        `exceptions.LockOcupado` if another process already holds it.
+        `exceptions.LockBusy` if another process already holds it.
 
-        `core.nucleo` acquires this around every mutating operation (via
+        `core.core` acquires this around every mutating operation (via
         `with self.store:`) so two AdminForge processes never interleave
         writes to the same state; note that id allocation in
-        `interfaces.auditor.IAuditor.proximo_id` happens before this lock
+        `interfaces.auditor.IAuditor.next_id` happens before this lock
         is taken, so it is not itself covered by it.
         """
         ...

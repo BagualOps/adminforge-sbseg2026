@@ -1,1 +1,1 @@
-"""Desired-vs-installed SSH access diffing: `Planner` and `ChaveInstalada`, used by `Nucleo` and the deployer layer."""
+"""Desired-vs-installed SSH access diffing: `Planner` and `InstalledKey`, used by `Core` and the deployer layer."""

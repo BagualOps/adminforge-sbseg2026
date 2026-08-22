@@ -9,7 +9,7 @@ import pytest
 
 from adminforge.cli.main import main
 
-from .conftest import CHAVE_ALICE, HOST_KEY_FAKE
+from .conftest import KEY_ALICE, HOST_KEY_FAKE
 
 
 @pytest.fixture
@@ -32,7 +32,7 @@ def test_cli_fluxo_basico(env):
     rc, out = run_cli(["user", "add", "--username", "alice", "--name", "Alice", "--email", "m@e.com"])
     assert rc == 0, out
 
-    rc, out = run_cli(["user", "key", "add", "--username", "alice", "--string", CHAVE_ALICE])
+    rc, out = run_cli(["user", "key", "add", "--username", "alice", "--string", KEY_ALICE])
     assert rc == 0, out
 
     rc, _ = run_cli(["user-group", "create", "--name", "sysadmins"])
@@ -57,7 +57,7 @@ def test_cli_fluxo_basico(env):
 
     rc, out = run_cli(["apply", "--yes", "--dry-run"])
     assert rc == 0
-    assert "SUCESSO" in out.upper()
+    assert "SUCCESS" in out.upper()
 
     rc, out = run_cli(["history", "list"])
     assert rc == 0
@@ -105,10 +105,10 @@ def test_cli_add_member_misto_virgula_e_espaco(env):
         assert u in out
 
 
-def test_cli_apply_diff_resiliente_a_ssh_quebrado(env, monkeypatch):
-    """Regressao: erro de SSH em um host nao pode abortar o diff dos demais."""
+def test_cli_apply_diff_resilient_to_broken_ssh(env, monkeypatch):
+    """Regression: an SSH error on one host must not abort the diff of the others."""
     run_cli(["user", "add", "--username", "alice", "--name", "A", "--email", "a@e.com"])
-    run_cli(["user", "key", "add", "--username", "alice", "--string", CHAVE_ALICE])
+    run_cli(["user", "key", "add", "--username", "alice", "--string", KEY_ALICE])
     run_cli(["user-group", "create", "--name", "sa"])
     run_cli(["user-group", "add-member", "--group", "sa", "--username", "alice"])
     run_cli(["server", "add", "--hostname", "web-01", "--ip", "10.0.0.10", "--host-key", HOST_KEY_FAKE])
@@ -119,25 +119,25 @@ def test_cli_apply_diff_resiliente_a_ssh_quebrado(env, monkeypatch):
 
     from adminforge.deployer.dry_run import DryRunDeployer
 
-    original = DryRunDeployer.ler_authorized_keys
+    original = DryRunDeployer.read_authorized_keys
 
-    def quebra_no_web01(self, servidor, username):
-        if servidor.hostname == "web-01":
+    def quebra_no_web01(self, server, username):
+        if server.hostname == "web-01":
             raise RuntimeError("ssh: connect failed")
-        return original(self, servidor, username)
+        return original(self, server, username)
 
-    monkeypatch.setattr(DryRunDeployer, "ler_authorized_keys", quebra_no_web01)
+    monkeypatch.setattr(DryRunDeployer, "read_authorized_keys", quebra_no_web01)
 
     rc, out = run_cli(["apply", "--yes", "--dry-run", "--diff"])
-    # mesmo com erro em web-01, web-02 ainda deve aparecer no diff
+    # mesmo com error em web-01, web-02 ainda deve aparecer no diff
     assert "ssh: connect failed" in out
     assert "web-02:alice" in out
 
 
 def test_cli_apply_verify_dry_run(env):
-    # cenario: estado declarado, DryRun.ler_authorized_keys == "" => tudo divergente
+    # cenario: state declarado, DryRun.read_authorized_keys == "" => tudo divergente
     run_cli(["user", "add", "--username", "alice", "--name", "A", "--email", "a@e.com"])
-    run_cli(["user", "key", "add", "--username", "alice", "--string", CHAVE_ALICE])
+    run_cli(["user", "key", "add", "--username", "alice", "--string", KEY_ALICE])
     run_cli(["user-group", "create", "--name", "sa"])
     run_cli(["user-group", "add-member", "--group", "sa", "--username", "alice"])
     run_cli(["server", "add", "--hostname", "web-01", "--ip", "10.0.0.10", "--host-key", HOST_KEY_FAKE])
@@ -155,7 +155,7 @@ def test_cli_apply_verify_dry_run(env):
 
 def test_cli_apply_diff(env):
     run_cli(["user", "add", "--username", "alice", "--name", "A", "--email", "a@e.com"])
-    run_cli(["user", "key", "add", "--username", "alice", "--string", CHAVE_ALICE])
+    run_cli(["user", "key", "add", "--username", "alice", "--string", KEY_ALICE])
     run_cli(["user-group", "create", "--name", "sa"])
     run_cli(["user-group", "add-member", "--group", "sa", "--username", "alice"])
     run_cli(["server", "add", "--hostname", "web-01", "--ip", "10.0.0.10", "--host-key", HOST_KEY_FAKE])
@@ -167,13 +167,13 @@ def test_cli_apply_diff(env):
     assert rc == 0
     assert "Diff" in out
     assert "web-01:alice" in out
-    # com DryRun.ler_authorized_keys=='', tudo eh nova adicao
+    # com DryRun.read_authorized_keys=='', tudo eh nova adicao
     assert "+# BEGIN adminforge: alice:" in out
 
 
 def test_cli_dump_json(env):
     run_cli(["user", "add", "--username", "alice", "--name", "A", "--email", "a@e.com"])
-    run_cli(["user", "key", "add", "--username", "alice", "--string", CHAVE_ALICE])
+    run_cli(["user", "key", "add", "--username", "alice", "--string", KEY_ALICE])
     run_cli(["user-group", "create", "--name", "sa"])
     run_cli(["user-group", "add-member", "--group", "sa", "--username", "alice"])
     run_cli(["server", "add", "--hostname", "web-01", "--ip", "10.0.0.10", "--host-key", HOST_KEY_FAKE])
@@ -247,7 +247,7 @@ def test_cli_list_format_json(env):
     assert all("command" in op and "status" in op for op in ops)
 
 
-def test_cli_status_estado_vazio(env):
+def test_cli_status_empty_state(env):
     rc, out = run_cli(["status"])
     assert rc == 0
     assert "0 users" in out
@@ -258,7 +258,7 @@ def test_cli_status_estado_vazio(env):
 
 def test_cli_status_com_pendencia_e_json(env):
     run_cli(["user", "add", "--username", "alice", "--name", "A", "--email", "a@e.com"])
-    run_cli(["user", "key", "add", "--username", "alice", "--string", CHAVE_ALICE])
+    run_cli(["user", "key", "add", "--username", "alice", "--string", KEY_ALICE])
     run_cli(["user-group", "create", "--name", "sa"])
     run_cli(["user-group", "add-member", "--group", "sa", "--username", "alice"])
     run_cli(["server", "add", "--hostname", "web-01", "--ip", "10.0.0.10", "--host-key", HOST_KEY_FAKE])
@@ -280,7 +280,7 @@ def test_cli_status_com_pendencia_e_json(env):
     assert j["history_chain"]["ok"] is True
 
 
-def test_cli_permission_show_user_servers_acessiveis(env):
+def test_cli_permission_show_user_reachable_servers(env):
     for u in ("alice", "bob"):
         run_cli(["user", "add", "--username", u, "--name", u.title(), "--email", f"{u}@e.com"])
     run_cli(["user-group", "create", "--name", "sa"])
@@ -296,7 +296,7 @@ def test_cli_permission_show_user_servers_acessiveis(env):
     assert "web-01" in out and "web-02" in out
     assert "sudo" in out
 
-    # bob nao esta em grupo nenhum -> sem acesso, mostra hint
+    # bob nao esta em group nenhum -> sem acesso, mostra hint
     rc, out = run_cli(["permission", "show", "--user", "bob"])
     assert rc == 0
     assert "no servers accessible" in out
@@ -307,7 +307,7 @@ def test_cli_permission_show_user_servers_acessiveis(env):
     assert "does not exist" in out
 
 
-def test_cli_permission_show_exige_um_dos_filtros(env):
+def test_cli_permission_show_requires_one_filter(env):
     # mutually_exclusive_group(required=True) faz argparse chamar sys.exit(2)
     with pytest.raises(SystemExit) as exc:
         run_cli(["permission", "show"])

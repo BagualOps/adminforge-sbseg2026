@@ -34,9 +34,9 @@ mypy adminforge/
 
 ## Estrutura de novo caso de uso
 
-1. Acrescentar método no `Nucleo` (validações + Store + Auditor).
+1. Acrescentar método no `Core` (validações + Store + Auditor).
 2. Acrescentar comando na CLI (`adminforge/cli/main.py`).
-3. Escrever teste de fluxo positivo + 1-2 edge cases em `tests/test_nucleo.py`.
+3. Escrever teste de fluxo positivo + 1-2 edge cases em `tests/test_core.py`.
 4. Acrescentar exemplo no [`USAGE.md`](USAGE.md).
 
 ## Commits

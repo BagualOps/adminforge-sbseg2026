@@ -6,53 +6,53 @@ from pathlib import Path
 import pytest
 
 from adminforge.auditor.jsonl_auditor import JsonlAuditor
-from adminforge.domain import Operacao, StatusOperacao
-from adminforge.exceptions import CadeiaQuebrada
+from adminforge.domain import Operation, OperationStatus
+from adminforge.exceptions import BrokenChain
 
 
-def _op(id: str) -> Operacao:
-    return Operacao(
+def _op(id: str) -> Operation:
+    return Operation(
         id=id,
-        momento=datetime(2026, 4, 22, 14, 32),
+        timestamp=datetime(2026, 4, 22, 14, 32),
         superadmin="operador",
-        comando="user add alice",
-        status=StatusOperacao.SUCESSO,
+        command="user add alice",
+        status=OperationStatus.SUCCESS,
     )
 
 
-def test_cadeia_de_hashes_integra(tmp_path: Path):
+def test_hash_chain_intact(tmp_path: Path):
     a = JsonlAuditor(tmp_path / "history.jsonl")
-    a.registrar(_op("OP-0001"))
-    a.registrar(_op("OP-0002"))
-    ok, _ = a.verificar_cadeia()
+    a.record(_op("OP-0001"))
+    a.record(_op("OP-0002"))
+    ok, _ = a.verify_chain()
     assert ok is True
 
 
 def test_proximo_id_incrementa(tmp_path: Path):
     a = JsonlAuditor(tmp_path / "history.jsonl")
-    assert a.proximo_id() == "OP-0001"
-    a.registrar(_op("OP-0001"))
-    assert a.proximo_id() == "OP-0002"
+    assert a.next_id() == "OP-0001"
+    a.record(_op("OP-0001"))
+    assert a.next_id() == "OP-0002"
 
 
-def test_cadeia_quebrada_em_alteracao_retroativa(tmp_path: Path):
+def test_broken_chain_on_retroactive_change(tmp_path: Path):
     path = tmp_path / "history.jsonl"
     a = JsonlAuditor(path)
-    a.registrar(_op("OP-0001"))
-    a.registrar(_op("OP-0002"))
-    linhas = path.read_text(encoding="utf-8").splitlines()
-    linhas[0] = linhas[0].replace("user add alice", "user add evil")
-    path.write_text("\n".join(linhas) + "\n", encoding="utf-8")
-    with pytest.raises(CadeiaQuebrada):
-        a.verificar_cadeia()
+    a.record(_op("OP-0001"))
+    a.record(_op("OP-0002"))
+    lines = path.read_text(encoding="utf-8").splitlines()
+    lines[0] = lines[0].replace("user add alice", "user add evil")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    with pytest.raises(BrokenChain):
+        a.verify_chain()
 
 
-def test_listar_falhas(tmp_path: Path):
+def test_list_failures(tmp_path: Path):
     a = JsonlAuditor(tmp_path / "history.jsonl")
-    a.registrar(_op("OP-0001"))
+    a.record(_op("OP-0001"))
     op2 = _op("OP-0002")
-    op2.status = StatusOperacao.FALHA
-    a.registrar(op2)
-    falhos = a.listar_falhas()
+    op2.status = OperationStatus.FAILURE
+    a.record(op2)
+    falhos = a.list_failures()
     assert len(falhos) == 1
     assert falhos[0].id == "OP-0002"

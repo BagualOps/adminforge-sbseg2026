@@ -8,7 +8,7 @@ from __future__ import annotations
 import os
 import sys
 
-from adminforge.domain import Operacao, StatusOperacao
+from adminforge.domain import Operation, OperationStatus
 from adminforge.i18n import t as _
 
 _USE_COLOR = sys.stdout.isatty() and os.environ.get("NO_COLOR") is None
@@ -74,29 +74,29 @@ def heading(msg: str) -> None:
     print(_color(msg, bold=True, underline=True))
 
 
-def kv(chave: str, valor: str) -> None:
+def kv(key: str, value: str) -> None:
     """Print one right-aligned "key: value" line (key width 12, cyan key)."""
-    print(_color(f"{chave:>12}: ", _CYAN) + valor)
+    print(_color(f"{key:>12}: ", _CYAN) + value)
 
 
-def imprimir_resultado(op: Operacao) -> int:
-    """Print the outcome of an Operacao (success/partial/failure) and return its process exit code.
+def print_result(op: Operation) -> int:
+    """Print the outcome of an Operation (success/partial/failure) and return its process exit code.
 
     On failure, also prints the error of the first failed sub-action (if any)
     as extra context. Return value maps status to exit code: 0 for
-    SUCESSO, 1 for SUCESSO_PARCIAL, 2 for anything else (failure) — callers
+    SUCCESS, 1 for PARTIAL_SUCCESS, 2 for anything else (failure) — callers
     typically return this value straight from the CLI command.
     """
-    if op.status == StatusOperacao.SUCESSO:
-        ok(f"{op.comando}  ({op.id})")
+    if op.status == OperationStatus.SUCCESS:
+        ok(f"{op.command}  ({op.id})")
         return 0
-    if op.status == StatusOperacao.SUCESSO_PARCIAL:
-        warn(_("{cmd}  ({id}) — partial").format(cmd=op.comando, id=op.id))
+    if op.status == OperationStatus.PARTIAL_SUCCESS:
+        warn(_("{cmd}  ({id}) — partial").format(cmd=op.command, id=op.id))
         return 1
-    erro = next((s.erro for s in op.subacoes if s.erro), op.comando)
-    fail(f"{op.comando}  ({op.id})")
-    if erro:
-        secho(f"        {erro}", _RED, dim=True)
+    error = next((s.error for s in op.sub_actions if s.error), op.command)
+    fail(f"{op.command}  ({op.id})")
+    if error:
+        secho(f"        {error}", _RED, dim=True)
     return 2
 
 
@@ -119,34 +119,34 @@ def confirmar(pergunta: str, default: bool = False) -> bool:
     return resposta[:1] == "y" or resposta[:1] == "s"
 
 
-def exit_se_falha(op: Operacao) -> None:
+def exit_if_failed(op: Operation) -> None:
     """Print the result of `op` and terminate the process (sys.exit) if it did not fully succeed.
 
-    Unlike `imprimir_resultado`, this never returns to the caller when the
+    Unlike `print_result`, this never returns to the caller when the
     operation is a partial success or a failure — use it only in commands
     that have nothing left to do after this point.
     """
-    rc = imprimir_resultado(op)
+    rc = print_result(op)
     if rc != 0:
         sys.exit(rc)
 
 
-def tabela(cabecalho: list[str], linhas: list[list[str]]) -> None:
-    """Print `linhas` as a left-aligned, space-padded table under `cabecalho`.
+def tabela(cabecalho: list[str], lines: list[list[str]]) -> None:
+    """Print `lines` as a left-aligned, space-padded table under `cabecalho`.
 
     Column widths are computed from the widest cell (header or value) in each
     column. Prints a dimmed "(empty)" placeholder instead of a table when
-    `linhas` is empty.
+    `lines` is empty.
     """
-    if not linhas:
+    if not lines:
         secho(_("(empty)"), dim=True)
         return
     larguras = [len(c) for c in cabecalho]
-    for linha in linhas:
-        for i, valor in enumerate(linha):
-            larguras[i] = max(larguras[i], len(str(valor)))
+    for line in lines:
+        for i, value in enumerate(line):
+            larguras[i] = max(larguras[i], len(str(value)))
     sep = "  "
     print(_color(sep.join(c.ljust(larguras[i]) for i, c in enumerate(cabecalho)), bold=True))
     print(sep.join("-" * w for w in larguras))
-    for linha in linhas:
-        print(sep.join(str(v).ljust(larguras[i]) for i, v in enumerate(linha)))
+    for line in lines:
+        print(sep.join(str(v).ljust(larguras[i]) for i, v in enumerate(line)))

@@ -342,7 +342,7 @@ Coloque `af history verify` no seu monitoring. Se sair com erro, alguém adulter
 
 ### `apply` parou no meio com erro de SSH
 
-A subação que falhou fica anotada no histórico; `chaves_instaladas` daquele servidor não muda. No próximo `apply`, o delta naturalmente identifica o que faltou — basta rodar de novo.
+A subação que falhou fica anotada no histórico; `installed_keys` daquele servidor não muda. No próximo `apply`, o delta naturalmente identifica o que faltou — basta rodar de novo.
 
 ```bash
 af history failed
@@ -380,7 +380,7 @@ af audit server --hostname prod-web-01     # real (read-only via SSH)
 
 Para conferir automaticamente: `af apply verify` lê os blocos AdminForge reais via SSH e compara com o declarado, reportando MISSING/EXTRA por servidor (rc=2 se houver drift).
 
-> **Escopo do verify.** Lê `authorized_keys` apenas dos usuários que aparecem em `chaves_instaladas` do estado. Blocos AdminForge sob contas locais que **não** estão (mais) declaradas — ex.: usuário removido do estado mas com bloco órfão no servidor — não são detectados pelo `verify`. Para esse caso, use `af audit server --hostname <h>` que olha `/etc/sudoers.d/` e marca arquivos `adminforge-*` sem permissão correspondente como drift.
+> **Escopo do verify.** Lê `authorized_keys` apenas dos usuários que aparecem em `installed_keys` do estado. Blocos AdminForge sob contas locais que **não** estão (mais) declaradas — ex.: usuário removido do estado mas com bloco órfão no servidor — não são detectados pelo `verify`. Para esse caso, use `af audit server --hostname <h>` que olha `/etc/sudoers.d/` e marca arquivos `adminforge-*` sem permissão correspondente como drift.
 
 ---
 

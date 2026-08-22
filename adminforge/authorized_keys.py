@@ -1,58 +1,58 @@
 """Helpers for managing the AdminForge block in authorized_keys."""
 from __future__ import annotations
 
-MARCADOR_INICIO = "# BEGIN adminforge: "
-MARCADOR_FIM = "# END adminforge: "
+START_MARKER = "# BEGIN adminforge: "
+END_MARKER = "# END adminforge: "
 
 
-def bloco(ref: str, chave: str) -> str:
-    """Build one managed BEGIN/END block for `chave`, tagged with `ref`.
+def block(ref: str, key: str) -> str:
+    """Build one managed BEGIN/END block for `key`, tagged with `ref`.
 
-    `chave` is stripped but not otherwise validated or re-encoded; it is
+    `key` is stripped but not otherwise validated or re-encoded; it is
     written verbatim between the markers.
     """
-    return f"{MARCADOR_INICIO}{ref}\n{chave.strip()}\n{MARCADOR_FIM}{ref}"
+    return f"{START_MARKER}{ref}\n{key.strip()}\n{END_MARKER}{ref}"
 
 
-def parse_blocos(conteudo: str) -> dict[str, str]:
+def parse_blocks(conteudo: str) -> dict[str, str]:
     """Return {ref: body} of the '# BEGIN/END adminforge: <ref>' blocks found."""
     out: dict[str, str] = {}
     ref: str | None = None
     buffer: list[str] = []
-    for linha in conteudo.splitlines():
-        if linha.startswith(MARCADOR_INICIO):
-            ref = linha[len(MARCADOR_INICIO):]
+    for line in conteudo.splitlines():
+        if line.startswith(START_MARKER):
+            ref = line[len(START_MARKER):]
             buffer = []
             continue
-        if ref is not None and linha.startswith(MARCADOR_FIM):
-            if linha[len(MARCADOR_FIM):] == ref:
+        if ref is not None and line.startswith(END_MARKER):
+            if line[len(END_MARKER):] == ref:
                 out[ref] = "\n".join(buffer)
             ref = None
             buffer = []
             continue
         if ref is not None:
-            buffer.append(linha)
+            buffer.append(line)
     return out
 
 
-def substituir_bloco(conteudo: str, ref: str, bloco_novo: str) -> str:
+def replace_block(conteudo: str, ref: str, new_block: str) -> str:
     """Replace the body of the block with the given ref (empty = remove). Lines outside
     the AdminForge markers are preserved."""
-    inicio = f"{MARCADOR_INICIO}{ref}"
-    fim = f"{MARCADOR_FIM}{ref}"
+    inicio = f"{START_MARKER}{ref}"
+    fim = f"{END_MARKER}{ref}"
     out: list[str] = []
     dentro = False
-    for linha in conteudo.splitlines():
-        if linha == inicio:
+    for line in conteudo.splitlines():
+        if line == inicio:
             dentro = True
             continue
         if dentro:
-            if linha == fim:
+            if line == fim:
                 dentro = False
             continue
-        out.append(linha)
-    if bloco_novo:
-        out.append(bloco_novo)
+        out.append(line)
+    if new_block:
+        out.append(new_block)
     resultado = "\n".join(out)
     if resultado and not resultado.endswith("\n"):
         resultado += "\n"

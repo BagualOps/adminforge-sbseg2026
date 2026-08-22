@@ -174,7 +174,7 @@ Comandos precisam ser caminhos absolutos (`/bin/...`, `/usr/bin/...`) — sudoer
 adminforge preview
 ```
 
-Read-only: lê o estado declarado e cada `chaves_instaladas`, calcula o delta, agrupa por servidor:
+Read-only: lê o estado declarado e cada `installed_keys`, calcula o delta, agrupa por servidor:
 
 ```
 i  3 subacoes em 2 servidores
@@ -219,7 +219,7 @@ sucessos: 2
 i  reaplicar com 'adminforge apply' retentativa apenas as subacoes em falha
 ```
 
-`apply` **não tem fila de pendentes**. O delta é recalculado a cada execução: o que não foi para o servidor (porque o `chaves_instaladas` não mudou) entra novamente no próximo `apply`. Detalhes em [`ARCHITECTURE.md`](ARCHITECTURE.md#apply).
+`apply` **não tem fila de pendentes**. O delta é recalculado a cada execução: o que não foi para o servidor (porque o `installed_keys` não mudou) entra novamente no próximo `apply`. Detalhes em [`ARCHITECTURE.md`](ARCHITECTURE.md#apply).
 
 ---
 

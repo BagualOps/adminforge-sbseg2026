@@ -1,6 +1,6 @@
 # Arquitetura
 
-> **Visão de 30 segundos.** Seis componentes, cada um com uma responsabilidade clara. CLI é a única porta de entrada; os outros são internos. Estado declarado em JSON; estado real espelhado no campo `chaves_instaladas` de cada servidor; delta calculado em memória; aplicação via SSH (OpenSSH binário); histórico append-only com cadeia de hashes. **Zero dependências de runtime** — só stdlib + OpenSSH.
+> **Visão de 30 segundos.** Seis componentes, cada um com uma responsabilidade clara. CLI é a única porta de entrada; os outros são internos. Estado declarado em JSON; estado real espelhado no campo `installed_keys` de cada servidor; delta calculado em memória; aplicação via SSH (OpenSSH binário); histórico append-only com cadeia de hashes. **Zero dependências de runtime** — só stdlib + OpenSSH.
 
 ## Zero deps {#zero-deps}
 
@@ -58,7 +58,7 @@ A v1 (M-1) começou usando `paramiko` (SSH), `click` (CLI) e `PyYAML` (estado), 
 | **CLI** (`adminforge/cli`) | Lê argumentos (argparse), valida sintaxe, formata saída. | Não conhece JSON, SSH ou hash chain. |
 | **Núcleo** (`adminforge/core/nucleo.py`) | Aplica regras (duplicatas, validações), coordena demais. | Não escreve em arquivo nem conecta em servidor diretamente. |
 | **Store** (`adminforge/store/json_store.py`) | Persiste entidades em JSON; lockfile; escrita atômica; permissão 0600. | Não conhece SSH nem hash chain. |
-| **Planner** (`adminforge/planner/planner.py`) | Calcula `desejado − chaves_instaladas` e emite subações. | Não persiste, não conecta em servidor. |
+| **Planner** (`adminforge/planner/planner.py`) | Calcula `desejado − installed_keys` e emite subações. | Não persiste, não conecta em servidor. |
 | **Deployer** (`adminforge/deployer/`) | Executa subações chamando `ssh`/`ssh-keyscan` via subprocess; faz inspeção operacional. | Não decide o que fazer; recebe lista pronta do Núcleo. |
 | **Auditor** (`adminforge/auditor/jsonl_auditor.py`) | Persiste histórico append-only com cadeia SHA256. | Não muda estado; só lê/escreve `history.jsonl`. |
 
@@ -70,7 +70,7 @@ state/
 │   └── alice.json
 ├── user-groups/
 │   └── sysadmins.json
-├── servers/               # cada server.json inclui chaves_instaladas
+├── servers/               # cada server.json inclui installed_keys
 │   └── web-01.json
 ├── server-groups/
 │   └── producao.json
@@ -112,13 +112,13 @@ Padrões deliberadamente **evitados**: Singleton, Abstract Factory, container DI
 3. CLI exibe lista e pede confirmação
 4. Deployer executa subações em paralelo (limite configurável)
 5. Para cada subação:
-   - sucesso  -> atualiza chaves_instaladas no Store
-   - falha    -> anota erro; nao toca chaves_instaladas
+   - sucesso  -> atualiza installed_keys no Store
+   - falha    -> anota erro; nao toca installed_keys
 6. Núcleo fecha Operação com sucesso | sucesso_parcial | falha
 7. CLI imprime resumo
 ```
 
-**Não existe fila de "tarefas pendentes".** Pendência é sempre calculada na hora como `desejado − aplicado`. Se uma subação falhar, `chaves_instaladas` daquele servidor não muda, então o próximo `apply` naturalmente identifica a diferença no delta. Isso evita duas fontes da verdade que podem divergir.
+**Não existe fila de "tarefas pendentes".** Pendência é sempre calculada na hora como `desejado − aplicado`. Se uma subação falhar, `installed_keys` daquele servidor não muda, então o próximo `apply` naturalmente identifica a diferença no delta. Isso evita duas fontes da verdade que podem divergir.
 
 ## Histórico imutável
 
@@ -127,12 +127,12 @@ Cada entrada de `history.jsonl` é um JSON com:
 ```json
 {
   "id": "OP-0042",
-  "momento": "2026-04-22T14:32:11-03:00",
+  "timestamp": "2026-04-22T14:32:11-03:00",
   "superadmin": "alice",
-  "comando": "apply",
+  "command": "apply",
   "status": "sucesso_parcial",
-  "subacoes": [...],
-  "hash_anterior": "7c4a8d09...",
+  "sub_actions": [...],
+  "previous_hash": "7c4a8d09...",
   "hash": "9e8b2c14..."
 }
 ```
@@ -150,7 +150,7 @@ Cada entrada de `history.jsonl` é um JSON com:
 | JSON em vez de banco | Escala pequena cabe em texto; versionável em Git. | Sem indexação; busca = leitura linear. Aceitável para dezenas de usuários. |
 | Fluxo síncrono | Sem latência crítica; um Superadmin opera por vez. | `apply` em 600 servidores depende de SSH paralelo no Deployer. |
 | Sem cache | Ler JSON é barato. | Cada leitura abre arquivos. |
-| `chaves_instaladas` no Servidor | Resposta direta a "o que já está deployado". | `apply verify` confere declarado × real; cifragem dos JSONs fica para M-2. |
+| `installed_keys` no Servidor | Resposta direta a "o que já está deployado". | `apply verify` confere declarado × real; cifragem dos JSONs fica para M-2. |
 | Lockfile | KISS para exclusão mútua. | Falha rápida se outra instância roda; aceitável. |
 | TOFU para host_key | KISS; conta com confirmação humana no cadastro. | Não detecta MitM no primeiro contato. |
 | `chave_host` armazenada | Detecta MitM em conexões seguintes. | Rotação requer revalidação manual. |

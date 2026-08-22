@@ -1,15 +1,15 @@
 """Compute the SSH-key/permission delta between declared state and installed state.
 
 `Planner` is where the paper's declared-vs-real state comparison and the
-linear-per-host apply cost originate. `estado_desejado` expands users, groups
+linear-per-host apply cost originate. `desired_state` expands users, groups
 and permissions into a per-host, per-key desired state purely from `IStore`
-reads (no network I/O). `calcular_delta` then diffs that desired state
-against either the state already persisted on each `Servidor` (the default,
+reads (no network I/O). `calculate_delta` then diffs that desired state
+against either the state already persisted on each `Server` (the default,
 and the fast "is anything pending?" path, since it touches no host) or an
-`atual_override` supplied by the caller (used by `Nucleo` with
+`atual_override` supplied by the caller (used by `Core` with
 `--reconcile` to diff against state fetched live over SSH instead). The
-per-host loop inside `calcular_delta` is independent across hosts, which is
-what lets `Nucleo.aplicar` parallelize the subsequent apply step.
+per-host loop inside `calculate_delta` is independent across hosts, which is
+what lets `Core.apply` parallelize the subsequent apply step.
 """
 
 from __future__ import annotations
@@ -18,47 +18,47 @@ from collections import defaultdict
 from dataclasses import dataclass
 
 from adminforge.domain import (
-    NivelPermissao,
-    StatusCredencial,
-    StatusUser,
-    Subacao,
-    TipoAcao,
+    PermissionLevel,
+    CredentialStatus,
+    UserStatus,
+    SubAction,
+    ActionType,
 )
-from adminforge.exceptions import EstadoInvalido
+from adminforge.exceptions import InvalidState
 from adminforge.interfaces.store import IStore
 
 
-_PRIORIDADE = {NivelPermissao.SHELL: 1, NivelPermissao.SUDO: 2}
+_PRIORIDADE = {PermissionLevel.SHELL: 1, PermissionLevel.SUDO: 2}
 
 
-def _maior(a: NivelPermissao, b: NivelPermissao) -> NivelPermissao:
+def _maior(a: PermissionLevel, b: PermissionLevel) -> PermissionLevel:
     """Return whichever of `a`/`b` outranks the other (`SUDO` beats `SHELL`); ties keep `a`."""
     return a if _PRIORIDADE[a] >= _PRIORIDADE[b] else b
 
 
 def _merge_profile(
-    existente: "ChaveInstalada | None",
-    perm_nivel: NivelPermissao,
+    existente: "InstalledKey | None",
+    perm_level: PermissionLevel,
     perm_profile: str | None,
-    nivel_final: NivelPermissao,
+    final_level: PermissionLevel,
 ) -> str | None:
-    """Compute the effective profile when merging a new permission into the existing ChaveInstalada.
+    """Compute the effective profile when merging a new permission into the existing InstalledKey.
 
     Rules (validated by parametrized tests):
-      - nivel_final != SUDO              -> None (profile does not apply to SHELL)
+      - final_level != SUDO              -> None (profile does not apply to SHELL)
       - existente is None                -> incoming profile
       - existente was SHELL              -> incoming profile (incoming is SUDO)
       - incoming is SHELL                -> keep the existing SUDO profile
       - both SUDO, one without profile   -> None (full sudo wins, least restriction)
       - both SUDO with profile           -> keep the existing profile (stable)
     """
-    if nivel_final != NivelPermissao.SUDO:
+    if final_level != PermissionLevel.SUDO:
         return None
     if existente is None:
         return perm_profile
-    if existente.nivel != NivelPermissao.SUDO:
+    if existente.level != PermissionLevel.SUDO:
         return perm_profile
-    if perm_nivel != NivelPermissao.SUDO:
+    if perm_level != PermissionLevel.SUDO:
         return existente.profile
     if existente.profile is None or perm_profile is None:
         return None
@@ -66,12 +66,12 @@ def _merge_profile(
 
 
 @dataclass(frozen=True)
-class ChaveInstalada:
+class InstalledKey:
     """One SSH credential installed for one user, at one permission level, on one host.
 
-    Used both for the desired state built by `Planner.estado_desejado` and the
-    installed state read from `Servidor.chaves_instaladas` or a live
-    inspection (`Nucleo._atual_vivo`); `calcular_delta` compares instances of
+    Used both for the desired state built by `Planner.desired_state` and the
+    installed state read from `Server.installed_keys` or a live
+    inspection (`Core._atual_vivo`); `calculate_delta` compares instances of
     the two by field equality to detect drift. Frozen because instances are
     used as dict values keyed by `ref` and are expected to be replaced, not
     mutated in place, whenever their level or profile changes.
@@ -79,38 +79,38 @@ class ChaveInstalada:
 
     ref: str
     username: str
-    nivel: NivelPermissao
+    level: PermissionLevel
     profile: str | None = None
 
     @classmethod
-    def de_dict(cls, d: dict) -> "ChaveInstalada":
-        """Reconstruct a `ChaveInstalada` from the dict form persisted in `Servidor.chaves_instaladas`.
+    def de_dict(cls, d: dict) -> "InstalledKey":
+        """Reconstruct a `InstalledKey` from the dict form persisted in `Server.installed_keys`.
 
-        `username` and `nivel` fall back to being derived from `ref` and to
-        `NivelPermissao.SHELL` respectively when the dict omits them, which
+        `username` and `level` fall back to being derived from `ref` and to
+        `PermissionLevel.SHELL` respectively when the dict omits them, which
         happens for records written before those fields existed.
         """
         return cls(
             ref=d["ref"],
             username=d.get("username") or d["ref"].split(":", 1)[0],
-            nivel=NivelPermissao(d.get("nivel", "shell")),
+            level=PermissionLevel(d.get("level", "shell")),
             profile=d.get("profile"),
         )
 
     def para_dict(self) -> dict:
-        """Serialize back to the dict form persisted in `Servidor.chaves_instaladas`, omitting `profile` entirely instead of writing a null when it is `None`."""
-        out = {"ref": self.ref, "username": self.username, "nivel": self.nivel.value}
+        """Serialize back to the dict form persisted in `Server.installed_keys`, omitting `profile` entirely instead of writing a null when it is `None`."""
+        out = {"ref": self.ref, "username": self.username, "level": self.level.value}
         if self.profile is not None:
             out["profile"] = self.profile
         return out
 
 
 class Planner:
-    """Diffs the store's declared access state against installed state, on behalf of `Nucleo`.
+    """Diffs the store's declared access state against installed state, on behalf of `Core`.
 
     Holds only the `IStore` needed to read users, groups, permissions,
     credentials and servers; has no knowledge of SSH or the deployer, which
-    keeps `estado_desejado` and the default path of `calcular_delta` free of
+    keeps `desired_state` and the default path of `calculate_delta` free of
     network I/O and therefore fast regardless of fleet size.
     """
 
@@ -118,8 +118,8 @@ class Planner:
         """Store the `IStore` used to read users, groups, permissions, credentials and servers."""
         self.store = store
 
-    def estado_desejado(self) -> dict[str, dict[str, ChaveInstalada]]:
-        """Expand every active permission into the desired `ChaveInstalada` for each (host, credential) pair, from store reads alone.
+    def desired_state(self) -> dict[str, dict[str, InstalledKey]]:
+        """Expand every active permission into the desired `InstalledKey` for each (host, credential) pair, from store reads alone.
 
         For each permission, walks every active member of its user-group,
         every active credential of each such user, and every server in its
@@ -134,47 +134,47 @@ class Planner:
         as an error: the store is the source of truth, so a stale reference
         just yields less desired state, not a failure.
         """
-        users = {u.username: u for u in self.store.list_users() if u.status == StatusUser.ATIVO}
+        users = {u.username: u for u in self.store.list_users() if u.status == UserStatus.ACTIVE}
         creds_por_user = {
-            u: [c for c in self.store.list_credenciais(u) if c.status == StatusCredencial.ATIVA]
+            u: [c for c in self.store.list_credentials(u) if c.status == CredentialStatus.ACTIVE]
             for u in users
         }
-        grupos_user = {g.nome: g for g in self.store.list_grupos_user()}
-        grupos_servidor = {g.nome: g for g in self.store.list_grupos_servidor()}
-        servidores_validos = {s.hostname for s in self.store.list_servidores()}
+        user_groups = {g.name: g for g in self.store.list_user_groups()}
+        server_groups = {g.name: g for g in self.store.list_server_groups()}
+        valid_servers = {s.hostname for s in self.store.list_servers()}
 
-        desejado: dict[str, dict[str, ChaveInstalada]] = defaultdict(dict)
-        for perm in self.store.list_permissoes():
-            gu = grupos_user.get(perm.grupo_user)
-            gs = grupos_servidor.get(perm.grupo_servidor)
+        desejado: dict[str, dict[str, InstalledKey]] = defaultdict(dict)
+        for perm in self.store.list_permissions():
+            gu = user_groups.get(perm.user_group)
+            gs = server_groups.get(perm.server_group)
             if not gu or not gs:
                 continue
-            for username in gu.membros:
+            for username in gu.members:
                 if username not in users:
                     continue
                 for cred in creds_por_user.get(username, []):
-                    ref = cred.referencia
-                    for hostname in gs.membros:
-                        if hostname not in servidores_validos:
+                    ref = cred.reference
+                    for hostname in gs.members:
+                        if hostname not in valid_servers:
                             continue
                         existente = desejado[hostname].get(ref)
-                        nivel = perm.nivel if existente is None else _maior(existente.nivel, perm.nivel)
-                        profile = _merge_profile(existente, perm.nivel, perm.profile, nivel)
-                        desejado[hostname][ref] = ChaveInstalada(
-                            ref=ref, username=username, nivel=nivel, profile=profile
+                        level = perm.level if existente is None else _maior(existente.level, perm.level)
+                        profile = _merge_profile(existente, perm.level, perm.profile, level)
+                        desejado[hostname][ref] = InstalledKey(
+                            ref=ref, username=username, level=level, profile=profile
                         )
         return desejado
 
-    def calcular_delta(
+    def calculate_delta(
         self,
         force: bool = False,
-        atual_override: dict[str, dict[str, "ChaveInstalada"]] | None = None,
-    ) -> list[Subacao]:
-        """Diff desired state against installed state and return the `Subacao` list needed to reconcile them, sorted deterministically.
+        atual_override: dict[str, dict[str, "InstalledKey"]] | None = None,
+    ) -> list[SubAction]:
+        """Diff desired state against installed state and return the `SubAction` list needed to reconcile them, sorted deterministically.
 
         This is the check the paper calls "is anything pending?": by default
         (no `atual_override`), the installed side is read entirely from
-        `Servidor.chaves_instaladas` already in the store, so the whole
+        `Server.installed_keys` already in the store, so the whole
         computation is local and touches no host. `atual_override` lets the
         caller substitute state fetched live over SSH instead (used for
         `--reconcile`). `force=True` discards, per host, any
@@ -184,93 +184,93 @@ class Planner:
         `--reconcile`. A key is judged divergent if it is missing, installed
         at the wrong permission level, or installed with the wrong sudo
         profile. Profile command lists are resolved once per profile name via
-        a local cache and raise `EstadoInvalido` if the referenced profile is
+        a local cache and raise `InvalidState` if the referenced profile is
         missing or has no commands, so a dangling or emptied profile can
         never silently degrade into unrestricted sudo. The result is sorted
-        by (host, action, credential) so `Nucleo.aplicar` groups it by host
+        by (host, action, credential) so `Core.apply` groups it by host
         deterministically and repeated runs against the same state produce
         identical subaction ordering.
         """
-        desejado = self.estado_desejado()
-        subacoes: list[Subacao] = []
+        desejado = self.desired_state()
+        sub_actions: list[SubAction] = []
 
         # cache profiles to avoid re-reading on every subaction
         profiles_cache: dict[str, list[str] | None] = {}
 
-        def _comandos(profile: str | None) -> list[str] | None:
+        def _commands(profile: str | None) -> list[str] | None:
             """None  = no profile (legitimate NOPASSWD:ALL).
             Non-empty list = resolved profile.
-            Raises EstadoInvalido if the referenced profile does not exist or is empty
+            Raises InvalidState if the referenced profile does not exist or is empty
             (avoids silently becoming full sudo)."""
             if profile is None:
                 return None
             if profile not in profiles_cache:
                 p = self.store.get_sudo_profile(profile)
-                profiles_cache[profile] = list(p.comandos) if p else None
-            comandos = profiles_cache[profile]
-            if comandos is None:
-                raise EstadoInvalido(
+                profiles_cache[profile] = list(p.commands) if p else None
+            commands = profiles_cache[profile]
+            if commands is None:
+                raise InvalidState(
                     f"sudo-profile '{profile}' referenced but not found in state"
                 )
-            if not comandos:
-                raise EstadoInvalido(
+            if not commands:
+                raise InvalidState(
                     f"sudo-profile '{profile}' has no commands; refusing to apply"
                 )
-            return comandos
+            return commands
 
-        for servidor in self.store.list_servidores():
-            alvo = desejado.get(servidor.hostname, {})
-            if atual_override is not None and servidor.hostname in atual_override:
-                atual = dict(atual_override[servidor.hostname])
+        for server in self.store.list_servers():
+            alvo = desejado.get(server.hostname, {})
+            if atual_override is not None and server.hostname in atual_override:
+                atual = dict(atual_override[server.hostname])
             else:
                 atual = {}
-                for item in servidor.chaves_instaladas:
+                for item in server.installed_keys:
                     if isinstance(item, str):
-                        ch = ChaveInstalada(
+                        ch = InstalledKey(
                             ref=item,
                             username=item.split(":", 1)[0],
-                            nivel=NivelPermissao.SHELL,
+                            level=PermissionLevel.SHELL,
                         )
                     else:
-                        ch = ChaveInstalada.de_dict(item)
+                        ch = InstalledKey.de_dict(item)
                     atual[ch.ref] = ch
                 if force:
                     atual = {r: c for r, c in atual.items() if r not in alvo}
 
             for ref, esperado in alvo.items():
-                cred = self.store.get_credencial_por_fingerprint(esperado.ref.split(":", 1)[1])
-                chave_publica = cred.chave_publica if cred else ""
-                instalado = atual.get(ref)
+                cred = self.store.get_credential_by_fingerprint(esperado.ref.split(":", 1)[1])
+                public_key = cred.public_key if cred else ""
+                installed = atual.get(ref)
                 divergente = (
-                    instalado is None
-                    or instalado.nivel != esperado.nivel
-                    or instalado.profile != esperado.profile
+                    installed is None
+                    or installed.level != esperado.level
+                    or installed.profile != esperado.profile
                 )
                 if divergente:
-                    subacoes.append(
-                        Subacao(
-                            servidor=servidor.hostname,
-                            acao=TipoAcao.ADICIONAR_CHAVE,
-                            credencial=ref,
-                            chave_publica=chave_publica,
+                    sub_actions.append(
+                        SubAction(
+                            server=server.hostname,
+                            action=ActionType.ADD_KEY,
+                            credential=ref,
+                            public_key=public_key,
                             username=esperado.username,
-                            nivel=esperado.nivel,
+                            level=esperado.level,
                             profile=esperado.profile,
-                            profile_comandos=_comandos(esperado.profile),
+                            profile_commands=_commands(esperado.profile),
                         )
                     )
 
-            for ref, instalado in atual.items():
+            for ref, installed in atual.items():
                 if ref not in alvo:
-                    subacoes.append(
-                        Subacao(
-                            servidor=servidor.hostname,
-                            acao=TipoAcao.REMOVER_CHAVE,
-                            credencial=ref,
-                            username=instalado.username,
-                            nivel=instalado.nivel,
+                    sub_actions.append(
+                        SubAction(
+                            server=server.hostname,
+                            action=ActionType.REMOVE_KEY,
+                            credential=ref,
+                            username=installed.username,
+                            level=installed.level,
                         )
                     )
 
-        subacoes.sort(key=lambda s: (s.servidor, s.acao.value, s.credencial or ""))
-        return subacoes
+        sub_actions.sort(key=lambda s: (s.server, s.action.value, s.credential or ""))
+        return sub_actions

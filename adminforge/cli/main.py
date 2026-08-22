@@ -19,12 +19,12 @@ from pathlib import Path
 
 from adminforge import __version__
 from adminforge.cli import completers, ui
-from adminforge.core.nucleo import Nucleo
+from adminforge.core.core import Core
 from adminforge.domain import (
-    NivelPermissao,
-    TipoAcao,
+    PermissionLevel,
+    ActionType,
 )
-from adminforge.exceptions import LockOcupado
+from adminforge.exceptions import LockBusy
 from adminforge.i18n import t as _
 
 
@@ -69,28 +69,28 @@ def _split_tokens(items: list[str]) -> list[str]:
     return out
 
 
-def _emit_listagem(
+def _emit_listing(
     args: argparse.Namespace,
     headers: list[str],
-    linhas: list[list[str]],
+    lines: list[list[str]],
     json_keys: list[str] | None = None,
     json_data: list[dict] | None = None,
 ) -> int:
     """Print a listing in the format requested by --format. Default 'table'.
-    For 'json', use json_data if provided (richer structure); otherwise, zip(headers, linhas)."""
+    For 'json', use json_data if provided (richer structure); otherwise, zip(headers, lines)."""
     fmt = getattr(args, "format", "table")
     if fmt == "json":
         if json_data is None:
             keys = json_keys or [h.lower() for h in headers]
-            json_data = [dict(zip(keys, linha)) for linha in linhas]
+            json_data = [dict(zip(keys, line)) for line in lines]
         print(json.dumps(json_data, indent=2, ensure_ascii=False))
         return 0
-    ui.tabela(headers, linhas)
+    ui.tabela(headers, lines)
     return 0
 
 
-def _nucleo(args: argparse.Namespace, com_ssh: bool = False) -> Nucleo:
-    """Build the Nucleo (core domain object) that every command runs against.
+def _core(args: argparse.Namespace, com_ssh: bool = False) -> Core:
+    """Build the Core (core domain object) that every command runs against.
 
     With `com_ssh=True`, also wires a real SSHDeployer so the command can
     reach remote servers — needed only by `apply`, `apply verify` and
@@ -98,24 +98,24 @@ def _nucleo(args: argparse.Namespace, com_ssh: bool = False) -> Nucleo:
     whether to auto-create the Unix account are read from environment
     variables (ADMINFORGE_SSH_KEY, ADMINFORGE_SSH_USER,
     ADMINFORGE_CREATE_UNIX_USER), not from any CLI flag. With
-    `com_ssh=False` (the default), the returned Nucleo can only read/write
+    `com_ssh=False` (the default), the returned Core can only read/write
     local declared state — it never touches the network.
     """
     deployer = None
     if com_ssh:
         from adminforge.deployer.ssh_deployer import SSHDeployer
 
-        chave = os.environ.get("ADMINFORGE_SSH_KEY") or str(Path.home() / ".ssh" / "adminforge_id")
-        usuario = os.environ.get("ADMINFORGE_SSH_USER", "adminforge")
-        criar_conta = os.environ.get("ADMINFORGE_CREATE_UNIX_USER", "true").lower() != "false"
+        key = os.environ.get("ADMINFORGE_SSH_KEY") or str(Path.home() / ".ssh" / "adminforge_id")
+        user = os.environ.get("ADMINFORGE_SSH_USER", "adminforge")
+        create_account = os.environ.get("ADMINFORGE_CREATE_UNIX_USER", "true").lower() != "false"
         known_hosts = _state_dir(args) / "known_hosts"
         deployer = SSHDeployer(
-            chave_privada_path=Path(chave),
+            private_key_path=Path(key),
             known_hosts_path=known_hosts,
-            usuario_servico=usuario,
-            criar_conta_unix=criar_conta,
+            service_user=user,
+            create_unix_account=create_account,
         )
-    return Nucleo.montar(_state_dir(args), deployer=deployer, superadmin=_superadmin())
+    return Core.montar(_state_dir(args), deployer=deployer, superadmin=_superadmin())
 
 
 # ---------------------------------------------------------------------------
@@ -129,32 +129,32 @@ def cmd_user_add(args: argparse.Namespace) -> int:
     user is created with no key. Returns 2 if `--key-file` cannot be read
     (after the user record has already been created).
     """
-    nucleo = _nucleo(args)
-    rc = ui.imprimir_resultado(nucleo.cadastrar_user(args.username, args.name, args.email))
+    core = _core(args)
+    rc = ui.print_result(core.cadastrar_user(args.username, args.name, args.email))
     if rc != 0:
         return rc
-    chave = getattr(args, "key_string", None)
-    if chave is None and getattr(args, "key_file", None):
+    key = getattr(args, "key_string", None)
+    if key is None and getattr(args, "key_file", None):
         try:
-            chave = Path(args.key_file).read_text(encoding="utf-8")
+            key = Path(args.key_file).read_text(encoding="utf-8")
         except OSError as e:
             ui.fail(_("could not read key file {f}: {e}").format(f=repr(args.key_file), e=e))
             return 2
-    if chave:
-        rc = ui.imprimir_resultado(nucleo.cadastrar_chave(args.username, chave))
+    if key:
+        rc = ui.print_result(core.register_key(args.username, key))
     return rc
 
 
 def cmd_user_list(args: argparse.Namespace) -> int:
     """List all users in local declared state (username, name, email, status)."""
-    nucleo = _nucleo(args)
-    users = nucleo.store.list_users()
-    linhas = [[u.username, u.nome, u.email, u.status.value] for u in users]
+    core = _core(args)
+    users = core.store.list_users()
+    lines = [[u.username, u.name, u.email, u.status.value] for u in users]
     json_data = [
-        {"username": u.username, "name": u.nome, "email": u.email, "status": u.status.value}
+        {"username": u.username, "name": u.name, "email": u.email, "status": u.status.value}
         for u in users
     ]
-    return _emit_listagem(args, ["USERNAME", "NAME", "EMAIL", "STATUS"], linhas, json_data=json_data)
+    return _emit_listing(args, ["USERNAME", "NAME", "EMAIL", "STATUS"], lines, json_data=json_data)
 
 
 def cmd_user_show(args: argparse.Namespace) -> int:
@@ -162,23 +162,23 @@ def cmd_user_show(args: argparse.Namespace) -> int:
 
     Returns 2 if the username does not exist in local declared state.
     """
-    nucleo = _nucleo(args)
-    u = nucleo.store.get_user(args.username)
+    core = _core(args)
+    u = core.store.get_user(args.username)
     if not u:
         ui.fail(_("user {u} does not exist").format(u=args.username))
         return 2
     ui.heading(_("User"))
     ui.kv(_("username"), u.username)
-    ui.kv(_("name"), u.nome)
+    ui.kv(_("name"), u.name)
     ui.kv(_("email"), u.email)
     ui.kv(_("status"), u.status.value)
-    creds = nucleo.store.list_credenciais(args.username)
+    creds = core.store.list_credentials(args.username)
     ui.heading(_("Credentials ({n})").format(n=len(creds)))
     ui.tabela(["FINGERPRINT", "STATUS"], [[c.fingerprint, c.status.value] for c in creds])
-    grupos = [g.nome for g in nucleo.store.list_grupos_user() if args.username in g.membros]
-    ui.heading(_("Groups ({n})").format(n=len(grupos)))
-    if grupos:
-        ui.echo("  " + ", ".join(grupos))
+    groups = [g.name for g in core.store.list_user_groups() if args.username in g.members]
+    ui.heading(_("Groups ({n})").format(n=len(groups)))
+    if groups:
+        ui.echo("  " + ", ".join(groups))
     else:
         ui.secho(_("  (none)"), dim=True)
     return 0
@@ -197,8 +197,8 @@ def cmd_user_disable(args: argparse.Namespace) -> int:
     ):
         ui.warn(_("operation cancelled"))
         return 1
-    op = _nucleo(args).desabilitar_user(args.username)
-    return ui.imprimir_resultado(op)
+    op = _core(args).desabilitar_user(args.username)
+    return ui.print_result(op)
 
 
 def cmd_user_edit(args: argparse.Namespace) -> int:
@@ -209,14 +209,14 @@ def cmd_user_edit(args: argparse.Namespace) -> int:
     if args.name is None and args.email is None:
         ui.fail(_("provide --name and/or --email"))
         return 2
-    op = _nucleo(args).editar_user(args.username, nome=args.name, email=args.email)
-    return ui.imprimir_resultado(op)
+    op = _core(args).editar_user(args.username, name=args.name, email=args.email)
+    return ui.print_result(op)
 
 
 def cmd_user_rename(args: argparse.Namespace) -> int:
     """Rename a user in local declared state, cascading the rename into every user-group membership."""
-    op = _nucleo(args).renomear_user(args.de, args.para)
-    return ui.imprimir_resultado(op)
+    op = _core(args).rename_user(args.de, args.para)
+    return ui.print_result(op)
 
 
 # ---------------------------------------------------------------------------
@@ -232,18 +232,18 @@ def cmd_user_key_add(args: argparse.Namespace) -> int:
     if args.file and args.string:
         ui.fail(_("use --file OR --string, not both"))
         return 2
-    chave = args.string
+    key = args.string
     if args.file:
         try:
-            chave = Path(args.file).read_text(encoding="utf-8")
+            key = Path(args.file).read_text(encoding="utf-8")
         except OSError as e:
             ui.fail(_("could not read key file {f}: {e}").format(f=repr(args.file), e=e))
             return 2
-    if not chave:
+    if not key:
         ui.fail(_("provide --file or --string"))
         return 2
-    op = _nucleo(args).cadastrar_chave(args.username, chave)
-    return ui.imprimir_resultado(op)
+    op = _core(args).register_key(args.username, key)
+    return ui.print_result(op)
 
 
 def cmd_user_key_revoke(args: argparse.Namespace) -> int:
@@ -252,17 +252,17 @@ def cmd_user_key_revoke(args: argparse.Namespace) -> int:
     Local only — the key is not removed from any server's authorized_keys
     until the next `apply`.
     """
-    op = _nucleo(args).revogar_chave(args.fingerprint)
-    return ui.imprimir_resultado(op)
+    op = _core(args).revoke_key(args.fingerprint)
+    return ui.print_result(op)
 
 
 def cmd_user_key_list(args: argparse.Namespace) -> int:
     """List a user's SSH keys (fingerprint and status) from local declared state."""
-    nucleo = _nucleo(args)
-    creds = nucleo.store.list_credenciais(args.username)
-    linhas = [[c.fingerprint, c.status.value] for c in creds]
+    core = _core(args)
+    creds = core.store.list_credentials(args.username)
+    lines = [[c.fingerprint, c.status.value] for c in creds]
     json_data = [{"fingerprint": c.fingerprint, "status": c.status.value} for c in creds]
-    return _emit_listagem(args, ["FINGERPRINT", "STATUS"], linhas, json_data=json_data)
+    return _emit_listing(args, ["FINGERPRINT", "STATUS"], lines, json_data=json_data)
 
 
 # ---------------------------------------------------------------------------
@@ -270,7 +270,7 @@ def cmd_user_key_list(args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 def cmd_ug_create(args: argparse.Namespace) -> int:
     """Create an empty user-group in local declared state."""
-    return ui.imprimir_resultado(_nucleo(args).criar_grupo_user(args.name))
+    return ui.print_result(_core(args).create_user_group(args.name))
 
 
 def cmd_ug_add_member(args: argparse.Namespace) -> int:
@@ -279,7 +279,7 @@ def cmd_ug_add_member(args: argparse.Namespace) -> int:
     Local only — membership changes only reach servers through the
     permissions the group holds, on the next `apply`.
     """
-    return ui.imprimir_resultado(_nucleo(args).adicionar_membros_grupo_user(args.group, _split_tokens(args.username)))
+    return ui.print_result(_core(args).add_members_user_group(args.group, _split_tokens(args.username)))
 
 
 def cmd_ug_remove_member(args: argparse.Namespace) -> int:
@@ -288,26 +288,26 @@ def cmd_ug_remove_member(args: argparse.Namespace) -> int:
     Local only; affected keys are only revoked from servers on the next
     `apply`.
     """
-    return ui.imprimir_resultado(_nucleo(args).remover_membros_grupo_user(args.group, _split_tokens(args.username)))
+    return ui.print_result(_core(args).remove_members_user_group(args.group, _split_tokens(args.username)))
 
 
 def cmd_ug_delete(args: argparse.Namespace) -> int:
     """Delete a user-group from local declared state."""
-    return ui.imprimir_resultado(_nucleo(args).excluir_grupo_user(args.name))
+    return ui.print_result(_core(args).delete_user_group(args.name))
 
 
 def cmd_ug_rename(args: argparse.Namespace) -> int:
     """Rename a user-group, cascading the rename into every permission that references it."""
-    return ui.imprimir_resultado(_nucleo(args).renomear_grupo_user(args.de, args.para))
+    return ui.print_result(_core(args).rename_user_group(args.de, args.para))
 
 
 def cmd_ug_list(args: argparse.Namespace) -> int:
     """List all user-groups and their members from local declared state."""
-    nucleo = _nucleo(args)
-    grupos = nucleo.store.list_grupos_user()
-    linhas = [[g.nome, ", ".join(g.membros) or "-"] for g in grupos]
-    json_data = [{"name": g.nome, "members": list(g.membros)} for g in grupos]
-    return _emit_listagem(args, ["NAME", "MEMBERS"], linhas, json_data=json_data)
+    core = _core(args)
+    groups = core.store.list_user_groups()
+    lines = [[g.name, ", ".join(g.members) or "-"] for g in groups]
+    json_data = [{"name": g.name, "members": list(g.members)} for g in groups]
+    return _emit_listing(args, ["NAME", "MEMBERS"], lines, json_data=json_data)
 
 
 # ---------------------------------------------------------------------------
@@ -329,11 +329,11 @@ def cmd_server_add(args: argparse.Namespace) -> int:
         from adminforge.deployer.ssh_deployer import SSHDeployer
 
         deployer = SSHDeployer(
-            chave_privada_path=Path("/dev/null"),
+            private_key_path=Path("/dev/null"),
             known_hosts_path=_state_dir(args) / "known_hosts",
         )
         try:
-            host_key, fp = deployer.capturar_host_key(args.hostname, args.ip, args.port)
+            host_key, fp = deployer.capture_host_key(args.hostname, args.ip, args.port)
         except Exception as e:
             ui.fail(_("failed to capture host_key: {e}").format(e=e))
             return 2
@@ -344,24 +344,24 @@ def cmd_server_add(args: argparse.Namespace) -> int:
     if not host_key:
         ui.fail(_("provide --host-key or --auto"))
         return 2
-    op = _nucleo(args).cadastrar_servidor(args.hostname, args.ip, args.port, host_key)
-    return ui.imprimir_resultado(op)
+    op = _core(args).register_server(args.hostname, args.ip, args.port, host_key)
+    return ui.print_result(op)
 
 
 def cmd_server_list(args: argparse.Namespace) -> int:
     """List all registered servers (hostname, IPv4, port, number of installed keys)."""
-    nucleo = _nucleo(args)
-    servidores = nucleo.store.list_servidores()
-    linhas = [
-        [s.hostname, s.ipv4, str(s.porta_ssh), str(len(s.chaves_instaladas))]
-        for s in servidores
+    core = _core(args)
+    servers = core.store.list_servers()
+    lines = [
+        [s.hostname, s.ipv4, str(s.ssh_port), str(len(s.installed_keys))]
+        for s in servers
     ]
     json_data = [
-        {"hostname": s.hostname, "ipv4": s.ipv4, "port": s.porta_ssh,
-         "installed_keys": list(s.chaves_instaladas)}
-        for s in servidores
+        {"hostname": s.hostname, "ipv4": s.ipv4, "port": s.ssh_port,
+         "installed_keys": list(s.installed_keys)}
+        for s in servers
     ]
-    return _emit_listagem(args, ["HOSTNAME", "IPV4", "PORT", "KEYS"], linhas, json_data=json_data)
+    return _emit_listing(args, ["HOSTNAME", "IPV4", "PORT", "KEYS"], lines, json_data=json_data)
 
 
 def cmd_server_show(args: argparse.Namespace) -> int:
@@ -371,24 +371,24 @@ def cmd_server_show(args: argparse.Namespace) -> int:
     `apply verify` or `audit server` to check what is actually on the
     server.
     """
-    nucleo = _nucleo(args)
-    s = nucleo.store.get_servidor(args.hostname)
+    core = _core(args)
+    s = core.store.get_server(args.hostname)
     if not s:
         ui.fail(_("server {h} does not exist").format(h=args.hostname))
         return 2
     ui.heading(_("Server"))
     ui.kv(_("hostname"), s.hostname)
     ui.kv(_("ipv4"), s.ipv4)
-    ui.kv(_("port"), str(s.porta_ssh))
-    ui.kv(_("host_key"), s.chave_host[:80] + ("..." if len(s.chave_host) > 80 else ""))
-    ui.heading(_("Installed keys ({n})").format(n=len(s.chaves_instaladas)))
-    linhas = []
-    for item in s.chaves_instaladas:
+    ui.kv(_("port"), str(s.ssh_port))
+    ui.kv(_("host_key"), s.host_key[:80] + ("..." if len(s.host_key) > 80 else ""))
+    ui.heading(_("Installed keys ({n})").format(n=len(s.installed_keys)))
+    lines = []
+    for item in s.installed_keys:
         if isinstance(item, dict):
-            linhas.append([item.get("ref", "?"), item.get("nivel", "?")])
+            lines.append([item.get("ref", "?"), item.get("level", "?")])
         else:
-            linhas.append([str(item), "shell"])
-    ui.tabela(["REF", "LEVEL"], linhas)
+            lines.append([str(item), "shell"])
+    ui.tabela(["REF", "LEVEL"], lines)
     return 0
 
 
@@ -402,7 +402,7 @@ def cmd_server_remove(args: argparse.Namespace) -> int:
     ):
         ui.warn(_("operation cancelled"))
         return 1
-    return ui.imprimir_resultado(_nucleo(args).excluir_servidor(args.hostname))
+    return ui.print_result(_core(args).delete_server(args.hostname))
 
 
 def cmd_server_edit(args: argparse.Namespace) -> int:
@@ -416,16 +416,16 @@ def cmd_server_edit(args: argparse.Namespace) -> int:
     if args.ip is None and args.port is None and args.host_key is None:
         ui.fail(_("provide --ip, --port and/or --host-key"))
         return 2
-    op = _nucleo(args).editar_servidor(
-        args.hostname, ipv4=args.ip, porta=args.port, chave_host=args.host_key,
+    op = _core(args).edit_server(
+        args.hostname, ipv4=args.ip, porta=args.port, host_key=args.host_key,
     )
-    return ui.imprimir_resultado(op)
+    return ui.print_result(op)
 
 
 def cmd_server_rename(args: argparse.Namespace) -> int:
     """Rename a server, cascading the rename into every server-group membership."""
-    op = _nucleo(args).renomear_servidor(args.de, args.para)
-    return ui.imprimir_resultado(op)
+    op = _core(args).rename_server(args.de, args.para)
+    return ui.print_result(op)
 
 
 # ---------------------------------------------------------------------------
@@ -433,7 +433,7 @@ def cmd_server_rename(args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 def cmd_sg_create(args: argparse.Namespace) -> int:
     """Create an empty server-group in local declared state."""
-    return ui.imprimir_resultado(_nucleo(args).criar_grupo_servidor(args.name))
+    return ui.print_result(_core(args).create_server_group(args.name))
 
 
 def cmd_sg_add(args: argparse.Namespace) -> int:
@@ -442,7 +442,7 @@ def cmd_sg_add(args: argparse.Namespace) -> int:
     Local only — reaches servers only through the permissions this group is
     granted, on the next `apply`.
     """
-    return ui.imprimir_resultado(_nucleo(args).adicionar_membros_grupo_servidor(args.group, _split_tokens(args.hostname)))
+    return ui.print_result(_core(args).add_members_server_group(args.group, _split_tokens(args.hostname)))
 
 
 def cmd_sg_rm(args: argparse.Namespace) -> int:
@@ -451,26 +451,26 @@ def cmd_sg_rm(args: argparse.Namespace) -> int:
     Local only; affected keys are only revoked from the removed server on
     the next `apply`.
     """
-    return ui.imprimir_resultado(_nucleo(args).remover_membros_grupo_servidor(args.group, _split_tokens(args.hostname)))
+    return ui.print_result(_core(args).remove_members_server_group(args.group, _split_tokens(args.hostname)))
 
 
 def cmd_sg_delete(args: argparse.Namespace) -> int:
     """Delete a server-group from local declared state."""
-    return ui.imprimir_resultado(_nucleo(args).excluir_grupo_servidor(args.name))
+    return ui.print_result(_core(args).delete_server_group(args.name))
 
 
 def cmd_sg_rename(args: argparse.Namespace) -> int:
     """Rename a server-group, cascading the rename into every permission that references it."""
-    return ui.imprimir_resultado(_nucleo(args).renomear_grupo_servidor(args.de, args.para))
+    return ui.print_result(_core(args).rename_server_group(args.de, args.para))
 
 
 def cmd_sg_list(args: argparse.Namespace) -> int:
     """List all server-groups and their members from local declared state."""
-    nucleo = _nucleo(args)
-    grupos = nucleo.store.list_grupos_servidor()
-    linhas = [[g.nome, ", ".join(g.membros) or "-"] for g in grupos]
-    json_data = [{"name": g.nome, "members": list(g.membros)} for g in grupos]
-    return _emit_listagem(args, ["NAME", "MEMBERS"], linhas, json_data=json_data)
+    core = _core(args)
+    groups = core.store.list_server_groups()
+    lines = [[g.name, ", ".join(g.members) or "-"] for g in groups]
+    json_data = [{"name": g.name, "members": list(g.members)} for g in groups]
+    return _emit_listing(args, ["NAME", "MEMBERS"], lines, json_data=json_data)
 
 
 # ---------------------------------------------------------------------------
@@ -480,46 +480,46 @@ def cmd_permission_show(args: argparse.Namespace) -> int:
     """Reverse query: 'which servers does X have access to?' (--user) or
     'which grants reach server-group X?' (--server-group) or
     'which servers does user-group X grant?' (--user-group)."""
-    nucleo = _nucleo(args)
-    s = nucleo.store
+    core = _core(args)
+    s = core.store
 
     # Useful indices
-    grupos_user = {g.nome: g for g in s.list_grupos_user()}
-    grupos_servidor = {g.nome: g for g in s.list_grupos_servidor()}
-    perms = s.list_permissoes()
+    user_groups = {g.name: g for g in s.list_user_groups()}
+    server_groups = {g.name: g for g in s.list_server_groups()}
+    perms = s.list_permissions()
 
     if args.user:
         user = s.get_user(args.user)
         if not user:
             ui.fail(_("user {u} does not exist").format(u=args.user))
             return 2
-        user_groups = sorted(g.nome for g in grupos_user.values() if args.user in g.membros)
+        user_groups = sorted(g.name for g in user_groups.values() if args.user in g.members)
         # For each of the user's groups, expand the permissions; aggregate by (hostname).
-        from adminforge.planner.planner import _merge_profile, ChaveInstalada, _maior
+        from adminforge.planner.planner import _merge_profile, InstalledKey, _maior
 
-        agregado: dict[str, dict] = {}  # hostname -> {nivel, profile, via}
+        agregado: dict[str, dict] = {}  # hostname -> {level, profile, via}
         for perm in perms:
-            if perm.grupo_user not in user_groups:
+            if perm.user_group not in user_groups:
                 continue
-            sg = grupos_servidor.get(perm.grupo_servidor)
+            sg = server_groups.get(perm.server_group)
             if not sg:
                 continue
-            for hostname in sg.membros:
+            for hostname in sg.members:
                 exist = agregado.get(hostname)
                 if exist is None:
                     agregado[hostname] = {
-                        "nivel": perm.nivel,
+                        "level": perm.level,
                         "profile": perm.profile,
-                        "via": [perm.grupo_user],
+                        "via": [perm.user_group],
                     }
                     continue
-                ch = ChaveInstalada(ref="x", username=args.user, nivel=exist["nivel"], profile=exist["profile"])
-                novo_nivel = _maior(exist["nivel"], perm.nivel)
-                novo_profile = _merge_profile(ch, perm.nivel, perm.profile, novo_nivel)
+                ch = InstalledKey(ref="x", username=args.user, level=exist["level"], profile=exist["profile"])
+                new_level = _maior(exist["level"], perm.level)
+                novo_profile = _merge_profile(ch, perm.level, perm.profile, new_level)
                 agregado[hostname] = {
-                    "nivel": novo_nivel,
+                    "level": new_level,
                     "profile": novo_profile,
-                    "via": exist["via"] + [perm.grupo_user],
+                    "via": exist["via"] + [perm.user_group],
                 }
 
         if getattr(args, "format", "table") == "json":
@@ -529,7 +529,7 @@ def cmd_permission_show(args: argparse.Namespace) -> int:
                 "servers": [
                     {
                         "hostname": h,
-                        "level": v["nivel"].value,
+                        "level": v["level"].value,
                         "profile": v["profile"],
                         "via": sorted(set(v["via"])),
                     }
@@ -547,20 +547,20 @@ def cmd_permission_show(args: argparse.Namespace) -> int:
             if not user_groups:
                 ui.info(_("user is not in any user-group; try: adminforge user-group add-member --group <g> --username {u}").format(u=args.user))
             return 0
-        linhas = [
-            [h, v["nivel"].value, v["profile"] or "—", ", ".join(sorted(set(v["via"])))]
+        lines = [
+            [h, v["level"].value, v["profile"] or "—", ", ".join(sorted(set(v["via"])))]
             for h, v in sorted(agregado.items())
         ]
-        ui.tabela(["HOSTNAME", "LEVEL", "PROFILE", "VIA"], linhas)
+        ui.tabela(["HOSTNAME", "LEVEL", "PROFILE", "VIA"], lines)
         return 0
 
     if args.user_group:
-        if args.user_group not in grupos_user:
+        if args.user_group not in user_groups:
             ui.fail(_("user-group {g} does not exist").format(g=args.user_group))
             return 2
-        relevantes = [p for p in perms if p.grupo_user == args.user_group]
+        relevantes = [p for p in perms if p.user_group == args.user_group]
         json_data = [
-            {"server_group": p.grupo_servidor, "level": p.nivel.value, "profile": p.profile}
+            {"server_group": p.server_group, "level": p.level.value, "profile": p.profile}
             for p in relevantes
         ]
         if getattr(args, "format", "table") == "json":
@@ -572,20 +572,20 @@ def cmd_permission_show(args: argparse.Namespace) -> int:
             return 0
         ui.tabela(
             ["SERVER_GROUP", "LEVEL", "PROFILE"],
-            [[p.grupo_servidor, p.nivel.value, p.profile or "—"] for p in relevantes],
+            [[p.server_group, p.level.value, p.profile or "—"] for p in relevantes],
         )
         return 0
 
     if args.server_group:
-        if args.server_group not in grupos_servidor:
+        if args.server_group not in server_groups:
             ui.fail(_("server-group {g} does not exist").format(g=args.server_group))
             return 2
-        relevantes = [p for p in perms if p.grupo_servidor == args.server_group]
+        relevantes = [p for p in perms if p.server_group == args.server_group]
         if getattr(args, "format", "table") == "json":
             print(json.dumps({
                 "server_group": args.server_group,
                 "grants": [
-                    {"user_group": p.grupo_user, "level": p.nivel.value, "profile": p.profile}
+                    {"user_group": p.user_group, "level": p.level.value, "profile": p.profile}
                     for p in relevantes
                 ],
             }, indent=2))
@@ -596,7 +596,7 @@ def cmd_permission_show(args: argparse.Namespace) -> int:
             return 0
         ui.tabela(
             ["USER_GROUP", "LEVEL", "PROFILE"],
-            [[p.grupo_user, p.nivel.value, p.profile or "—"] for p in relevantes],
+            [[p.user_group, p.level.value, p.profile or "—"] for p in relevantes],
         )
         return 0
 
@@ -606,18 +606,18 @@ def cmd_permission_show(args: argparse.Namespace) -> int:
 
 def cmd_permission_list(args: argparse.Namespace) -> int:
     """List all permission grants (user-group -> server-group, level, profile) from local declared state."""
-    nucleo = _nucleo(args)
-    perms = nucleo.store.list_permissoes()
-    linhas = [
-        [p.grupo_user, p.grupo_servidor, p.nivel.value, p.profile or "—"] for p in perms
+    core = _core(args)
+    perms = core.store.list_permissions()
+    lines = [
+        [p.user_group, p.server_group, p.level.value, p.profile or "—"] for p in perms
     ]
     json_data = [
-        {"user_group": p.grupo_user, "server_group": p.grupo_servidor,
-         "level": p.nivel.value, "profile": p.profile}
+        {"user_group": p.user_group, "server_group": p.server_group,
+         "level": p.level.value, "profile": p.profile}
         for p in perms
     ]
-    return _emit_listagem(
-        args, ["USER_GROUP", "SERVER_GROUP", "LEVEL", "PROFILE"], linhas, json_data=json_data
+    return _emit_listing(
+        args, ["USER_GROUP", "SERVER_GROUP", "LEVEL", "PROFILE"], lines, json_data=json_data
     )
 
 
@@ -628,9 +628,9 @@ def cmd_permission_grant(args: argparse.Namespace) -> int:
     `--profile` is only meaningful with `--level sudo`; without it, sudo
     grants full NOPASSWD:ALL rather than a restricted command set.
     """
-    return ui.imprimir_resultado(
-        _nucleo(args).conceder(
-            args.user_group, args.server_group, NivelPermissao(args.level),
+    return ui.print_result(
+        _core(args).grant(
+            args.user_group, args.server_group, PermissionLevel(args.level),
             profile=getattr(args, "profile", None),
         )
     )
@@ -645,44 +645,44 @@ def cmd_sudo_profile_create(args: argparse.Namespace) -> int:
     Local only; profiles do nothing until granted via `permission grant
     --level sudo --profile <name>` and then applied.
     """
-    return ui.imprimir_resultado(_nucleo(args).criar_sudo_profile(args.name, args.command))
+    return ui.print_result(_core(args).create_sudo_profile(args.name, args.command))
 
 
 def cmd_sudo_profile_list(args: argparse.Namespace) -> int:
     """List sudo profiles with their command count and a truncated preview of the commands."""
-    nucleo = _nucleo(args)
-    profiles = nucleo.store.list_sudo_profiles()
-    linhas = []
+    core = _core(args)
+    profiles = core.store.list_sudo_profiles()
+    lines = []
     for p in profiles:
-        comandos_str = ", ".join(p.comandos)
-        if len(comandos_str) > 80:
-            comandos_str = comandos_str[:77] + "…"
-        linhas.append([p.nome, str(len(p.comandos)), comandos_str])
-    json_data = [{"name": p.nome, "commands": list(p.comandos)} for p in profiles]
-    return _emit_listagem(args, ["NAME", "#CMDS", "COMMANDS"], linhas, json_data=json_data)
+        commands_str = ", ".join(p.commands)
+        if len(commands_str) > 80:
+            commands_str = commands_str[:77] + "…"
+        lines.append([p.name, str(len(p.commands)), commands_str])
+    json_data = [{"name": p.name, "commands": list(p.commands)} for p in profiles]
+    return _emit_listing(args, ["NAME", "#CMDS", "COMMANDS"], lines, json_data=json_data)
 
 
 def cmd_sudo_profile_show(args: argparse.Namespace) -> int:
     """Print every command allowed by a sudo profile, one per line. Returns 2 if the profile does not exist."""
-    nucleo = _nucleo(args)
-    p = nucleo.store.get_sudo_profile(args.name)
+    core = _core(args)
+    p = core.store.get_sudo_profile(args.name)
     if not p:
         ui.fail(_("sudo-profile {n} does not exist").format(n=args.name))
         return 2
-    ui.heading(_("sudo-profile {n}").format(n=p.nome))
-    for c in p.comandos:
+    ui.heading(_("sudo-profile {n}").format(n=p.name))
+    for c in p.commands:
         ui.echo(f"  {c}")
     return 0
 
 
 def cmd_sudo_profile_delete(args: argparse.Namespace) -> int:
-    """Delete a sudo profile. Fails (non-zero, via imprimir_resultado) if any permission still references it."""
-    return ui.imprimir_resultado(_nucleo(args).excluir_sudo_profile(args.name))
+    """Delete a sudo profile. Fails (non-zero, via print_result) if any permission still references it."""
+    return ui.print_result(_core(args).delete_sudo_profile(args.name))
 
 
 def cmd_sudo_profile_rename(args: argparse.Namespace) -> int:
     """Rename a sudo profile, cascading the rename into every permission that references it."""
-    return ui.imprimir_resultado(_nucleo(args).renomear_sudo_profile(args.de, args.para))
+    return ui.print_result(_core(args).rename_sudo_profile(args.de, args.para))
 
 
 def cmd_permission_revoke(args: argparse.Namespace) -> int:
@@ -696,7 +696,7 @@ def cmd_permission_revoke(args: argparse.Namespace) -> int:
     ):
         ui.warn(_("operation cancelled"))
         return 1
-    return ui.imprimir_resultado(_nucleo(args).revogar(args.user_group, args.server_group))
+    return ui.print_result(_core(args).revoke(args.user_group, args.server_group))
 
 
 # ---------------------------------------------------------------------------
@@ -709,48 +709,48 @@ def cmd_preview(args: argparse.Namespace) -> int:
     connection) and does not ask for confirmation. Grouped by server, with
     "+" for keys/sudoers to add and "-" for ones to remove. Always returns 0.
     """
-    nucleo = _nucleo(args)
-    subacoes = nucleo.preview()
-    if not subacoes:
+    core = _core(args)
+    sub_actions = core.preview()
+    if not sub_actions:
         ui.ok(_("nothing to do — state in sync"))
         return 0
-    ui.info(_("{n} sub-actions across {s} servers").format(n=len(subacoes), s=len({sb.servidor for sb in subacoes})))
-    for hostname in sorted({s.servidor for s in subacoes}):
+    ui.info(_("{n} sub-actions across {s} servers").format(n=len(sub_actions), s=len({sb.server for sb in sub_actions})))
+    for hostname in sorted({s.server for s in sub_actions}):
         ui.heading(hostname)
-        for s in subacoes:
-            if s.servidor != hostname:
+        for s in sub_actions:
+            if s.server != hostname:
                 continue
-            sinal = "+" if s.acao == TipoAcao.ADICIONAR_CHAVE else "-"
-            cor = ui._GREEN if s.acao == TipoAcao.ADICIONAR_CHAVE else ui._RED
+            sinal = "+" if s.action == ActionType.ADD_KEY else "-"
+            cor = ui._GREEN if s.action == ActionType.ADD_KEY else ui._RED
             ui.secho(
-                f"  {sinal} {s.acao.value:18} {s.credencial:50} {(s.nivel.value if s.nivel else '-')}",
+                f"  {sinal} {s.action.value:18} {s.credential:50} {(s.level.value if s.level else '-')}",
                 cor,
             )
     return 0
 
 
-def _imprimir_diff(nucleo: Nucleo, subacoes: list) -> None:
+def _print_diff(core: Core, sub_actions: list) -> None:
     """Show a unified diff of the authorized_keys of each (server, username) affected."""
     import difflib
     from adminforge import authorized_keys as ak
 
     por_user: dict[tuple[str, str], list] = {}
-    for s in subacoes:
-        if s.acao not in (TipoAcao.ADICIONAR_CHAVE, TipoAcao.REMOVER_CHAVE):
+    for s in sub_actions:
+        if s.action not in (ActionType.ADD_KEY, ActionType.REMOVE_KEY):
             continue
         if not s.username:
             continue
-        por_user.setdefault((s.servidor, s.username), []).append(s)
+        por_user.setdefault((s.server, s.username), []).append(s)
 
     ui.heading(_("Diff (authorized_keys)"))
     for (hostname, username), lote in sorted(por_user.items()):
-        servidor = nucleo.store.get_servidor(hostname)
-        if servidor is None:
+        server = core.store.get_server(hostname)
+        if server is None:
             continue
         ui.secho(f"  {hostname}:{username}", bold=True)
-        # ler_authorized_keys can fail (ssh, host_key etc); it must not abort the diff of the others.
+        # read_authorized_keys can fail (ssh, host_key etc); it must not abort the diff of the others.
         try:
-            atual, ok = nucleo.deployer.ler_authorized_keys(servidor, username)
+            atual, ok = core.deployer.read_authorized_keys(server, username)
         except Exception as e:
             ui.fail(_("    ssh: {e}").format(e=e))
             continue
@@ -759,38 +759,38 @@ def _imprimir_diff(nucleo: Nucleo, subacoes: list) -> None:
             continue
         novo = atual
         for s in lote:
-            if s.acao == TipoAcao.ADICIONAR_CHAVE and s.chave_publica and s.credencial:
-                novo = ak.substituir_bloco(novo, s.credencial, ak.bloco(s.credencial, s.chave_publica))
-            elif s.acao == TipoAcao.REMOVER_CHAVE and s.credencial:
-                novo = ak.substituir_bloco(novo, s.credencial, "")
-        for linha in difflib.unified_diff(
+            if s.action == ActionType.ADD_KEY and s.public_key and s.credential:
+                novo = ak.replace_block(novo, s.credential, ak.block(s.credential, s.public_key))
+            elif s.action == ActionType.REMOVE_KEY and s.credential:
+                novo = ak.replace_block(novo, s.credential, "")
+        for line in difflib.unified_diff(
             atual.splitlines(), novo.splitlines(),
             fromfile="current", tofile="planned", lineterm="",
         ):
-            if linha.startswith("+") and not linha.startswith("+++"):
-                ui.secho(f"    {linha}", ui._GREEN)
-            elif linha.startswith("-") and not linha.startswith("---"):
-                ui.secho(f"    {linha}", ui._RED)
-            elif linha.startswith("@@"):
-                ui.secho(f"    {linha}", ui._CYAN)
+            if line.startswith("+") and not line.startswith("+++"):
+                ui.secho(f"    {line}", ui._GREEN)
+            elif line.startswith("-") and not line.startswith("---"):
+                ui.secho(f"    {line}", ui._RED)
+            elif line.startswith("@@"):
+                ui.secho(f"    {line}", ui._CYAN)
             else:
-                ui.echo(f"    {linha}")
+                ui.echo(f"    {line}")
 
 
 _SUDOERS_PREFIX = "adminforge-"
 
 
-def _esperado_do_servidor(servidor) -> tuple[dict[str, str], dict[str, str | None]]:
-    """Read chaves_instaladas and return ({ref: username} of the blocks,
+def _expected_from_server(server) -> tuple[dict[str, str], dict[str, str | None]]:
+    """Read installed_keys and return ({ref: username} of the blocks,
     {username: profile} of those with sudo — profile None = full sudo)."""
     blocks: dict[str, str] = {}
     sudo: dict[str, str | None] = {}
-    for item in servidor.chaves_instaladas:
+    for item in server.installed_keys:
         if isinstance(item, dict):
             ref = item["ref"]
             u = item.get("username") or ref.split(":", 1)[0]
             blocks[ref] = u
-            if item.get("nivel") == "sudo":
+            if item.get("level") == "sudo":
                 sudo[u] = item.get("profile")
         else:
             blocks[item] = item.split(":", 1)[0]
@@ -820,14 +820,14 @@ def cmd_apply_verify(args: argparse.Namespace) -> int:
     and level — full sudo vs restricted profile)."""
     from adminforge import authorized_keys as ak
 
-    nucleo = _nucleo(args, com_ssh=not args.dry_run)
+    core = _core(args, com_ssh=not args.dry_run)
     total_ok = 0
     total_div = 0
-    erros_ssh: list[str] = []
+    ssh_errors: list[str] = []
 
-    servidores = nucleo.store.list_servidores()
+    servers = core.store.list_servers()
 
-    def _coletar(servidor):
+    def _coletar(server):
         """Gather one server's expected vs. real authorized_keys/sudoers state over SSH.
 
         Pure data collection with no printing, so it is safe to run
@@ -835,47 +835,47 @@ def cmd_apply_verify(args: argparse.Namespace) -> int:
         (necessarily sequential) loop below.
         """
         # SSH-only gathering for one host (no printing, safe to run concurrently).
-        esperado_blocks, esperado_sudo = _esperado_do_servidor(servidor)
-        dados = {"esperado_blocks": esperado_blocks, "esperado_sudo": esperado_sudo,
-                 "real_blocks": {}, "blocks_erro": None, "relatorio": None}
+        esperado_blocks, esperado_sudo = _expected_from_server(server)
+        data = {"esperado_blocks": esperado_blocks, "esperado_sudo": esperado_sudo,
+                 "real_blocks": {}, "blocks_erro": None, "report": None}
         if esperado_blocks:
             real_blocks: dict[str, str] = {}
             for u in sorted(set(esperado_blocks.values())):
                 try:
-                    conteudo, ok = nucleo.deployer.ler_authorized_keys(servidor, u)
+                    conteudo, ok = core.deployer.read_authorized_keys(server, u)
                 except Exception as e:
-                    dados["blocks_erro"] = _("  ssh failed reading {u}: {e}").format(u=u, e=e)
+                    data["blocks_erro"] = _("  ssh failed reading {u}: {e}").format(u=u, e=e)
                     break
                 if not ok:
-                    dados["blocks_erro"] = _("  ssh: could not read authorized_keys for {u} (sudo blocked?)").format(u=u)
+                    data["blocks_erro"] = _("  ssh: could not read authorized_keys for {u} (sudo blocked?)").format(u=u)
                     break
-                for ref in ak.parse_blocos(conteudo):
+                for ref in ak.parse_blocks(conteudo):
                     real_blocks[ref] = u
-            dados["real_blocks"] = real_blocks
+            data["real_blocks"] = real_blocks
         try:
-            dados["relatorio"] = nucleo.deployer.inspecionar(servidor)
+            data["report"] = core.deployer.inspect(server)
         except Exception as e:
-            dados["relatorio"] = {"erro": str(e)}
-        rel = dados["relatorio"]
-        usuarios = rel.get("usuarios", []) if isinstance(rel, dict) and "erro" not in rel else []
-        dados["real_users"] = {u["nome"] for u in usuarios} if usuarios else None
-        return dados
+            data["report"] = {"error": str(e)}
+        rel = data["report"]
+        users = rel.get("users", []) if isinstance(rel, dict) and "error" not in rel else []
+        data["real_users"] = {u["name"] for u in users} if users else None
+        return data
 
-    coletados = _mapear_hosts(_coletar, servidores, getattr(args, "jobs", 1))
+    coletados = _mapear_hosts(_coletar, servers, getattr(args, "jobs", 1))
 
-    for servidor, dados in zip(servidores, coletados):
-        esperado_blocks = dados["esperado_blocks"]
-        esperado_sudo = dados["esperado_sudo"]
-        ui.heading(servidor.hostname)
+    for server, data in zip(servers, coletados):
+        esperado_blocks = data["esperado_blocks"]
+        esperado_sudo = data["esperado_sudo"]
+        ui.heading(server.hostname)
 
         # 1) authorized_keys — only if there are declared blocks
         if esperado_blocks:
-            if dados["blocks_erro"]:
-                ui.fail(dados["blocks_erro"])
-                erros_ssh.append(servidor.hostname)
+            if data["blocks_erro"]:
+                ui.fail(data["blocks_erro"])
+                ssh_errors.append(server.hostname)
                 continue
-            real_blocks = dados["real_blocks"]
-            real_users = dados["real_users"]
+            real_blocks = data["real_blocks"]
+            real_users = data["real_users"]
             for ref, username in sorted(esperado_blocks.items()):
                 if real_users is not None and username not in real_users:
                     ui.fail(_("  {u} {ref} — declared but account missing on server").format(u=f"{username:20}", ref=ref))
@@ -899,19 +899,19 @@ def cmd_apply_verify(args: argparse.Namespace) -> int:
             ui.secho(_("  (no installed keys declared)"), dim=True)
 
         # 2) sudoers — always runs (even without declared blocks, to find orphan files)
-        relatorio = dados["relatorio"]
-        if "erro" in relatorio:
-            ui.fail(_("  ssh failed listing sudoers: {e}").format(e=relatorio["erro"]))
-            erros_ssh.append(servidor.hostname)
+        report = data["report"]
+        if "error" in report:
+            ui.fail(_("  ssh failed listing sudoers: {e}").format(e=report["error"]))
+            ssh_errors.append(server.hostname)
             continue
-        arquivos = relatorio.get("sudoers_arquivos") or []
+        files = report.get("sudoers_arquivos") or []
         real_sudo = {
-            a["nome"][len(_SUDOERS_PREFIX):] for a in arquivos
-            if a.get("adminforge") and a.get("nome", "").startswith(_SUDOERS_PREFIX)
+            a["name"][len(_SUDOERS_PREFIX):] for a in files
+            if a.get("adminforge") and a.get("name", "").startswith(_SUDOERS_PREFIX)
         }
         # real rules per user (1st column; ignore group rules '%...')
         real_regras: dict[str, list[str]] = {}
-        for regra in relatorio.get("sudoers_regras") or []:
+        for regra in report.get("sudoers_regras") or []:
             col = regra.split(None, 1)[0] if regra else ""
             if col and not col.startswith("%"):
                 real_regras.setdefault(col, []).append(regra)
@@ -930,8 +930,8 @@ def cmd_apply_verify(args: argparse.Namespace) -> int:
                     ui.fail(_("  {u} sudoers — expected restricted profile {p}, server grants full sudo").format(u=f"{u:20}", p=repr(profile)))
                 total_div += 1
             else:
-                nivel = "full" if esperado_full else "restricted"
-                ui.ok(_("  {u} sudoers — present ({lvl})").format(u=f"{u:20}", lvl=nivel))
+                level = "full" if esperado_full else "restricted"
+                ui.ok(_("  {u} sudoers — present ({lvl})").format(u=f"{u:20}", lvl=level))
                 total_ok += 1
         for u in sorted(real_sudo - set(esperado_sudo)):
             ui.warn(_("  {u} sudoers — present on server but not declared").format(u=f"{u:20}"))
@@ -941,9 +941,9 @@ def cmd_apply_verify(args: argparse.Namespace) -> int:
     ui.heading(_("Summary"))
     ui.kv(_("matches"), str(total_ok))
     ui.kv(_("divergences"), str(total_div))
-    if erros_ssh:
-        ui.kv(_("ssh errors"), ", ".join(erros_ssh))
-    return 0 if total_div == 0 and not erros_ssh else 2
+    if ssh_errors:
+        ui.kv(_("ssh errors"), ", ".join(ssh_errors))
+    return 0 if total_div == 0 and not ssh_errors else 2
 
 
 def cmd_apply(args: argparse.Namespace) -> int:
@@ -963,67 +963,67 @@ def cmd_apply(args: argparse.Namespace) -> int:
     retries only the failed ones), 2 if all failed or there was nothing to
     retry.
     """
-    nucleo = _nucleo(args, com_ssh=not args.dry_run)
+    core = _core(args, com_ssh=not args.dry_run)
     force = getattr(args, "force", False)
     reconcile = getattr(args, "reconcile", False)
-    subacoes = nucleo.preview(force=force, reconcile=reconcile)
-    if not subacoes:
+    sub_actions = core.preview(force=force, reconcile=reconcile)
+    if not sub_actions:
         ui.ok(_("nothing to do — state in sync"))
         return 0
 
-    ui.info(_("{n} sub-actions across {s} servers").format(n=len(subacoes), s=len({sb.servidor for sb in subacoes})))
-    for hostname in sorted({s.servidor for s in subacoes}):
+    ui.info(_("{n} sub-actions across {s} servers").format(n=len(sub_actions), s=len({sb.server for sb in sub_actions})))
+    for hostname in sorted({s.server for s in sub_actions}):
         ui.secho(f"  {hostname}", bold=True)
-        for s in subacoes:
-            if s.servidor != hostname:
+        for s in sub_actions:
+            if s.server != hostname:
                 continue
-            sinal = "+" if s.acao == TipoAcao.ADICIONAR_CHAVE else "-"
-            ui.echo(f"    {sinal} {s.acao.value:18} {s.credencial}")
+            sinal = "+" if s.action == ActionType.ADD_KEY else "-"
+            ui.echo(f"    {sinal} {s.action.value:18} {s.credential}")
 
     if args.diff:
-        _imprimir_diff(nucleo, subacoes)
+        _print_diff(core, sub_actions)
 
-    if not args.yes and not ui.confirmar(_("Apply {n} change(s) now?").format(n=len(subacoes))):
+    if not args.yes and not ui.confirmar(_("Apply {n} change(s) now?").format(n=len(sub_actions))):
         ui.warn(_("apply cancelled"))
         return 1
 
-    op = nucleo.aplicar(jobs=max(1, getattr(args, "jobs", 1)), force=force, reconcile=reconcile, subacoes=subacoes)
-    sucessos = sum(1 for s in op.subacoes if s.status == "sucesso")
-    falhas = sum(1 for s in op.subacoes if s.status == "falha")
+    op = core.apply(jobs=max(1, getattr(args, "jobs", 1)), force=force, reconcile=reconcile, sub_actions=sub_actions)
+    successes = sum(1 for s in op.sub_actions if s.status == "success")
+    failures = sum(1 for s in op.sub_actions if s.status == "failure")
     ui.heading(_("Result"))
-    for s in op.subacoes:
-        if s.status == "sucesso":
-            ui.ok(f"{s.servidor:24} {s.acao.value:18} {s.credencial or ''}")
+    for s in op.sub_actions:
+        if s.status == "success":
+            ui.ok(f"{s.server:24} {s.action.value:18} {s.credential or ''}")
         else:
-            ui.fail(f"{s.servidor:24} {s.acao.value:18} {s.credencial or ''} — {s.erro}")
+            ui.fail(f"{s.server:24} {s.action.value:18} {s.credential or ''} — {s.error}")
     ui.echo()
     ui.kv(_("operation"), op.id)
     ui.kv(_("status"), op.status.value.upper())
-    ui.kv(_("successes"), str(sucessos))
-    ui.kv(_("failures"), str(falhas))
-    if falhas:
+    ui.kv(_("successes"), str(successes))
+    ui.kv(_("failures"), str(failures))
+    if failures:
         ui.echo()
         ui.info(_("re-running 'adminforge apply' retries only the failed sub-actions"))
-        return 1 if sucessos else 2
+        return 1 if successes else 2
     return 0
 
 
 # ---------------------------------------------------------------------------
 # UC-9: history
 # ---------------------------------------------------------------------------
-def _historico_linhas_e_json(ops: list) -> tuple[list[list[str]], list[dict]]:
-    """Render a list of Operacao records into (table rows, JSON dicts) for --format.
+def _history_rows_and_json(ops: list) -> tuple[list[list[str]], list[dict]]:
+    """Render a list of Operation records into (table rows, JSON dicts) for --format.
 
     Shared by `history list` and `history failed` so both commands render
     identically. The command in the table row is truncated to 40 characters;
     the JSON form keeps the full command string.
     """
-    linhas = [
+    lines = [
         [
             op.id,
-            op.momento.strftime("%Y-%m-%d %H:%M"),
+            op.timestamp.strftime("%Y-%m-%d %H:%M"),
             op.superadmin,
-            op.comando[:40],
+            op.command[:40],
             op.status.value.upper(),
         ]
         for op in ops
@@ -1031,24 +1031,24 @@ def _historico_linhas_e_json(ops: list) -> tuple[list[list[str]], list[dict]]:
     json_data = [
         {
             "id": op.id,
-            "when": op.momento.isoformat(timespec="seconds"),
+            "when": op.timestamp.isoformat(timespec="seconds"),
             "superadmin": op.superadmin,
-            "command": op.comando,
+            "command": op.command,
             "status": op.status.value,
-            "subactions": len(op.subacoes),
+            "subactions": len(op.sub_actions),
         }
         for op in ops
     ]
-    return linhas, json_data
+    return lines, json_data
 
 
 def cmd_history_list(args: argparse.Namespace) -> int:
     """List the most recent operations from the local audit log (default: last 50, newest first)."""
-    nucleo = _nucleo(args)
-    ops = nucleo.auditor.listar(args.limit)
-    linhas, json_data = _historico_linhas_e_json(ops)
-    return _emit_listagem(
-        args, ["ID", "WHEN", "SUPERADMIN", "COMMAND", "STATUS"], linhas, json_data=json_data
+    core = _core(args)
+    ops = core.auditor.list_operations(args.limit)
+    lines, json_data = _history_rows_and_json(ops)
+    return _emit_listing(
+        args, ["ID", "WHEN", "SUPERADMIN", "COMMAND", "STATUS"], lines, json_data=json_data
     )
 
 
@@ -1057,41 +1057,41 @@ def cmd_history_show(args: argparse.Namespace) -> int:
 
     Returns 2 if the operation id does not exist in the audit log.
     """
-    nucleo = _nucleo(args)
-    op = nucleo.auditor.buscar(args.op_id)
+    core = _core(args)
+    op = core.auditor.find(args.op_id)
     if not op:
         ui.fail(_("operation {i} does not exist").format(i=args.op_id))
         return 2
     ui.heading(_("Operation"))
     ui.kv(_("id"), op.id)
-    ui.kv(_("when"), op.momento.isoformat())
+    ui.kv(_("when"), op.timestamp.isoformat())
     ui.kv(_("superadmin"), op.superadmin)
-    ui.kv(_("command"), op.comando)
+    ui.kv(_("command"), op.command)
     ui.kv(_("status"), op.status.value)
     ui.kv(_("hash"), op.hash or "-")
-    ui.kv(_("prev_hash"), op.hash_anterior or "-")
-    ui.heading(_("Sub-actions ({n})").format(n=len(op.subacoes)))
-    linhas = [
+    ui.kv(_("prev_hash"), op.previous_hash or "-")
+    ui.heading(_("Sub-actions ({n})").format(n=len(op.sub_actions)))
+    lines = [
         [
-            s.servidor or "-",
-            s.acao.value,
-            s.credencial or s.username or "-",
+            s.server or "-",
+            s.action.value,
+            s.credential or s.username or "-",
             s.status,
-            (s.erro or s.mensagem or "")[:60],
+            (s.error or s.message or "")[:60],
         ]
-        for s in op.subacoes
+        for s in op.sub_actions
     ]
-    ui.tabela(["SERVER", "ACTION", "TARGET", "STATUS", "DETAIL"], linhas)
+    ui.tabela(["SERVER", "ACTION", "TARGET", "STATUS", "DETAIL"], lines)
     return 0
 
 
 def cmd_history_failed(args: argparse.Namespace) -> int:
     """List only the operations that failed or partially failed, most recent first."""
-    nucleo = _nucleo(args)
-    ops = nucleo.auditor.listar_falhas(args.limit)
-    linhas, json_data = _historico_linhas_e_json(ops)
-    return _emit_listagem(
-        args, ["ID", "WHEN", "SUPERADMIN", "COMMAND", "STATUS"], linhas, json_data=json_data
+    core = _core(args)
+    ops = core.auditor.list_failures(args.limit)
+    lines, json_data = _history_rows_and_json(ops)
+    return _emit_listing(
+        args, ["ID", "WHEN", "SUPERADMIN", "COMMAND", "STATUS"], lines, json_data=json_data
     )
 
 
@@ -1101,9 +1101,9 @@ def cmd_history_verify(args: argparse.Namespace) -> int:
     Read-only. Returns 2 (and prints the exception message) if any link in
     the chain does not match; returns 0 and prints the last hash otherwise.
     """
-    nucleo = _nucleo(args)
+    core = _core(args)
     try:
-        _ok, ultimo = nucleo.auditor.verificar_cadeia()
+        _ok, ultimo = core.auditor.verify_chain()
     except Exception as e:
         ui.fail(_("chain broken: {e}").format(e=e))
         return 2
@@ -1114,7 +1114,7 @@ def cmd_history_verify(args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 # Dump global
 # ---------------------------------------------------------------------------
-def _coletar_estado(nucleo: Nucleo) -> dict:
+def _collect_state(core: Core) -> dict:
     """Gather the full local declared state (users, groups, servers, permissions, sudo-profiles) into one dict.
 
     Read-only, local only. Used by `cmd_dump` for both the JSON and table
@@ -1124,101 +1124,101 @@ def _coletar_estado(nucleo: Nucleo) -> dict:
         "users": [
             {
                 "username": u.username,
-                "name": u.nome,
+                "name": u.name,
                 "email": u.email,
                 "status": u.status.value,
                 "credentials": [
                     {"fingerprint": c.fingerprint, "status": c.status.value}
-                    for c in nucleo.store.list_credenciais(u.username)
+                    for c in core.store.list_credentials(u.username)
                 ],
             }
-            for u in nucleo.store.list_users()
+            for u in core.store.list_users()
         ],
         "user_groups": [
-            {"name": g.nome, "members": list(g.membros)}
-            for g in nucleo.store.list_grupos_user()
+            {"name": g.name, "members": list(g.members)}
+            for g in core.store.list_user_groups()
         ],
         "servers": [
             {
                 "hostname": s.hostname,
                 "ipv4": s.ipv4,
-                "port": s.porta_ssh,
-                "host_key": s.chave_host,
-                "installed_keys": list(s.chaves_instaladas),
+                "port": s.ssh_port,
+                "host_key": s.host_key,
+                "installed_keys": list(s.installed_keys),
             }
-            for s in nucleo.store.list_servidores()
+            for s in core.store.list_servers()
         ],
         "server_groups": [
-            {"name": g.nome, "members": list(g.membros)}
-            for g in nucleo.store.list_grupos_servidor()
+            {"name": g.name, "members": list(g.members)}
+            for g in core.store.list_server_groups()
         ],
         "permissions": [
             {
-                "user_group": p.grupo_user,
-                "server_group": p.grupo_servidor,
-                "level": p.nivel.value,
+                "user_group": p.user_group,
+                "server_group": p.server_group,
+                "level": p.level.value,
                 "profile": p.profile,
             }
-            for p in nucleo.store.list_permissoes()
+            for p in core.store.list_permissions()
         ],
         "sudo_profiles": [
-            {"name": p.nome, "commands": list(p.comandos)}
-            for p in nucleo.store.list_sudo_profiles()
+            {"name": p.name, "commands": list(p.commands)}
+            for p in core.store.list_sudo_profiles()
         ],
     }
 
 
 def cmd_status(args: argparse.Namespace) -> int:
     """Quick 'git status'-like overview: counts, pending changes and last operation."""
-    nucleo = _nucleo(args)
-    s = nucleo.store
+    core = _core(args)
+    s = core.store
     counts = {
         "users": len(s.list_users()),
-        "user_groups": len(s.list_grupos_user()),
-        "servers": len(s.list_servidores()),
-        "server_groups": len(s.list_grupos_servidor()),
-        "permissions": len(s.list_permissoes()),
+        "user_groups": len(s.list_user_groups()),
+        "servers": len(s.list_servers()),
+        "server_groups": len(s.list_server_groups()),
+        "permissions": len(s.list_permissions()),
         "sudo_profiles": len(s.list_sudo_profiles()),
     }
 
     try:
-        pendentes = nucleo.preview()
-        pendentes_servers = len({sb.servidor for sb in pendentes})
-        pendentes_erro = None
+        pending = core.preview()
+        pending_servers = len({sb.server for sb in pending})
+        pending_error = None
     except Exception as e:
-        pendentes = []
-        pendentes_servers = 0
-        pendentes_erro = str(e)
+        pending = []
+        pending_servers = 0
+        pending_error = str(e)
 
-    ultima = nucleo.auditor.listar(1)
+    ultima = core.auditor.list_operations(1)
     ultima_op = ultima[0] if ultima else None
 
-    cadeia_ok = True
-    cadeia_erro = None
+    chain_ok = True
+    chain_error = None
     try:
-        nucleo.auditor.verificar_cadeia()
+        core.auditor.verify_chain()
     except Exception as e:
-        cadeia_ok = False
-        cadeia_erro = str(e)
+        chain_ok = False
+        chain_error = str(e)
 
     if getattr(args, "format", "table") == "json":
         print(json.dumps({
             "counts": counts,
             "pending": {
-                "subactions": len(pendentes),
-                "servers": pendentes_servers,
-                "error": pendentes_erro,
+                "subactions": len(pending),
+                "servers": pending_servers,
+                "error": pending_error,
             },
             "last_operation": (
                 {
                     "id": ultima_op.id,
-                    "command": ultima_op.comando,
+                    "command": ultima_op.command,
                     "status": ultima_op.status.value,
-                    "when": ultima_op.momento.isoformat(timespec="seconds"),
+                    "when": ultima_op.timestamp.isoformat(timespec="seconds"),
                     "superadmin": ultima_op.superadmin,
                 } if ultima_op else None
             ),
-            "history_chain": {"ok": cadeia_ok, "error": cadeia_erro},
+            "history_chain": {"ok": chain_ok, "error": chain_error},
         }, indent=2, ensure_ascii=False))
         return 0
 
@@ -1228,28 +1228,28 @@ def cmd_status(args: argparse.Namespace) -> int:
         sgroups=counts["server_groups"], perms=counts["permissions"], sprofiles=counts["sudo_profiles"]))
 
     ui.heading(_("Pending"))
-    if pendentes_erro:
-        ui.fail(_("  could not compute delta: {e}").format(e=pendentes_erro))
-    elif not pendentes:
+    if pending_error:
+        ui.fail(_("  could not compute delta: {e}").format(e=pending_error))
+    elif not pending:
         ui.ok(_("  no pending changes — state is in sync with declared"))
     else:
-        ui.warn(_("  {n} sub-action(s) across {s} server(s) — run 'adminforge preview' to see, 'adminforge apply' to apply").format(n=len(pendentes), s=pendentes_servers))
+        ui.warn(_("  {n} sub-action(s) across {s} server(s) — run 'adminforge preview' to see, 'adminforge apply' to apply").format(n=len(pending), s=pending_servers))
 
     ui.heading(_("Last operation"))
     if ultima_op is None:
         ui.secho(_("  (no operations yet)"), dim=True)
     else:
         ui.kv(_("id"), ultima_op.id)
-        ui.kv(_("command"), ultima_op.comando)
+        ui.kv(_("command"), ultima_op.command)
         ui.kv(_("status"), ultima_op.status.value)
-        ui.kv(_("when"), ultima_op.momento.isoformat(timespec="seconds"))
+        ui.kv(_("when"), ultima_op.timestamp.isoformat(timespec="seconds"))
         ui.kv(_("by"), ultima_op.superadmin)
 
     ui.heading(_("History chain"))
-    if cadeia_ok:
+    if chain_ok:
         ui.ok(_("  intact"))
     else:
-        ui.fail(_("  broken: {e}").format(e=cadeia_erro))
+        ui.fail(_("  broken: {e}").format(e=chain_error))
 
     if counts["users"] == 0:
         ui.echo()
@@ -1261,57 +1261,57 @@ def cmd_dump(args: argparse.Namespace) -> int:
     """Print the entire local declared state: users, user-groups, servers, server-groups, permissions and sudo-profiles.
 
     Read-only. Unlike most other list commands here, `--format` has no
-    "table" default fallback via `_emit_listagem` — `table` prints one table
+    "table" default fallback via `_emit_listing` — `table` prints one table
     per section instead of a single flat table.
     """
-    estado = _coletar_estado(_nucleo(args))
+    state = _collect_state(_core(args))
     if args.format == "json":
-        print(json.dumps(estado, indent=2, ensure_ascii=False))
+        print(json.dumps(state, indent=2, ensure_ascii=False))
         return 0
 
-    ui.heading(_("Users ({n})").format(n=len(estado["users"])))
+    ui.heading(_("Users ({n})").format(n=len(state["users"])))
     ui.tabela(
         ["USERNAME", "NOME", "EMAIL", "STATUS", "CHAVES"],
         [
             [u["username"], u["name"], u["email"], u["status"], str(len(u["credentials"]))]
-            for u in estado["users"]
+            for u in state["users"]
         ],
     )
 
-    ui.heading(_("User groups ({n})").format(n=len(estado["user_groups"])))
+    ui.heading(_("User groups ({n})").format(n=len(state["user_groups"])))
     ui.tabela(
         ["NOME", "MEMBROS"],
-        [[g["name"], ", ".join(g["members"]) or "-"] for g in estado["user_groups"]],
+        [[g["name"], ", ".join(g["members"]) or "-"] for g in state["user_groups"]],
     )
 
-    ui.heading(_("Servers ({n})").format(n=len(estado["servers"])))
+    ui.heading(_("Servers ({n})").format(n=len(state["servers"])))
     ui.tabela(
         ["HOSTNAME", "IPV4", "PORTA", "CHAVES_INSTALADAS"],
         [
             [s["hostname"], s["ipv4"], str(s["port"]), str(len(s["installed_keys"]))]
-            for s in estado["servers"]
+            for s in state["servers"]
         ],
     )
 
-    ui.heading(_("Server groups ({n})").format(n=len(estado["server_groups"])))
+    ui.heading(_("Server groups ({n})").format(n=len(state["server_groups"])))
     ui.tabela(
         ["NOME", "MEMBROS"],
-        [[g["name"], ", ".join(g["members"]) or "-"] for g in estado["server_groups"]],
+        [[g["name"], ", ".join(g["members"]) or "-"] for g in state["server_groups"]],
     )
 
-    ui.heading(_("Permissions ({n})").format(n=len(estado["permissions"])))
+    ui.heading(_("Permissions ({n})").format(n=len(state["permissions"])))
     ui.tabela(
         ["USER_GROUP", "SERVER_GROUP", "LEVEL", "PROFILE"],
         [
             [p["user_group"], p["server_group"], p["level"], p.get("profile") or "—"]
-            for p in estado["permissions"]
+            for p in state["permissions"]
         ],
     )
 
-    ui.heading(_("Sudo profiles ({n})").format(n=len(estado["sudo_profiles"])))
+    ui.heading(_("Sudo profiles ({n})").format(n=len(state["sudo_profiles"])))
     ui.tabela(
         ["NAME", "#CMDS", "COMMANDS"],
-        [[p["name"], str(len(p["commands"])), ", ".join(p["commands"])[:60]] for p in estado["sudo_profiles"]],
+        [[p["name"], str(len(p["commands"])), ", ".join(p["commands"])[:60]] for p in state["sudo_profiles"]],
     )
     return 0
 
@@ -1319,17 +1319,17 @@ def cmd_dump(args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 # UC-10: audit server
 # ---------------------------------------------------------------------------
-def _hosts_para_auditar(nucleo: Nucleo, args: argparse.Namespace) -> list[str] | None:
+def _hosts_para_auditar(core: Core, args: argparse.Namespace) -> list[str] | None:
     """Resolve the set of hostnames to audit. Returns None when it has already
     reported an error (e.g. nonexistent server-group) — the caller prints nothing more."""
     if getattr(args, "all", False):
-        return [s.hostname for s in nucleo.store.list_servidores()]
+        return [s.hostname for s in core.store.list_servers()]
     if getattr(args, "server_group", None):
-        g = nucleo.store.get_grupo_servidor(args.server_group)
+        g = core.store.get_server_group(args.server_group)
         if not g:
             ui.fail(_("server-group {g} does not exist").format(g=repr(args.server_group)))
             return None
-        return list(g.membros)
+        return list(g.members)
     return list(args.hostname or [])
 
 
@@ -1343,29 +1343,29 @@ def cmd_audit_server(args: argparse.Namespace) -> int:
     servers resolve, or if any host fails to respond over SSH (other hosts'
     results are still printed).
     """
-    nucleo = _nucleo(args, com_ssh=True)
-    hostnames = _hosts_para_auditar(nucleo, args)
+    core = _core(args, com_ssh=True)
+    hostnames = _hosts_para_auditar(core, args)
     if hostnames is None:
         return 2
     if not hostnames:
         ui.fail(_("no servers to audit"))
         return 2
-    resultados = _mapear_hosts(nucleo.auditar_servidor, hostnames, getattr(args, "jobs", 1))
+    resultados = _mapear_hosts(core.audit_server, hostnames, getattr(args, "jobs", 1))
 
-    qualquer_falha = False
-    for i, (hostname, (op, relatorio)) in enumerate(zip(hostnames, resultados)):
+    any_failure = False
+    for i, (hostname, (op, report)) in enumerate(zip(hostnames, resultados)):
         if i > 0:
             ui.echo()
             ui.secho("─" * 60, dim=True)
-        if "erro" in relatorio:
-            ui.fail(f"{hostname}: {relatorio['erro']}")
-            qualquer_falha = True
+        if "error" in report:
+            ui.fail(f"{hostname}: {report['error']}")
+            any_failure = True
             continue
-        _imprimir_audit_relatorio(args, hostname, op, relatorio)
-    return 2 if qualquer_falha else 0
+        _print_audit_report(args, hostname, op, report)
+    return 2 if any_failure else 0
 
 
-def _imprimir_audit_relatorio(args: argparse.Namespace, hostname: str, op, relatorio: dict) -> None:
+def _print_audit_report(args: argparse.Namespace, hostname: str, op, report: dict) -> None:
     """Pretty-print one server's audit report: users, groups, sudoers, services and heuristic alerts.
 
     With `--humans`, only users with UID >= 1000 are listed. `--user`,
@@ -1373,58 +1373,58 @@ def _imprimir_audit_relatorio(args: argparse.Namespace, hostname: str, op, relat
     respective section. Alerts include sudoers files found under
     /etc/sudoers.d/ that were not written by AdminForge.
     """
-    usuarios = relatorio.get("usuarios", [])
-    grupos = relatorio.get("grupos", [])
-    servicos = relatorio.get("servicos", [])
-    arquivos_sudoers = relatorio.get("sudoers_arquivos", [])
-    regras_sudo = relatorio.get("sudoers_regras", [])
+    users = report.get("users", [])
+    groups = report.get("groups", [])
+    servicos = report.get("servicos", [])
+    sudoers_files = report.get("sudoers_arquivos", [])
+    regras_sudo = report.get("sudoers_regras", [])
 
     if args.humans:
-        usuarios = [u for u in usuarios if u.get("categoria") == "human"]
+        users = [u for u in users if u.get("categoria") == "human"]
 
     ui.heading(hostname)
     # Users
-    titulo = _("Users ({n})").format(n=len(usuarios))
+    titulo = _("Users ({n})").format(n=len(users))
     if args.humans:
-        titulo = _("Users ({n}) — humans only (UID >= 1000)").format(n=len(usuarios))
+        titulo = _("Users ({n}) — humans only (UID >= 1000)").format(n=len(users))
     ui.heading(titulo)
-    if usuarios:
-        linhas = []
-        for u in usuarios:
-            destacar = bool(args.user and args.user in u["nome"])
+    if users:
+        lines = []
+        for u in users:
+            destacar = bool(args.user and args.user in u["name"])
             marca = "*" if destacar else " "
-            grupos_str = ",".join(u.get("grupos", []))[:40]
+            groups_str = ",".join(u.get("groups", []))[:40]
             sudo_str = "yes" if u.get("sudo") else "—"
-            linhas.append([marca, u["nome"], str(u["uid"]), u["categoria"], u["shell"], grupos_str, sudo_str])
-        ui.tabela([" ", "USERNAME", "UID", "CATEGORY", "SHELL", "GROUPS", "SUDO"], linhas)
+            lines.append([marca, u["name"], str(u["uid"]), u["categoria"], u["shell"], groups_str, sudo_str])
+        ui.tabela([" ", "USERNAME", "UID", "CATEGORY", "SHELL", "GROUPS", "SUDO"], lines)
     else:
         ui.secho(_("  (none)"), dim=True)
 
     # Groups
     if args.group:
-        alvo = [g for g in grupos if args.group in g["nome"]]
+        alvo = [g for g in groups if args.group in g["name"]]
         ui.heading(_("Groups matching {g} ({n})").format(g=repr(args.group), n=len(alvo)))
         for g in alvo:
-            membros = ", ".join(g["membros"]) or "-"
-            ui.echo(f"  {g['nome']} (gid={g['gid']}): {membros}")
+            members = ", ".join(g["members"]) or "-"
+            ui.echo(f"  {g['name']} (gid={g['gid']}): {members}")
     else:
-        ui.heading(_("Groups ({n})").format(n=len(grupos)))
-        com_membros = [g for g in grupos if g["membros"]]
-        if com_membros:
+        ui.heading(_("Groups ({n})").format(n=len(groups)))
+        with_members = [g for g in groups if g["members"]]
+        if with_members:
             ui.tabela(
                 ["NAME", "GID", "MEMBERS"],
-                [[g["nome"], str(g["gid"]), ", ".join(g["membros"])[:60]] for g in com_membros],
+                [[g["name"], str(g["gid"]), ", ".join(g["members"])[:60]] for g in with_members],
             )
         else:
             ui.secho(_("  (no group with explicit members)"), dim=True)
 
     # Sudoers
-    ui.heading(_("Sudoers — files in /etc/sudoers.d/ ({n})").format(n=len(arquivos_sudoers)))
-    if arquivos_sudoers:
-        for a in arquivos_sudoers:
-            origem = "adminforge" if a["adminforge"] else "manual"
+    ui.heading(_("Sudoers — files in /etc/sudoers.d/ ({n})").format(n=len(sudoers_files)))
+    if sudoers_files:
+        for a in sudoers_files:
+            source = "adminforge" if a["adminforge"] else "manual"
             cor = ui._GREEN if a["adminforge"] else ui._YELLOW
-            ui.secho(f"  [{origem:10}] {a['nome']}", cor)
+            ui.secho(f"  [{source:10}] {a['name']}", cor)
     else:
         ui.secho(_("  (could not list — ssh has no sudo on the server?)"), dim=True)
 
@@ -1446,10 +1446,10 @@ def _imprimir_audit_relatorio(args: argparse.Namespace, hostname: str, op, relat
     # Heuristic alerts
     alertas = []
     if args.user:
-        nomes = {u["nome"] for u in usuarios}
-        if args.user in nomes and not any(args.user in s for s in servicos):
+        names = {u["name"] for u in users}
+        if args.user in names and not any(args.user in s for s in servicos):
             alertas.append(_("user {u} exists but no matching service is running").format(u=repr(args.user)))
-    sudoers_manuais = [a["nome"] for a in arquivos_sudoers if not a["adminforge"]]
+    sudoers_manuais = [a["name"] for a in sudoers_files if not a["adminforge"]]
     if sudoers_manuais:
         alertas.append(_("{n} file(s) in /etc/sudoers.d/ outside AdminForge: {files}").format(
             n=len(sudoers_manuais),
@@ -1883,7 +1883,7 @@ def main(argv: list[str] | None = None) -> int:
     Enables shell tab-completion via `argcomplete` when that package is
     installed, silently skipping it otherwise (the `# PYTHON_ARGCOMPLETE_OK`
     marker at the top of this file is what lets `register-python-argcomplete`
-    find this hook). Converts a `LockOcupado` exception — raised when another
+    find this hook). Converts a `LockBusy` exception — raised when another
     AdminForge process holds the state directory's lock — into a clean error
     message and exit code 3 instead of a traceback.
     """
@@ -1896,7 +1896,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return args.func(args)
-    except LockOcupado as e:
+    except LockBusy as e:
         ui.fail(str(e))
         return 3
 

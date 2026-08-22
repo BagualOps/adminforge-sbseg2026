@@ -22,7 +22,7 @@ state/
 │   └── <username>.json
 ├── user-groups/
 │   └── <nome>.json
-├── servers/                # 1 arquivo por servidor (inclui chaves_instaladas)
+├── servers/                # 1 arquivo por servidor (inclui installed_keys)
 │   └── <hostname>.json
 ├── server-groups/
 │   └── <nome>.json
@@ -43,13 +43,13 @@ Permissões: diretórios `0700`, arquivos `0600`.
 {
   "id": "9c1d8e1a-9b1f-4e09-9d34-3b5b23a3eaa1",
   "username": "alice",
-  "nome": "Alice Silva",
+  "name": "Alice Silva",
   "email": "alice@empresa.com",
   "status": "ativo",
   "credenciais": [
     {
       "id": "7f01...",
-      "chave_publica": "ssh-ed25519 AAAA... alice@laptop",
+      "public_key": "ssh-ed25519 AAAA... alice@laptop",
       "fingerprint": "SHA256:abc...",
       "status": "ativa"
     }
@@ -64,8 +64,8 @@ Permissões: diretórios `0700`, arquivos `0600`.
 ```json
 {
   "id": "...",
-  "nome": "sysadmins",
-  "membros": ["alice", "bob"]
+  "name": "sysadmins",
+  "members": ["alice", "bob"]
 }
 ```
 
@@ -76,27 +76,27 @@ Permissões: diretórios `0700`, arquivos `0600`.
   "id": "...",
   "hostname": "web-01",
   "ipv4": "10.0.0.10",
-  "porta_ssh": 22,
-  "chave_host": "ssh-ed25519 AAAAC3...",
-  "chaves_instaladas": [
+  "ssh_port": 22,
+  "host_key": "ssh-ed25519 AAAAC3...",
+  "installed_keys": [
     {
       "ref": "alice:SHA256:abc...",
       "username": "alice",
-      "nivel": "sudo"
+      "level": "sudo"
     }
   ]
 }
 ```
 
-`chaves_instaladas` reflete o que de fato está nesse servidor. **É a única fonte de verdade do estado real**; o Planner compara com isso para calcular o delta.
+`installed_keys` reflete o que de fato está nesse servidor. **É a única fonte de verdade do estado real**; o Planner compara com isso para calcular o delta.
 
 ### `server-groups/<nome>.json`
 
 ```json
 {
   "id": "...",
-  "nome": "producao",
-  "membros": ["web-01", "web-02"]
+  "name": "producao",
+  "members": ["web-01", "web-02"]
 }
 ```
 
@@ -104,12 +104,12 @@ Permissões: diretórios `0700`, arquivos `0600`.
 
 ```json
 {
-  "permissoes": [
+  "permissions": [
     {
       "id": "...",
-      "grupo_user": "sysadmins",
-      "grupo_servidor": "producao",
-      "nivel": "sudo",
+      "user_group": "sysadmins",
+      "server_group": "producao",
+      "level": "sudo",
       "profile": "read-logs"
     }
   ]
@@ -123,15 +123,15 @@ Permissões: diretórios `0700`, arquivos `0600`.
 ```json
 {
   "id": "...",
-  "nome": "read-logs",
-  "comandos": [
+  "name": "read-logs",
+  "commands": [
     "/bin/journalctl",
     "/bin/cat /var/log/*"
   ]
 }
 ```
 
-Cada `comando` precisa ser um caminho absoluto (`/...`) — sudoers exige absolute paths. Quando uma `Permissao` aponta para este profile, o `apply` escreve `/etc/sudoers.d/adminforge-<username>` com uma linha `<username> ALL=(ALL) NOPASSWD: <comando>` para cada item.
+Cada `command` precisa ser um caminho absoluto (`/...`) — sudoers exige absolute paths. Quando uma `Permission` aponta para este profile, o `apply` escreve `/etc/sudoers.d/adminforge-<username>` com uma linha `<username> ALL=(ALL) NOPASSWD: <comando>` para cada item.
 
 ### `known_hosts`
 
@@ -146,7 +146,7 @@ Usado pelo `SSHDeployer` com `ssh -o UserKnownHostsFile=state/known_hosts -o Str
 ### `history.jsonl` (1 linha por operação)
 
 ```json
-{"id":"OP-0042","momento":"2026-04-22T14:32:11-03:00","superadmin":"alice","comando":"apply","status":"sucesso_parcial","subacoes":[{"servidor":"web-01","acao":"adicionar_chave","credencial":"alice:SHA256:abc","status":"sucesso"},{"servidor":"db-03","acao":"adicionar_chave","credencial":"alice:SHA256:abc","status":"falha","erro":"ssh: connect timeout after 30s"}],"hash_anterior":"7c4a8d09...","hash":"9e8b2c14..."}
+{"id":"OP-0042","timestamp":"2026-04-22T14:32:11-03:00","superadmin":"alice","command":"apply","status":"sucesso_parcial","sub_actions":[{"server":"web-01","action":"adicionar_chave","credential":"alice:SHA256:abc","status":"success"},{"server":"db-03","action":"adicionar_chave","credential":"alice:SHA256:abc","status":"falha","error":"ssh: connect timeout after 30s"}],"previous_hash":"7c4a8d09...","hash":"9e8b2c14..."}
 ```
 
 ## Backup

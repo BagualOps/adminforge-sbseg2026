@@ -43,7 +43,7 @@ Detalhes em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#zero-deps).
 | 7 | Histórico append-only com cadeia SHA256; `verify` aponta divergência | ✅ |
 | 8 | Backup `authorized_keys.bak` antes da edição | ✅ |
 | 9 | Sudoers configurável por comando via `sudo-profile` (alternativa a `NOPASSWD:ALL`) | ✅ |
-| 10 | `apply verify` — confere `chaves_instaladas` declaradas vs reais | ✅ |
+| 10 | `apply verify` — confere `installed_keys` declaradas vs reais | ✅ |
 | 11 | `apply --diff` mostra antes/depois do `authorized_keys` | ✅ |
 | 12 | `apply verify` também confere existência da conta Unix — bloco deixado por `userdel` sem `-r` não vira OK falso | ✅ |
 | 13 | `apply --reconcile` lê o estado vivo do servidor e reconverge (recria usuário/chave deletados manualmente, remove órfãos entre os declarados); `apply --force` re-aplica toda chave declarada | ✅ |
@@ -64,7 +64,7 @@ Detalhes em [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#zero-deps).
 
 ```
 CLI ──► Núcleo ─┬─► Store    (JSON em ./state/)
-                ├─► Planner  (delta = desejado − chaves_instaladas)
+                ├─► Planner  (delta = desejado − installed_keys)
                 ├─► Deployer (subprocess(ssh) via OpenSSH, ou DryRun para testes)
                 └─► Auditor  (history.jsonl com cadeia de SHA256)
 ```

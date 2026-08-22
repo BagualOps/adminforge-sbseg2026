@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from adminforge.domain import GrupoUser, NivelPermissao, Permissao, Servidor, SudoProfile, User
-from adminforge.exceptions import LockOcupado
+from adminforge.domain import UserGroup, PermissionLevel, Permission, Server, SudoProfile, User
+from adminforge.exceptions import LockBusy
 from adminforge.store.json_store import JsonStore
 
 
@@ -14,7 +14,7 @@ def test_lockfile_concorrencia(tmp_path: Path):
     b = JsonStore(tmp_path)
     a.lock()
     try:
-        with pytest.raises(LockOcupado):
+        with pytest.raises(LockBusy):
             b.lock()
     finally:
         a.unlock()
@@ -22,73 +22,73 @@ def test_lockfile_concorrencia(tmp_path: Path):
     b.unlock()
 
 
-def test_save_user_permissao_0600(tmp_path: Path):
+def test_save_user_permission_0600(tmp_path: Path):
     s = JsonStore(tmp_path)
-    s.save_user(User(username="alice", nome="Alice", email="m@e.com"))
-    arquivo = tmp_path / "users" / "alice.json"
-    assert arquivo.exists()
-    modo = oct(arquivo.stat().st_mode)[-3:]
+    s.save_user(User(username="alice", name="Alice", email="m@e.com"))
+    file = tmp_path / "users" / "alice.json"
+    assert file.exists()
+    modo = oct(file.stat().st_mode)[-3:]
     assert modo == "600"
 
 
-def test_roundtrip_servidor(tmp_path: Path):
+def test_roundtrip_server(tmp_path: Path):
     s = JsonStore(tmp_path)
-    serv = Servidor(
+    serv = Server(
         hostname="web-01",
         ipv4="10.0.0.10",
-        porta_ssh=22,
-        chave_host="ssh-ed25519 AAAA...",
-        chaves_instaladas=[{"ref": "alice:fp", "username": "alice", "nivel": "sudo"}],
+        ssh_port=22,
+        host_key="ssh-ed25519 AAAA...",
+        installed_keys=[{"ref": "alice:fp", "username": "alice", "level": "sudo"}],
     )
-    s.save_servidor(serv)
-    lido = s.get_servidor("web-01")
+    s.save_server(serv)
+    lido = s.get_server("web-01")
     assert lido is not None
     assert lido.ipv4 == "10.0.0.10"
-    assert lido.chaves_instaladas[0]["ref"] == "alice:fp"
+    assert lido.installed_keys[0]["ref"] == "alice:fp"
 
 
-def test_permissao_atualiza_em_vez_de_duplicar(tmp_path: Path):
+def test_permission_updates_instead_of_duplicating(tmp_path: Path):
     s = JsonStore(tmp_path)
-    s.save_permissao(Permissao(grupo_user="sa", grupo_servidor="prod", nivel=NivelPermissao.SHELL))
-    s.save_permissao(Permissao(grupo_user="sa", grupo_servidor="prod", nivel=NivelPermissao.SUDO))
-    perms = s.list_permissoes()
+    s.save_permission(Permission(user_group="sa", server_group="prod", level=PermissionLevel.SHELL))
+    s.save_permission(Permission(user_group="sa", server_group="prod", level=PermissionLevel.SUDO))
+    perms = s.list_permissions()
     assert len(perms) == 1
-    assert perms[0].nivel == NivelPermissao.SUDO
+    assert perms[0].level == PermissionLevel.SUDO
 
 
-def test_delete_grupo(tmp_path: Path):
+def test_delete_group(tmp_path: Path):
     s = JsonStore(tmp_path)
-    s.save_grupo_user(GrupoUser(nome="sa", membros=["x"]))
-    assert s.get_grupo_user("sa") is not None
-    s.delete_grupo_user("sa")
-    assert s.get_grupo_user("sa") is None
+    s.save_user_group(UserGroup(name="sa", members=["x"]))
+    assert s.get_user_group("sa") is not None
+    s.delete_user_group("sa")
+    assert s.get_user_group("sa") is None
 
 
 def test_sudo_profile_roundtrip(tmp_path: Path):
     s = JsonStore(tmp_path)
-    profile = SudoProfile(nome="read-logs", comandos=["/bin/journalctl", "/bin/cat /var/log/*"])
+    profile = SudoProfile(name="read-logs", commands=["/bin/journalctl", "/bin/cat /var/log/*"])
     s.save_sudo_profile(profile)
 
     lido = s.get_sudo_profile("read-logs")
     assert lido is not None
-    assert lido.nome == "read-logs"
-    assert lido.comandos == ["/bin/journalctl", "/bin/cat /var/log/*"]
+    assert lido.name == "read-logs"
+    assert lido.commands == ["/bin/journalctl", "/bin/cat /var/log/*"]
 
-    arquivo = tmp_path / "sudo-profiles" / "read-logs.json"
-    assert arquivo.exists()
-    assert oct(arquivo.stat().st_mode)[-3:] == "600"
+    file = tmp_path / "sudo-profiles" / "read-logs.json"
+    assert file.exists()
+    assert oct(file.stat().st_mode)[-3:] == "600"
 
 
 def test_sudo_profile_list_e_delete(tmp_path: Path):
     s = JsonStore(tmp_path)
-    s.save_sudo_profile(SudoProfile(nome="a", comandos=["/bin/a"]))
-    s.save_sudo_profile(SudoProfile(nome="b", comandos=["/bin/b"]))
-    nomes = sorted(p.nome for p in s.list_sudo_profiles())
-    assert nomes == ["a", "b"]
+    s.save_sudo_profile(SudoProfile(name="a", commands=["/bin/a"]))
+    s.save_sudo_profile(SudoProfile(name="b", commands=["/bin/b"]))
+    names = sorted(p.name for p in s.list_sudo_profiles())
+    assert names == ["a", "b"]
 
     s.delete_sudo_profile("a")
     assert s.get_sudo_profile("a") is None
-    assert [p.nome for p in s.list_sudo_profiles()] == ["b"]
+    assert [p.name for p in s.list_sudo_profiles()] == ["b"]
 
 
 def test_sudo_profile_inexistente_retorna_none(tmp_path: Path):
