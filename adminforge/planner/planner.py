@@ -42,15 +42,15 @@ def _merge_profile(
     perm_profile: str | None,
     nivel_final: NivelPermissao,
 ) -> str | None:
-    """Calcula o profile efetivo ao mesclar uma nova permissao na ChaveInstalada existente.
+    """Compute the effective profile when merging a new permission into the existing ChaveInstalada.
 
-    Regras (validadas por testes parametrizados):
-      - nivel_final != SUDO              -> None (profile nao se aplica a SHELL)
-      - existente is None                -> profile do entrante
-      - existente era SHELL              -> profile do entrante (entrante eh SUDO)
-      - entrante eh SHELL                -> mantem profile do existente SUDO
-      - ambos SUDO, algum sem profile    -> None (full sudo prevalece, menor restricao)
-      - ambos SUDO com profile           -> mantem o profile do existente (estavel)
+    Rules (validated by parametrized tests):
+      - nivel_final != SUDO              -> None (profile does not apply to SHELL)
+      - existente is None                -> incoming profile
+      - existente was SHELL              -> incoming profile (incoming is SUDO)
+      - incoming is SHELL                -> keep the existing SUDO profile
+      - both SUDO, one without profile   -> None (full sudo wins, least restriction)
+      - both SUDO with profile           -> keep the existing profile (stable)
     """
     if nivel_final != NivelPermissao.SUDO:
         return None
@@ -194,14 +194,14 @@ class Planner:
         desejado = self.estado_desejado()
         subacoes: list[Subacao] = []
 
-        # cache de profiles para evitar reler a cada subaction
+        # cache profiles to avoid re-reading on every subaction
         profiles_cache: dict[str, list[str] | None] = {}
 
         def _comandos(profile: str | None) -> list[str] | None:
-            """None  = sem profile (NOPASSWD:ALL legítimo).
-            Lista nao-vazia = perfil resolvido.
-            Lanca EstadoInvalido se profile referenciado nao existe ou esta vazio
-            (evita virar full sudo silenciosamente)."""
+            """None  = no profile (legitimate NOPASSWD:ALL).
+            Non-empty list = resolved profile.
+            Raises EstadoInvalido if the referenced profile does not exist or is empty
+            (avoids silently becoming full sudo)."""
             if profile is None:
                 return None
             if profile not in profiles_cache:

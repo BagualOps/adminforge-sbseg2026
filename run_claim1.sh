@@ -17,6 +17,22 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+# --dry-run: check the comparison logic without Docker. It feeds the stored
+# reference measurements to the same assertion block the live run uses, so the
+# thresholds and the arithmetic are exercised end to end; what it does NOT do is
+# measure this machine. Use it to see what the claim asserts, not to confirm it.
+DRY=0
+case "${1:-}" in
+  --dry-run) DRY=1 ;;
+  "") ;;
+  *) echo "usage: $0 [--dry-run]" >&2; exit 2 ;;
+esac
+
+if [ "$DRY" -eq 1 ]; then
+  RAW="infra/perf/results/raw"
+  echo "Claim #1 --dry-run: no Docker, no measurement; reading stored reference results."
+else
+
 # Every external tool this claim shells out to, checked before anything is built, so a
 # missing one names itself here instead of surfacing as a traceback ten minutes in.
 missing=""
@@ -74,10 +90,13 @@ python3 infra/perf/run_e1.py --sizes 1,5 --reps 1 >/dev/null
 
 echo "Claim #1 (b): Ansible comparison (N=10), measured live..."
 python3 infra/perf/run_e2.py --reps 1 --configs 10:default >/dev/null
+fi
 
-python3 - "$RAW" <<'PYEOF'
+python3 - "$RAW" "$DRY" <<'PYEOF'
 import json, sys, pathlib
 raw = pathlib.Path(sys.argv[1])
+dry = sys.argv[2] == "1"
+origem = "stored reference results, NOT measured here" if dry else "measured live"
 load = lambda name: json.loads((raw / name).read_text())
 
 e1_1 = load("e1_n01_rep1.json")["cells"]
@@ -90,7 +109,11 @@ diff = abs(ph5 - ph1) / max(ph1, ph5) * 100
 ans = load("e2_n10_forksdefault_rep1.json")
 af = load("e2_af_sanity_python3_image.json")["cells"]
 ans_first, ans_noop = ans["cells"]["first_apply"], ans["cells"]["noop_apply"]
-af_first, af_noop = af["cold_apply_parallel"], af["noop_apply"]
+if "cold_apply_parallel" in af:
+    af_first, rotulo = af["cold_apply_parallel"], "(parallel)"
+else:
+    af_first, rotulo = af["cold_apply"], "(sequential)"
+af_noop = af["noop_apply"]
 yaml_lines = sum(ans["effort"].values())
 ratio = ans_noop / af_noop if af_noop else float("inf")
 
@@ -103,13 +126,13 @@ print(f"""
 {bar}
   Claim #1: linear per-host cost, and instant "is anything pending?"
 {bar}
-  (a) Scalability (base image, measured live)
+  (a) Scalability (base image, {origem})
       N=1  cold apply : {c1:6.1f} s     no-op apply : {noop1:.2f} s
       N=5  cold apply : {c5:6.1f} s     no-op apply : {noop5:.2f} s
       Per-host cold   : N=1 {ph1:.1f} s/host   N=5 {ph5:.1f} s/host   (diff {diff:.1f}%)
 
-  (b) Comparison with Ansible at N=10 (python3 image, measured live)
-      First apply     : AdminForge {af_first:6.1f} s (parallel)   Ansible {ans_first:6.1f} s
+  (b) Comparison with Ansible at N=10 (python3 image, {origem})
+      First apply     : AdminForge {af_first:6.1f} s {rotulo}   Ansible {ans_first:6.1f} s
       No-op re-run    : AdminForge {af_noop:6.2f} s (local)      Ansible {ans_noop:6.2f} s   ({ratio:.0f}x faster)
       Write effort    : AdminForge 29 commands    Ansible {yaml_lines} lines of YAML
 

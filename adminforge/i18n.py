@@ -1,18 +1,18 @@
-"""Localizacao leve da CLI (sem dependencias).
+"""Lightweight CLI localization (no dependencies).
 
-O texto-fonte em ingles e a *chave*; o catalogo `pt` fornece a traducao, com
-fallback para o proprio texto-fonte quando a chave nao esta no catalogo. Assim o
-ingles (padrao) custa zero e uma chave sem traducao degrada para ingles em vez de
-quebrar.
+The English source text is the *key*; the `pt` catalog provides the
+translation, falling back to the source text itself when the key is not in the
+catalog. So English (the default) costs nothing and a key without a translation
+degrades to English instead of breaking.
 
-Mensagens com valores interpolados usam placeholders no estilo str.format
-(`{x}`), nunca f-strings, para que o template possa ser traduzido:
+Messages with interpolated values use str.format-style placeholders (`{x}`),
+never f-strings, so the template can be translated:
 
     ui.fail(t("user {u} does not exist").format(u=username))
 
-Idioma: env var ADMINFORGE_LANG (`en` | `pt` | `pt_BR`...); se ausente, cai para
-LC_ALL / LC_MESSAGES / LANG; default `en`. Resolvido a cada chamada de t() para
-ser sensivel a mudanca de env em testes; set_lang() permite forcar.
+Language: ADMINFORGE_LANG env var (`en` | `pt` | `pt_BR`...); if absent, falls
+back to LC_ALL / LC_MESSAGES / LANG; default `en`. Resolved on every t() call
+so it is sensitive to env changes in tests; set_lang() allows forcing it.
 """
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ def _resolve_lang() -> str:
 
 
 def set_lang(code: str | None) -> None:
-    """Forca o idioma (usado em testes). `None` volta a resolucao automatica por env."""
+    """Force the language (used in tests). `None` restores automatic env-based resolution."""
     global _OVERRIDE
     _OVERRIDE = None if code is None else _normalize(code)
 
@@ -58,16 +58,16 @@ def t(msg: str) -> str:
     return _CATALOGS.get(lang, {}).get(msg, msg)
 
 
-# alias curto, no estilo gettext
+# short alias, gettext style
 _ = t
 
 
 # ---------------------------------------------------------------------------
-# Catalogos. Chave = texto-fonte em ingles (exatamente como aparece no codigo).
+# Catalogs. Key = English source text (exactly as it appears in the code).
 # ---------------------------------------------------------------------------
 _CATALOGS: dict[str, dict[str, str]] = {
     "pt": {
-        # ---- parser: descricao geral e epilogos ----
+        # ---- parser: general description and epilogues ----
         "AdminForge - manages who has privileged access (SSH keys and sudo) on a fleet of "
         "Linux servers.\n\n"
         "You edit the desired state with these commands; 'apply' pushes the changes to the "
@@ -175,7 +175,7 @@ _CATALOGS: dict[str, dict[str, str]] = {
         "  adminforge server-group create --name producao\n"
         "  adminforge server-group add-member --group producao --hostname web-01 web-02 db-03",
 
-        # ---- parser: help= de comandos e flags ----
+        # ---- parser: help= for commands and flags ----
         "State directory (default: ./state or $ADMINFORGE_STATE).":
             "Diretorio de estado (padrao: ./state ou $ADMINFORGE_STATE).",
         "Register, lifecycle and SSH keys of users.":
@@ -309,7 +309,7 @@ _CATALOGS: dict[str, dict[str, str]] = {
         "Highlight occurrences of this service.": "Destaca ocorrencias deste servico.",
         "Show only human users (UID >= 1000).": "Mostra so usuarios humanos (UID >= 1000).",
 
-        # ---- main.py: mensagens de erro (ui.fail) ----
+        # ---- main.py: error messages (ui.fail) ----
         "user {u} does not exist": "usuario {u} nao existe",
         "use --file OR --string, not both": "use --file OU --string, nao os dois",
         "provide --file or --string": "informe --file ou --string",
@@ -443,7 +443,7 @@ _CATALOGS: dict[str, dict[str, str]] = {
         "{n} file(s) in /etc/sudoers.d/ outside AdminForge: {files}":
             "{n} arquivo(s) em /etc/sudoers.d/ fora do AdminForge: {files}",
 
-        # kv-keys adicionais (rotulos de campo)
+        # additional kv keys (field labels)
         "username": "usuario",
         "name": "nome",
         "email": "email",
@@ -455,7 +455,7 @@ _CATALOGS: dict[str, dict[str, str]] = {
         "(empty)": "(vazio)",
         "{cmd}  ({id}) — partial": "{cmd}  ({id}) — parcial",
 
-        # ---- nucleo.py: mensagens de erro ----
+        # ---- nucleo.py: error messages ----
         "invalid username: {u}": "username invalido: {u}",
         "name is required": "o nome e obrigatorio",
         "invalid email: {e}": "email invalido: {e}",
@@ -489,7 +489,7 @@ _CATALOGS: dict[str, dict[str, str]] = {
         "Revoke them first:": "Revogue antes:",
         "permission does not exist": "a permissao nao existe",
         "{u} users, {g} groups, {s} services, {r} sudo rules": "{u} usuarios, {g} grupos, {s} servicos, {r} regras de sudo",
-        # rotulos de "kind" usados na mensagem acima
+        # "kind" labels used in the message above
         "user-group": "user-group",
         "server-group": "server-group",
     },

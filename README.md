@@ -168,9 +168,15 @@ The paper makes three claims. Each is one command and prints a result box ending
 ./run_claim1.sh
 ```
 
-- **Flags:** none.
+- **Flags:** `--dry-run` checks the comparison logic **without Docker**. It feeds the stored
+  reference measurements in [`infra/perf/results/raw/`](infra/perf/results/raw/) to the same
+  assertion block the live run uses, so the thresholds and the arithmetic are exercised end
+  to end and print the same verdict block, with every number labelled *stored reference
+  results, NOT measured here*. It runs in under a second and needs nothing but `python3`.
+  It shows what the claim asserts; it does not confirm the claim on your machine, which is
+  what the plain run is for.
 - **Expected time:** 3m23s measured with the images already built; the first run adds the
-  Docker build of the fleet and Ansible-controller images.
+  Docker build of the fleet and Ansible-controller images. With `--dry-run`, instant.
 - **Expected resources:** ~410 MB of Docker images (measured: the fleet image, the Ansible
   fleet image and the controller), under 1 GB of RAM, and 11 local containers at the N=10
   step. Docker required; no GPU.
@@ -318,4 +324,17 @@ If you use this artifact, please cite the paper:
 
 # LICENSE
 
-[GNU AGPL-3.0](LICENSE).
+[GNU AGPL-3.0](LICENSE), or any later version.
+
+**What that means for use inside a company.** Running AdminForge to administer your own
+fleet triggers no obligation: the AGPL adds requirements when you *convey* the software or
+when you let third parties interact with a *modified* version over a network, not when you
+run it internally, however many hosts you point it at. Two situations do carry obligations:
+distributing AdminForge, modified or not, to anyone outside your organization, and offering
+a modified version as a network service to users who are not part of your organization. In
+both cases the corresponding source, including your modifications, must be offered to those
+recipients under the same licence. AdminForge is a CLI that acts on hosts over SSH; it
+exposes no network service of its own, so the network clause is reached only if you build
+one around it. Internal modifications that never leave the organization can stay private.
+This paragraph is orientation, not legal advice: the licence text governs, and a legal
+opinion is worth obtaining before redistributing.

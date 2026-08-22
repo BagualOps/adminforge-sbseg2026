@@ -1,4 +1,4 @@
-"""Helpers para manipulacao do bloco AdminForge em authorized_keys."""
+"""Helpers for managing the AdminForge block in authorized_keys."""
 from __future__ import annotations
 
 MARCADOR_INICIO = "# BEGIN adminforge: "
@@ -15,7 +15,7 @@ def bloco(ref: str, chave: str) -> str:
 
 
 def parse_blocos(conteudo: str) -> dict[str, str]:
-    """Devolve {ref: corpo} dos blocos '# BEGIN/END adminforge: <ref>' encontrados."""
+    """Return {ref: body} of the '# BEGIN/END adminforge: <ref>' blocks found."""
     out: dict[str, str] = {}
     ref: str | None = None
     buffer: list[str] = []
@@ -36,8 +36,8 @@ def parse_blocos(conteudo: str) -> dict[str, str]:
 
 
 def substituir_bloco(conteudo: str, ref: str, bloco_novo: str) -> str:
-    """Substitui o bloco com a ref dada por bloco_novo (vazio = remove). Linhas fora dos
-    markers AdminForge sao preservadas."""
+    """Replace the block with the given ref by bloco_novo (empty = remove). Lines outside
+    the AdminForge markers are preserved."""
     inicio = f"{MARCADOR_INICIO}{ref}"
     fim = f"{MARCADOR_FIM}{ref}"
     out: list[str] = []

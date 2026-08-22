@@ -62,7 +62,7 @@ def _superadmin() -> str:
 
 
 def _split_tokens(items: list[str]) -> list[str]:
-    """Aceita 'a b c' (espaco), 'a,b,c' (virgula) ou misto. Remove vazios."""
+    """Accept 'a b c' (space), 'a,b,c' (comma) or mixed. Drop empty items."""
     out: list[str] = []
     for it in items:
         out.extend(s.strip() for s in it.split(",") if s.strip())
@@ -76,8 +76,8 @@ def _emit_listagem(
     json_keys: list[str] | None = None,
     json_data: list[dict] | None = None,
 ) -> int:
-    """Imprime listagem no formato pedido por --format. Default 'table'.
-    Para 'json', usa json_data se fornecido (estrutura rica); senao, zip(headers, linhas)."""
+    """Print a listing in the format requested by --format. Default 'table'.
+    For 'json', use json_data if provided (richer structure); otherwise, zip(headers, linhas)."""
     fmt = getattr(args, "format", "table")
     if fmt == "json":
         if json_data is None:
@@ -477,13 +477,13 @@ def cmd_sg_list(args: argparse.Namespace) -> int:
 # UC-6: permission grant / revoke / list / show
 # ---------------------------------------------------------------------------
 def cmd_permission_show(args: argparse.Namespace) -> int:
-    """Query reversa: 'a que servidores X tem acesso?' (--user) ou
-    'que grupos concedem ao server-group X?' (--server-group) ou
-    'que servidores o user-group X concede?' (--user-group)."""
+    """Reverse query: 'which servers does X have access to?' (--user) or
+    'which grants reach server-group X?' (--server-group) or
+    'which servers does user-group X grant?' (--user-group)."""
     nucleo = _nucleo(args)
     s = nucleo.store
 
-    # Indices uteis
+    # Useful indices
     grupos_user = {g.nome: g for g in s.list_grupos_user()}
     grupos_servidor = {g.nome: g for g in s.list_grupos_servidor()}
     perms = s.list_permissoes()
@@ -494,7 +494,7 @@ def cmd_permission_show(args: argparse.Namespace) -> int:
             ui.fail(_("user {u} does not exist").format(u=args.user))
             return 2
         user_groups = sorted(g.nome for g in grupos_user.values() if args.user in g.membros)
-        # Para cada grupo do user, expandir as permissoes; agregar por (hostname).
+        # For each of the user's groups, expand the permissions; aggregate by (hostname).
         from adminforge.planner.planner import _merge_profile, ChaveInstalada, _maior
 
         agregado: dict[str, dict] = {}  # hostname -> {nivel, profile, via}
@@ -730,7 +730,7 @@ def cmd_preview(args: argparse.Namespace) -> int:
 
 
 def _imprimir_diff(nucleo: Nucleo, subacoes: list) -> None:
-    """Mostra unified diff do authorized_keys de cada (servidor, username) afetado."""
+    """Show a unified diff of the authorized_keys of each (server, username) affected."""
     import difflib
     from adminforge import authorized_keys as ak
 
@@ -748,7 +748,7 @@ def _imprimir_diff(nucleo: Nucleo, subacoes: list) -> None:
         if servidor is None:
             continue
         ui.secho(f"  {hostname}:{username}", bold=True)
-        # ler_authorized_keys pode falhar (ssh, host_key etc); nao deve abortar o diff dos demais.
+        # ler_authorized_keys can fail (ssh, host_key etc); it must not abort the diff of the others.
         try:
             atual, ok = nucleo.deployer.ler_authorized_keys(servidor, username)
         except Exception as e:
@@ -781,8 +781,8 @@ _SUDOERS_PREFIX = "adminforge-"
 
 
 def _esperado_do_servidor(servidor) -> tuple[dict[str, str], dict[str, str | None]]:
-    """Lê chaves_instaladas e retorna ({ref: username} dos blocos,
-    {username: profile} dos que têm sudo — profile None = sudo total)."""
+    """Read chaves_instaladas and return ({ref: username} of the blocks,
+    {username: profile} of those with sudo — profile None = full sudo)."""
     blocks: dict[str, str] = {}
     sudo: dict[str, str | None] = {}
     for item in servidor.chaves_instaladas:
@@ -798,8 +798,8 @@ def _esperado_do_servidor(servidor) -> tuple[dict[str, str], dict[str, str | Non
 
 
 def _regra_e_full_sudo(regra: str) -> bool:
-    """Heurística: a regra do sudoers concede TODOS os comandos (NOPASSWD:ALL).
-    Confiável porque o AdminForge escreve esses arquivos ele mesmo."""
+    """Heuristic: the sudoers rule grants ALL commands (NOPASSWD:ALL).
+    Reliable because AdminForge writes these files itself."""
     return "NOPASSWD:ALL" in regra.replace(" ", "").upper()
 
 
@@ -815,9 +815,9 @@ def _mapear_hosts(fn, itens, jobs):
 
 
 def cmd_apply_verify(args: argparse.Namespace) -> int:
-    """Compara o estado declarado vs o real do servidor: blocos AdminForge no
-    authorized_keys + arquivos `adminforge-<user>` em /etc/sudoers.d/ (presença
-    e nível — sudo total vs perfil restrito)."""
+    """Compare declared state vs the real server state: AdminForge blocks in
+    authorized_keys + `adminforge-<user>` files in /etc/sudoers.d/ (presence
+    and level — full sudo vs restricted profile)."""
     from adminforge import authorized_keys as ak
 
     nucleo = _nucleo(args, com_ssh=not args.dry_run)
@@ -868,7 +868,7 @@ def cmd_apply_verify(args: argparse.Namespace) -> int:
         esperado_sudo = dados["esperado_sudo"]
         ui.heading(servidor.hostname)
 
-        # 1) authorized_keys — só se há blocos declarados
+        # 1) authorized_keys — only if there are declared blocks
         if esperado_blocks:
             if dados["blocks_erro"]:
                 ui.fail(dados["blocks_erro"])
@@ -898,7 +898,7 @@ def cmd_apply_verify(args: argparse.Namespace) -> int:
         else:
             ui.secho(_("  (no installed keys declared)"), dim=True)
 
-        # 2) sudoers — sempre roda (mesmo sem blocos declarados, p/ achar arquivos órfãos)
+        # 2) sudoers — always runs (even without declared blocks, to find orphan files)
         relatorio = dados["relatorio"]
         if "erro" in relatorio:
             ui.fail(_("  ssh failed listing sudoers: {e}").format(e=relatorio["erro"]))
@@ -909,7 +909,7 @@ def cmd_apply_verify(args: argparse.Namespace) -> int:
             a["nome"][len(_SUDOERS_PREFIX):] for a in arquivos
             if a.get("adminforge") and a.get("nome", "").startswith(_SUDOERS_PREFIX)
         }
-        # regras reais por usuário (1ª coluna; ignora regras de grupo '%...')
+        # real rules per user (1st column; ignore group rules '%...')
         real_regras: dict[str, list[str]] = {}
         for regra in relatorio.get("sudoers_regras") or []:
             col = regra.split(None, 1)[0] if regra else ""
@@ -1169,7 +1169,7 @@ def _coletar_estado(nucleo: Nucleo) -> dict:
 
 
 def cmd_status(args: argparse.Namespace) -> int:
-    """Overview rapido tipo 'git status': contagens, pendencias e ultima operacao."""
+    """Quick 'git status'-like overview: counts, pending changes and last operation."""
     nucleo = _nucleo(args)
     s = nucleo.store
     counts = {
@@ -1320,8 +1320,8 @@ def cmd_dump(args: argparse.Namespace) -> int:
 # UC-10: audit server
 # ---------------------------------------------------------------------------
 def _hosts_para_auditar(nucleo: Nucleo, args: argparse.Namespace) -> list[str] | None:
-    """Resolve o conjunto de hostnames a auditar. Retorna None quando já reportou
-    um erro (ex.: server-group inexistente) — o chamador não imprime nada a mais."""
+    """Resolve the set of hostnames to audit. Returns None when it has already
+    reported an error (e.g. nonexistent server-group) — the caller prints nothing more."""
     if getattr(args, "all", False):
         return [s.hostname for s in nucleo.store.list_servidores()]
     if getattr(args, "server_group", None):
@@ -1540,7 +1540,7 @@ def _build_parser() -> argparse.ArgumentParser:
     a.add_argument("--to", dest="para", required=True, help=_("New username."))
     a.set_defaults(func=cmd_user_rename)
 
-    # user key (subcomando aninhado de user)
+    # user key (nested subcommand of user)
     p_uk = s_user.add_parser("key", help=_("Register and revoke user SSH keys."))
     s_uk = p_uk.add_subparsers(dest="key_sub", required=True)
     a = s_uk.add_parser("add", help=_("Register an SSH key."))
@@ -1684,7 +1684,7 @@ def _build_parser() -> argparse.ArgumentParser:
     a.add_argument("--format", choices=["table", "json"], default="table")
     a.set_defaults(func=cmd_sg_list)
 
-    # permission — todas as acoes de gerenciamento de permissoes ficam sob este menu
+    # permission — all permission-management actions live under this menu
     p_perm = sub.add_parser(
         "permission",
         help=_("Manage permissions: grant / revoke / list / show."),

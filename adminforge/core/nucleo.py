@@ -65,7 +65,7 @@ def _ipv4_valido(ip: str) -> bool:
 
 
 def _msg_permissoes_associadas(tipo: str, nome: str, perms: list[Permissao]) -> str:
-    """Mensagem de erro do delete bloqueado: lista as N permissões e sugere o comando."""
+    """Error message for a blocked delete: lists the N permissions and suggests the command."""
     pares = [(p.grupo_user, p.grupo_servidor, p.nivel.value) for p in perms]
     if tipo == "user-group":
         linhas = [f"  - {gs} ({lvl})" for _gu, gs, lvl in pares]
@@ -548,9 +548,9 @@ class Nucleo:
                 for c in comandos:
                     if not c.startswith("/"):
                         raise FormatoInvalido(_("command must be absolute path: {c} (sudoers requires absolute paths)").format(c=repr(c)))
-                    # Bloqueia injection de novas regras no sudoers via newline/CR.
-                    # 'visudo -c' valida sintaxe mas nao distingue 1 regra com \n vs 2 regras
-                    # legitimas; basta uma das linhas ser valida pra passar.
+                    # Blocks injection of new sudoers rules via newline/CR.
+                    # 'visudo -c' validates syntax but does not tell 1 rule with \n apart from 2
+                    # legitimate rules; as long as one of the lines is valid, it passes.
                     if any(ch in c for ch in ("\n", "\r", "\x00")):
                         raise FormatoInvalido(_("command contains forbidden control character: {c}").format(c=repr(c)))
                 if self.store.get_sudo_profile(nome):
@@ -615,8 +615,8 @@ class Nucleo:
         return self.planner.calcular_delta(force=force)
 
     def _atual_vivo(self) -> dict[str, dict]:
-        """Estado real por servidor ({host: {ref: ChaveInstalada}}) via SSH, para o
-        planner usar como 'atual' no --reconcile."""
+        """Real per-server state ({host: {ref: ChaveInstalada}}) fetched over SSH, for the
+        planner to use as the current state under --reconcile."""
         from adminforge import authorized_keys as ak
         from adminforge.planner.planner import ChaveInstalada
 

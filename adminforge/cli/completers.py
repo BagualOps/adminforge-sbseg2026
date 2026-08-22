@@ -1,4 +1,4 @@
-"""Completers dinamicos para argcomplete: leem o state/ e devolvem opcoes."""
+"""Dynamic completers for argcomplete: read the state/ dir and return options."""
 from __future__ import annotations
 
 import json

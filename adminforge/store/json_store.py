@@ -444,8 +444,8 @@ class JsonStore(IStore):
         (self.dir_sudo_profiles / f"{nome}.json").unlink(missing_ok=True)
 
     # ---------------------------------------------------------------------------
-    # Renomeacao em lote: cada uma faz move atomico do arquivo + atualiza o campo
-    # de nome dentro do JSON. Cascata de referencias e responsabilidade do Nucleo.
+    # Batch rename: each one atomically moves the file + updates the name field
+    # inside the JSON. Reference cascade is the Nucleo's responsibility.
     # ---------------------------------------------------------------------------
     def _renomear_entidade(self, diretorio: Path, de: str, para: str, campo: str) -> None:
         """Rename an entity's file from ``de`` to ``para``, updating its name field in place.
@@ -468,8 +468,8 @@ class JsonStore(IStore):
             raise FileExistsError(novo)
         data = self._load(antigo)
         data[campo] = para
-        # atualiza o campo no proprio arquivo antigo e move atomicamente:
-        # os.replace e uma unica syscall — nao ha janela com os dois nomes presentes.
+        # update the field in the old file itself and move it atomically:
+        # os.replace is a single syscall — there is no window with both names present.
         write_atomic(antigo, self._dump(data))
         os.replace(antigo, novo)
 

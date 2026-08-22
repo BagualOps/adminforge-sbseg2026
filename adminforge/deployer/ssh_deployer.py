@@ -158,7 +158,7 @@ class SSHDeployer(IDeployer):
             capture_output=True,
             text=True,
             timeout=self.timeout * 2,
-            stdin=subprocess.DEVNULL,  # não herda/consome o stdin de quem chamou
+            stdin=subprocess.DEVNULL,  # does not inherit/consume the caller's stdin
         )
         return proc.returncode, proc.stdout, proc.stderr
 
@@ -285,14 +285,14 @@ class SSHDeployer(IDeployer):
         ``_remover_chave``, which both refuse to proceed when ``ok`` is
         ``False`` to avoid clobbering content they couldn't actually read).
         """
-        # Primeiro valida que sudo funciona com NOPASSWD; sem isso nao da
-        # para distinguir 'arquivo nao existe' (output vazio legitimo) de
-        # 'sudo bloqueou' (output vazio mascarando erro).
+        # First validates that sudo works with NOPASSWD; without it there is no
+        # way to distinguish 'file does not exist' (legitimate empty output) from
+        # 'sudo blocked' (empty output masking the error).
         rc, _, _ = self._executar_ssh(servidor, "sudo -n true 2>/dev/null")
         if rc != 0:
             return "", False
         u = shlex.quote(username)
-        # if-then explicito: arquivo ausente => output vazio + rc=0 (legitimo).
+        # explicit if-then: missing file => empty output + rc=0 (legitimate).
         rc, out, _ = self._executar_ssh(
             servidor,
             f"if sudo test -e /home/{u}/.ssh/authorized_keys; then "
@@ -322,8 +322,8 @@ class SSHDeployer(IDeployer):
         """
         u = shlex.quote(username)
         b64 = base64.b64encode(conteudo.encode("utf-8")).decode("ascii")
-        # tee+temp+mv (mesmo padrao do _escrever_sudoers): install /dev/stdin
-        # quebra em coreutils minimalistas (busybox).
+        # tee+temp+mv (same pattern as _escrever_sudoers): install /dev/stdin
+        # breaks on minimal coreutils (busybox).
         ssh_dir = shlex.quote(f"/home/{username}/.ssh")
         destino = shlex.quote(f"/home/{username}/.ssh/authorized_keys")
         tmp = f"/tmp/.adminforge-ak-{username}.{secrets.token_hex(8)}"
@@ -399,10 +399,10 @@ class SSHDeployer(IDeployer):
         live sudoers directory; on any failure the temp file is best-effort
         removed and ``RuntimeError`` is raised.
         """
-        # Diferencia explicitamente None (full sudo) de [] (profile invalido):
-        #   None         -> NOPASSWD:ALL (intencional)
-        #   lista vazia  -> erro (profile resolveu para nada; nao escala silenciosamente)
-        #   lista        -> uma linha por comando absoluto
+        # Explicitly distinguishes None (full sudo) from [] (invalid profile):
+        #   None          -> NOPASSWD:ALL (intentional)
+        #   empty list    -> error (profile resolved to nothing; does not silently escalate)
+        #   list          -> one line per absolute command
         if comandos is None:
             corpo = f"{username} ALL=(ALL) NOPASSWD:ALL\n"
         elif len(comandos) == 0:
@@ -411,8 +411,8 @@ class SSHDeployer(IDeployer):
                 f"(would otherwise silently grant full sudo)"
             )
         else:
-            # defense-in-depth: revalida no ponto de gravacao. State editado a mao
-            # poderia conter path relativo ou control char nao detectado pelo Nucleo.
+            # defense-in-depth: revalidate at the write point. Hand-edited state
+            # could contain a relative path or control char not detected by the Nucleo.
             for c in comandos:
                 if not c.startswith("/"):
                     raise RuntimeError(
@@ -466,8 +466,8 @@ class SSHDeployer(IDeployer):
         'echo "=== USERS ==="; getent passwd; '
         'echo "=== GROUPS ==="; getent group; '
         'echo "=== SERVICES ==="; '
-        # checa systemctl explicitamente: 'cmd | awk' dava rc=0 do awk mesmo com systemctl ausente,
-        # impedindo o fallback service --status-all.
+        # checks systemctl explicitly: 'cmd | awk' returned rc=0 from awk even with systemctl missing,
+        # preventing the service --status-all fallback.
         'if command -v systemctl >/dev/null 2>&1; then '
         'systemctl list-units --type=service --state=running --no-legend --no-pager 2>/dev/null '
         '| awk \'{print $1}\'; '
@@ -529,7 +529,7 @@ class SSHDeployer(IDeployer):
             if atual and linha.strip():
                 secoes[atual].append(linha)
 
-        # parse: getent group dá nome:x:gid:m1,m2,...
+        # parse: getent group gives name:x:gid:m1,m2,...
         grupos_por_gid: dict[int, dict] = {}
         grupos: list[dict] = []
         for linha in secoes["GROUPS"]:
@@ -549,7 +549,7 @@ class SSHDeployer(IDeployer):
             grupos.append(g)
             grupos_por_gid[gid] = g
 
-        # parse: getent passwd dá nome:x:uid:gid:gecos:home:shell
+        # parse: getent passwd gives name:x:uid:gid:gecos:home:shell
         usuarios: list[dict] = []
         for linha in secoes["USERS"]:
             partes = linha.split(":")
@@ -573,7 +573,7 @@ class SSHDeployer(IDeployer):
                 "grupos": grupos_user,
             })
 
-        # parse sudoers: regras nao-comentario, e mapeamento por arquivo (drift)
+        # parse sudoers: non-comment rules, and per-file mapping (drift)
         regras_sudo: list[str] = []
         for linha in secoes["SUDOERS_BODY"]:
             stripped = linha.strip()
@@ -588,12 +588,12 @@ class SSHDeployer(IDeployer):
                 "adminforge": nome.strip().startswith("adminforge-"),
             })
 
-        # mapeia regras por usuario (heuristico: 1a coluna da regra)
+        # map rules per user (heuristic: 1st column of the rule)
         sudo_por_user: dict[str, list[str]] = {}
         for regra in regras_sudo:
             primeira = regra.split(None, 1)[0] if regra else ""
             if primeira.startswith("%"):
-                continue  # regra de grupo, ignora aqui
+                continue  # group rule, ignore here
             sudo_por_user.setdefault(primeira, []).append(regra)
         for u in usuarios:
             u["sudo"] = sudo_por_user.get(u["nome"], [])
