@@ -36,7 +36,7 @@ def parse_blocos(conteudo: str) -> dict[str, str]:
 
 
 def substituir_bloco(conteudo: str, ref: str, bloco_novo: str) -> str:
-    """Replace the block with the given ref by bloco_novo (empty = remove). Lines outside
+    """Replace the body of the block with the given ref (empty = remove). Lines outside
     the AdminForge markers are preserved."""
     inicio = f"{MARCADOR_INICIO}{ref}"
     fim = f"{MARCADOR_FIM}{ref}"
