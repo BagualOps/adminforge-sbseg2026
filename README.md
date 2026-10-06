@@ -116,7 +116,7 @@ None. AdminForge imports nothing outside the Python standard library, so it runs
 clone with the system Python:
 
 ```bash
-git clone https://gitlab.com/cristhianavila.aluno/adminforge-sbseg2026
+git clone https://github.com/BagualOps/adminforge-sbseg2026
 cd adminforge-sbseg2026
 ```
 

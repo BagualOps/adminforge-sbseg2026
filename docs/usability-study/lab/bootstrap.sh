@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Bootstrap do lab de avaliação de usabilidade do AdminForge — uma linha só.
 #
-#   curl -fsSL https://gitlab.com/cristhianavila.aluno/adminforge-sbseg2026/-/raw/main/docs/usability-study/lab/bootstrap.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/BagualOps/adminforge-sbseg2026/main/docs/usability-study/lab/bootstrap.sh | bash
 #
 # O que faz, tudo a nível de usuário (não instala nada no sistema):
 #   - clona (ou atualiza) o repo em ./adminforge-sbseg2026 (no diretório onde você rodar isto)
@@ -14,7 +14,7 @@
 # ADMINFORGE_REPO_URL, ADMINFORGE_REPO_REF (branch ou tag — SHA de commit não funciona com clone --branch).
 set -euo pipefail
 
-REPO_URL="${ADMINFORGE_REPO_URL:-https://gitlab.com/cristhianavila.aluno/adminforge-sbseg2026.git}"
+REPO_URL="${ADMINFORGE_REPO_URL:-https://github.com/BagualOps/adminforge-sbseg2026.git}"
 REPO_REF="${ADMINFORGE_REPO_REF:-main}"
 DEST="${ADMINFORGE_LAB_DIR:-$PWD/adminforge-sbseg2026}"
 
