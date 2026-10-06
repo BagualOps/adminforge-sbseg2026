@@ -32,9 +32,9 @@ preferred-citation:
   type: conference-paper
   title: "AdminForge: Declarative Privileged-Identity Management for Linux Server Fleets"
   year: 2026
-  collection-title: "Anais do XXVI Simpósio Brasileiro de Segurança da Informação e de Sistemas Computacionais (SBSeg 2026)"
+  collection-title: "Anais Estendidos do XXVI Simpósio Brasileiro de Cibersegurança (SBSeg 2026)"
   conference:
-    name: "Simpósio Brasileiro de Segurança da Informação e de Sistemas Computacionais (SBSeg 2026), Salão de Ferramentas"
+    name: "Simpósio Brasileiro de Cibersegurança (SBSeg 2026), Salão de Ferramentas"
   publisher:
     name: "Sociedade Brasileira de Computação (SBC)"
   authors:

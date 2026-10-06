@@ -1,5 +1,16 @@
 # AdminForge: Declarative Privileged-Identity Management for Linux Server Fleets
 
+<p align="center">
+  <a href="https://doc-artefatos.github.io/sbseg2026/results.html">
+    <img src="docs/assets/seals/SBRC25_SF_SeloD.png" alt="Artefatos Disponíveis / Available (SeloD)" width="110">
+    <img src="docs/assets/seals/SBRC25_SF_SeloF.png" alt="Artefatos Funcionais / Functional (SeloF)" width="110">
+    <img src="docs/assets/seals/SBRC25_SF_SeloS.png" alt="Artefatos Sustentáveis / Sustainable (SeloS)" width="110">
+    <img src="docs/assets/seals/SBRC25_SF_SeloR.png" alt="Experimentos Reprodutíveis / Reproducible (SeloR)" width="110">
+  </a>
+</p>
+
+<p align="center"><sub>Official SBSeg 2026 artifact-evaluation seals awarded to this artifact (Salão de Ferramentas): Available, Functional, Sustainable and Reproducible. <a href="https://doc-artefatos.github.io/sbseg2026/results.html">Official results</a>. Seal artwork by the SBSeg Artifact Evaluation Committee.</sub></p>
+
 > ❄️ **Frozen version.** This repository holds the SBSeg 2026 paper version of AdminForge and
 > stays frozen for reproducibility. Active development continues at
 > [BagualOps/adminforge](https://github.com/BagualOps/adminforge).
@@ -314,7 +325,7 @@ If you use this artifact, please cite the paper:
 @inproceedings{ribeiro2026adminforge,
   title     = {{AdminForge}: Declarative Privileged-Identity Management for {Linux} Server Fleets},
   author    = {Ribeiro, Rui de Quadros and Kapelinski, Cristhian and Kreutz, Diego},
-  booktitle = {Anais do XXVI Simp\'osio Brasileiro de Seguran\c{c}a da Informa\c{c}\~ao e de Sistemas Computacionais (SBSeg 2026), Sal\~ao de Ferramentas},
+  booktitle = {Anais Estendidos do XXVI Simp\'osio Brasileiro de Ciberseguran\c{c}a (SBSeg 2026), Sal\~ao de Ferramentas},
   year      = {2026},
   publisher = {Sociedade Brasileira de Computa\c{c}\~ao (SBC)},
 }
